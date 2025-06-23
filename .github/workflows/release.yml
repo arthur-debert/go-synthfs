@@ -25,16 +25,16 @@ jobs:
 
       - name: Set environment variables
         run: |
-          echo "PKG_NAME=go-synthfs" >> $GITHUB_ENV
+          echo "PKG_NAME=synthfs" >> $GITHUB_ENV
           echo "GH_USER=arthur-debert" >> $GITHUB_ENV
-          echo "GIT_REPO=arthur-debert/go-synthfs" >> $GITHUB_ENV
-          echo "Package name: go-synthfs"
-          echo "Repository: arthur-debert/go-synthfs"
+          echo "GIT_REPO=arthur-debert/synthfs" >> $GITHUB_ENV
+          echo "Package name: synthfs"
+          echo "Repository: arthur-debert/synthfs"
 
       - name: Build binary first
         run: scripts/build
         env:
-          PKG_NAME: go-synthfs
+          PKG_NAME: synthfs
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v5
@@ -44,4 +44,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          PKG_NAME: go-synthfs 
+          PKG_NAME: synthfs 

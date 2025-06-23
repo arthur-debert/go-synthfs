@@ -1,11 +1,11 @@
 version: 2
 
-project_name: go-synthfs
+project_name: synthfs
 
 builds:
-  - id: go-synthfs
-    main: ./cmd/go-synthfs
-    binary: go-synthfs
+  - id: synthfs
+    main: ./cmd/synthfs
+    binary: synthfs
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
     env:
@@ -17,13 +17,13 @@ builds:
         goarch: arm64
 
 archives:
-  - id: go-synthfs-archive
-    ids: [go-synthfs]
+  - id: synthfs-archive
+    ids: [synthfs]
     formats: [tar.gz]
     format_overrides:
       - goos: windows
         formats: [zip]
-    name_template: "go-synthfs-cli_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "synthfs-cli_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - "README.md"
       - "LICENSE"
@@ -45,8 +45,8 @@ changelog:
       - "Merge branch"
 
 brews:
-  - ids: [go-synthfs-archive]
-    name: go-synthfs
+  - ids: [synthfs-archive]
+    name: synthfs
     repository:
       owner: arthur-debert
       name: homebrew-tools
@@ -56,24 +56,24 @@ brews:
     commit_author:
       name: goreleaserbot
       email: bot@goreleaser.com
-    homepage: "https://github.com/arthur-debert/go-synthfs"
+    homepage: "https://github.com/arthur-debert/synthfs"
     description: "Description of your CLI tool"
     license: "MIT"
     test: |
-      system "#{bin}/go-synthfs --help"
+      system "#{bin}/synthfs --help"
     install: |
-      bin.install "go-synthfs"
+      bin.install "synthfs"
 
 # nFPM packages (deb, rpm, etc.)
 # https://goreleaser.com/customization/nfpm/
 nfpms:
-  - id: go-synthfs-deb
-    ids: [go-synthfs]
-    package_name: go-synthfs
+  - id: synthfs-deb
+    ids: [synthfs]
+    package_name: synthfs
     formats:
       - deb
     vendor: "Arthur Debert"
-    homepage: "https://github.com/arthur-debert/go-synthfs"
+    homepage: "https://github.com/arthur-debert/synthfs"
     maintainer: "Arthur Debert <arthur@debert.xyz>"
     description: "Description of your CLI tool"
     license: "MIT"

@@ -1,6 +1,0 @@
-main.go
-# CLI entry point
-
-root.go
-# Cobra root command with version
-

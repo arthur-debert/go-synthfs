@@ -40,8 +40,8 @@ LDFLAGS="-s -w -X main.version=${DEV_VERSION} -X main.commit=${GIT_COMMIT} -X ma
 
 # Build CLI binary
 echo -e "${BLUE}Building CLI binary with version info...${NC}"
-if go build -ldflags "${LDFLAGS}" -o bin/PKG_NAME_PLACEHOLDER ./cmd/PKG_NAME_PLACEHOLDER; then
-    echo -e "${GREEN}✅ CLI binary built successfully: bin/PKG_NAME_PLACEHOLDER${NC}"
+if go build -ldflags "${LDFLAGS}" -o bin/synthfs ./cmd/synthfs; then
+    echo -e "${GREEN}✅ CLI binary built successfully: bin/synthfs${NC}"
 else
     echo -e "${RED}❌ CLI binary build failed.${NC}"
     exit 1
@@ -51,7 +51,7 @@ fi
 echo -e "${BLUE}Testing CLI binary...${NC}"
 echo "This is a test" >"$TMPDIR/test.txt"
 
-if ./bin/PKG_NAME_PLACEHOLDER --help >/dev/null; then
+if ./bin/synthfs --help >/dev/null; then
     echo -e "${GREEN}✅ CLI binary help test passed!${NC}"
 else
     echo -e "${RED}❌ CLI binary help test failed.${NC}"

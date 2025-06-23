@@ -35,7 +35,7 @@ Replace all placeholder values throughout the project:
 
 ```bash
 # The project creator automatically handles these replacements:
-go-synthfs      → your-cli-name (from directory name)
+synthfs      → your-cli-name (from directory name)
 arthur-debert   → arthur-debert (from config.yaml)
 Description of your CLI tool → "Description of your CLI tool" 
 Arthur Debert   → "Arthur Debert" (from config.yaml)

@@ -29,7 +29,7 @@ AUTHOR_EMAIL="your.email@example.com"
 
 # Files to update
 find . -type f \( -name "*.go" -o -name "*.yml" -o -name "*.yaml" -o -name "*.md" -o -name "go.mod" \) -exec sed -i '' \
-  -e "s/go-synthfs/$PKG_NAME/g" \
+  -e "s/synthfs/$PKG_NAME/g" \
   -e "s/arthur-debert/$GITHUB_USER/g" \
   -e "s/Description of your CLI tool/$PKG_DESCRIPTION/g" \
   -e "s/Arthur Debert/$AUTHOR_NAME/g" \
@@ -37,7 +37,7 @@ find . -type f \( -name "*.go" -o -name "*.yml" -o -name "*.yaml" -o -name "*.md
   {} +
 
 # Rename directories
-mv "cmd/go-synthfs" "cmd/$PKG_NAME"
+mv "cmd/synthfs" "cmd/$PKG_NAME"
 ```
 
 ### 3. Initialize Git Repository
