@@ -20,7 +20,7 @@ func Create(item v2.FsItem) v2.Operation {
 	case *v2.SymlinkItem:
 		baseOp.SetDescriptionDetail("target", specificItem.Target())
 	case *v2.ArchiveItem:
-		baseOp.SetDescriptionDetail("format", string(specificItem.Format()))
+		baseOp.SetDescriptionDetail("format", specificItem.Format().String())
 		baseOp.SetDescriptionDetail("source_count", len(specificItem.Sources()))
 	}
 
@@ -47,7 +47,7 @@ func Delete(path string) v2.Operation {
 // For Phase 0, this returns a GenericOperation with stubbed methods.
 func Copy(src, dst string) v2.Operation {
 	opID := v2.OperationID("copy_" + src + "_to_" + dst) // Basic ID generation
-	baseOp := v2.NewBaseOperation(opID, "copy", src)    // Primary path is src for description
+	baseOp := v2.NewBaseOperation(opID, "copy", src)     // Primary path is src for description
 	baseOp.SetDescriptionDetail("destination", dst)
 	return &v2.GenericOperation{
 		BaseOperation: baseOp,
@@ -60,7 +60,7 @@ func Copy(src, dst string) v2.Operation {
 // For Phase 0, this returns a GenericOperation with stubbed methods.
 func Move(src, dst string) v2.Operation {
 	opID := v2.OperationID("move_" + src + "_to_" + dst) // Basic ID generation
-	baseOp := v2.NewBaseOperation(opID, "move", src)    // Primary path is src for description
+	baseOp := v2.NewBaseOperation(opID, "move", src)     // Primary path is src for description
 	baseOp.SetDescriptionDetail("destination", dst)
 	return &v2.GenericOperation{
 		BaseOperation: baseOp,

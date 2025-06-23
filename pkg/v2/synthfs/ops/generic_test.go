@@ -134,8 +134,8 @@ func TestCreateOperation_Archive(t *testing.T) {
 	if desc.Path != archivePath {
 		t.Errorf("Expected desc.Path '%s', got '%s'", archivePath, desc.Path)
 	}
-	if val, ok := desc.Details["format"]; !ok || val.(string) != string(format) {
-		t.Errorf("Expected detail format '%s', got '%v'", format, val)
+	if val, ok := desc.Details["format"]; !ok || val.(string) != format.String() {
+		t.Errorf("Expected detail format '%s', got '%v'", format.String(), val)
 	}
 	if val, ok := desc.Details["source_count"]; !ok || val.(int) != len(sources) {
 		t.Errorf("Expected detail source_count %d, got %v", len(sources), val)

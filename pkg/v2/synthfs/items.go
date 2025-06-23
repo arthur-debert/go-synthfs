@@ -133,12 +133,25 @@ func (si *SymlinkItem) Target() string {
 // --- ArchiveItem ---
 
 // ArchiveFormat defines the type of archive.
-type ArchiveFormat string
+type ArchiveFormat int
 
 const (
-	ArchiveFormatTarGz ArchiveFormat = "tar.gz"
-	ArchiveFormatZip   ArchiveFormat = "zip"
+	ArchiveFormatTarGz ArchiveFormat = iota
+	ArchiveFormatZip
 )
+
+// String returns the string representation of the ArchiveFormat.
+// This implements the fmt.Stringer interface.
+func (af ArchiveFormat) String() string {
+	switch af {
+	case ArchiveFormatTarGz:
+		return "tar.gz"
+	case ArchiveFormatZip:
+		return "zip"
+	default:
+		return "unknown"
+	}
+}
 
 // ArchiveItem represents an archive to be created.
 type ArchiveItem struct {
