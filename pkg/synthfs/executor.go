@@ -65,97 +65,143 @@ func NewExecutor() *Executor {
 	return &Executor{}
 }
 
-// Execute processes the operations in the queue with dependency resolution.
-func (e *Executor) Execute(ctx context.Context, queue Queue, fsys FileSystem, opts ...ExecuteOption) *Result {
-	startTime := time.Now()
-
+// Execute executes all operations in the queue
+func (e *Executor) Execute(ctx context.Context, queue Queue, fs FileSystem, opts ...ExecuteOption) *Result {
 	config := &ExecuteConfig{}
 	for _, opt := range opts {
 		opt(config)
 	}
 
-	overallResult := &Result{
-		Success:    true, // Assume success until a failure occurs
+	Logger().Info().
+		Int("operation_count", len(queue.Operations())).
+		Bool("dry_run", config.DryRun).
+		Msg("starting execution")
+
+	start := time.Now()
+	result := &Result{
 		Operations: []OperationResult{},
 		Errors:     []error{},
+		Success:    true,
 	}
 
-	// Phase 1: Resolve dependencies
+	// Resolve dependencies first
+	Logger().Info().Msg("resolving operation dependencies")
 	if err := queue.Resolve(); err != nil {
-		overallResult.Success = false
-		overallResult.Errors = append(overallResult.Errors, fmt.Errorf("dependency resolution failed: %w", err))
-		overallResult.Duration = time.Since(startTime)
-		return overallResult
+		Logger().Info().
+			Err(err).
+			Msg("dependency resolution failed")
+		result.Success = false
+		result.Errors = append(result.Errors, fmt.Errorf("dependency resolution failed: %w", err))
+		result.Duration = time.Since(start)
+		return result
+	}
+	Logger().Info().Msg("dependency resolution completed successfully")
+
+	// Validate the queue
+	Logger().Info().Msg("validating operation queue")
+	if err := queue.Validate(ctx, fs); err != nil {
+		Logger().Info().
+			Err(err).
+			Msg("queue validation failed")
+		result.Success = false
+		result.Errors = append(result.Errors, fmt.Errorf("queue validation failed: %w", err))
+		result.Duration = time.Since(start)
+		return result
+	}
+	Logger().Info().Msg("queue validation completed successfully")
+
+	operations := queue.Operations()
+	rollbackOps := make([]Operation, 0, len(operations))
+
+	if config.DryRun {
+		Logger().Info().Msg("executing in dry-run mode - no actual changes will be made")
+		for _, op := range operations {
+			Logger().Info().
+				Str("op_id", string(op.ID())).
+				Str("op_type", op.Describe().Type).
+				Str("path", op.Describe().Path).
+				Msg("dry-run: skipping operation execution")
+
+			opResult := OperationResult{
+				OperationID: op.ID(),
+				Operation:   op,
+				Status:      StatusSkipped,
+				Duration:    0,
+			}
+			result.Operations = append(result.Operations, opResult)
+		}
+		result.Duration = time.Since(start)
+		Logger().Info().
+			Dur("total_duration", result.Duration).
+			Int("operations_processed", len(operations)).
+			Msg("dry-run execution completed")
+		return result
 	}
 
-	// Phase 2: Validate the entire queue (dependencies, individual ops, conflicts)
-	// Note: queue.Validate() is expected to be called after queue.Resolve()
-	if err := queue.Validate(ctx, fsys); err != nil {
-		overallResult.Success = false
-		// Attempt to cast to specific error types to provide more granular results if needed
-		// For now, append the raw error.
-		// If err is a ValidationError, we might want to populate opResult for the specific op.
-		overallResult.Errors = append(overallResult.Errors, fmt.Errorf("queue validation failed: %w", err))
-		overallResult.Duration = time.Since(startTime)
-		// TODO: If queue.Validate fails due to a specific operation,
-		// we should ideally populate an OperationResult for that operation.
-		// This requires queue.Validate to return more structured error information or
-		// for the executor to iterate and validate if it needs to populate individual results.
-		// For now, a general error is added.
-		return overallResult
-	}
+	Logger().Info().
+		Int("operations_to_execute", len(operations)).
+		Msg("beginning operation execution")
 
-	// Phase 3: Execute operations in dependency-resolved order
-	queuedOps := queue.Operations() // Now in dependency-resolved order and validated
-	executedOps := make([]Operation, 0)
+	// Execute operations
+	for i, op := range operations {
+		Logger().Info().
+			Str("op_id", string(op.ID())).
+			Str("op_type", op.Describe().Type).
+			Str("path", op.Describe().Path).
+			Int("operation_index", i+1).
+			Int("total_operations", len(operations)).
+			Msg("executing operation")
 
-	for _, op := range queuedOps {
-		opStartTime := time.Now()
+		opStart := time.Now()
+		err := op.Execute(ctx, fs)
+		opDuration := time.Since(opStart)
+
 		opResult := OperationResult{
 			OperationID: op.ID(),
 			Operation:   op,
+			Duration:    opDuration,
 		}
 
-		// Individual operation validation has already been done by queue.Validate().
-		// We proceed to check for DryRun and then execute.
+		if err != nil {
+			Logger().Info().
+				Str("op_id", string(op.ID())).
+				Str("op_type", op.Describe().Type).
+				Str("path", op.Describe().Path).
+				Err(err).
+				Dur("duration", opDuration).
+				Msg("operation execution failed")
 
-		// Check for DryRun
-		if config.DryRun {
-			opResult.Status = StatusSkipped
-			// opResult.Error = nil; // No actual error occurred
-			opResult.Duration = time.Since(opStartTime)
-			overallResult.Operations = append(overallResult.Operations, opResult)
-			// Dry run operations are considered "successful" in terms of queue processing flow
-			continue
-		}
-
-		// Execute the operation
-		execErr := op.Execute(ctx, fsys)
-		opResult.Duration = time.Since(opStartTime)
-
-		if execErr != nil {
 			opResult.Status = StatusFailure
-			opResult.Error = fmt.Errorf("execution failed for operation %s (%s): %w", op.ID(), op.Describe().Path, execErr)
-			overallResult.Errors = append(overallResult.Errors, opResult.Error)
-			overallResult.Success = false
-
-			// Create rollback function for successfully executed operations
-			overallResult.Rollback = e.createRollbackFunc(executedOps, fsys)
-			// Continue processing remaining operations (don't break on failure)
+			opResult.Error = err
+			result.Success = false
+			result.Errors = append(result.Errors, fmt.Errorf("operation %s failed: %w", op.ID(), err))
 		} else {
+			Logger().Info().
+				Str("op_id", string(op.ID())).
+				Str("op_type", op.Describe().Type).
+				Str("path", op.Describe().Path).
+				Dur("duration", opDuration).
+				Msg("operation execution completed successfully")
+
 			opResult.Status = StatusSuccess
-			executedOps = append(executedOps, op)
+			rollbackOps = append(rollbackOps, op)
 		}
-		overallResult.Operations = append(overallResult.Operations, opResult)
+
+		result.Operations = append(result.Operations, opResult)
 	}
 
-	// If all operations succeeded but we executed some, still create rollback function
-	if overallResult.Success && len(executedOps) > 0 {
-		overallResult.Rollback = e.createRollbackFunc(executedOps, fsys)
-	}
+	result.Duration = time.Since(start)
+	result.Rollback = e.createRollbackFunc(rollbackOps, fs)
 
-	overallResult.Duration = time.Since(startTime)
-	return overallResult
+	Logger().Info().
+		Bool("success", result.Success).
+		Int("total_operations", len(operations)).
+		Int("successful_operations", len(rollbackOps)).
+		Int("failed_operations", len(result.Errors)).
+		Dur("total_duration", result.Duration).
+		Msg("execution completed")
+
+	return result
 }
 
 // createRollbackFunc creates a rollback function that can undo executed operations.

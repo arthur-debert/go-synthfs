@@ -51,7 +51,29 @@ func (op *CreateFileOperation) ID() synthfs.OperationID {
 
 // Execute creates the file with the specified data and mode.
 func (op *CreateFileOperation) Execute(ctx context.Context, fsys synthfs.FileSystem) error {
-	return fsys.WriteFile(op.path, op.data, op.mode)
+	synthfs.Logger().Info().
+		Str("op_id", string(op.id)).
+		Str("path", op.path).
+		Int("content_size", len(op.data)).
+		Str("mode", op.mode.String()).
+		Msg("creating file")
+
+	err := fsys.WriteFile(op.path, op.data, op.mode)
+	if err != nil {
+		synthfs.Logger().Info().
+			Str("op_id", string(op.id)).
+			Str("path", op.path).
+			Err(err).
+			Msg("file creation failed")
+		return fmt.Errorf("failed to create file %s: %w", op.path, err)
+	}
+
+	synthfs.Logger().Info().
+		Str("op_id", string(op.id)).
+		Str("path", op.path).
+		Msg("file created successfully")
+
+	return nil
 }
 
 // Validate checks if the operation parameters are sensible.

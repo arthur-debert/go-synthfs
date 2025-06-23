@@ -30,9 +30,9 @@ type Queue interface {
 
 // memQueue is an in-memory implementation of the Queue interface.
 type memQueue struct {
-	ops         []Operation
-	idIndex     map[OperationID]int // Maps operation ID to index in ops slice
-	resolved    bool                // Whether dependency resolution has been performed
+	ops      []Operation
+	idIndex  map[OperationID]int // Maps operation ID to index in ops slice
+	resolved bool                // Whether dependency resolution has been performed
 }
 
 // NewMemQueue creates a new in-memory operation queue.
@@ -46,24 +46,41 @@ func NewMemQueue() Queue {
 
 // Add appends operations to the queue.
 func (mq *memQueue) Add(ops ...Operation) error {
+	Logger().Info().
+		Int("existing_operations", len(mq.ops)).
+		Int("new_operations", len(ops)).
+		Msg("adding operations to queue")
+
 	for _, op := range ops {
 		if op == nil {
 			return fmt.Errorf("cannot add a nil operation to the queue")
 		}
-		
+
 		// Check for duplicate IDs
 		if _, exists := mq.idIndex[op.ID()]; exists {
 			return fmt.Errorf("operation with ID '%s' already exists in the queue", op.ID())
 		}
-		
+
+		Logger().Info().
+			Str("op_id", string(op.ID())).
+			Str("op_type", op.Describe().Type).
+			Str("path", op.Describe().Path).
+			Int("dependencies", len(op.Dependencies())).
+			Msg("operation added to queue")
+
 		// Add operation to queue
 		index := len(mq.ops)
 		mq.ops = append(mq.ops, op)
 		mq.idIndex[op.ID()] = index
-		
+
 		// Mark as unresolved since we added new operations
 		mq.resolved = false
 	}
+
+	Logger().Info().
+		Int("total_operations", len(mq.ops)).
+		Msg("operations added to queue successfully")
+
 	return nil
 }
 
@@ -77,19 +94,35 @@ func (mq *memQueue) Operations() []Operation {
 
 // Resolve performs dependency resolution using topological sorting.
 func (mq *memQueue) Resolve() error {
+	Logger().Info().
+		Int("operations", len(mq.ops)).
+		Bool("already_resolved", mq.resolved).
+		Msg("starting dependency resolution")
+
 	if len(mq.ops) == 0 {
 		mq.resolved = true
+		Logger().Info().Msg("no operations to resolve")
+		return nil
+	}
+
+	if mq.resolved {
+		Logger().Info().Msg("dependencies already resolved")
 		return nil
 	}
 
 	// Validate that all dependencies exist
+	Logger().Info().Msg("validating dependency references")
 	if err := mq.validateDependencies(); err != nil {
+		Logger().Info().
+			Err(err).
+			Msg("dependency validation failed")
 		return fmt.Errorf("dependency validation failed: %w", err)
 	}
+	Logger().Info().Msg("dependency references validated successfully")
 
 	// Build dependency graph using topological sort library
 	edges := make([]toposort.Edge, 0)
-	
+
 	for _, op := range mq.ops {
 		for _, depID := range op.Dependencies() {
 			// Edge is [2]interface{} where element 0 comes before element 1
@@ -98,16 +131,23 @@ func (mq *memQueue) Resolve() error {
 		}
 	}
 
+	Logger().Info().
+		Int("dependency_edges", len(edges)).
+		Msg("performing topological sort")
+
 	// Perform topological sort
 	sortedIDs, err := toposort.Toposort(edges)
 	if err != nil {
+		Logger().Info().
+			Err(err).
+			Msg("topological sort failed - circular dependency detected")
 		return fmt.Errorf("circular dependency detected: %w", err)
 	}
 
 	// Rebuild operations slice in topologically sorted order
 	resolvedOps := make([]Operation, 0, len(mq.ops))
 	newIdIndex := make(map[OperationID]int)
-	
+
 	// Add operations in dependency order
 	for _, idInterface := range sortedIDs {
 		idStr, ok := idInterface.(string)
@@ -134,7 +174,11 @@ func (mq *memQueue) Resolve() error {
 	mq.ops = resolvedOps
 	mq.idIndex = newIdIndex
 	mq.resolved = true
-	
+
+	Logger().Info().
+		Int("resolved_operations", len(resolvedOps)).
+		Msg("dependency resolution completed successfully")
+
 	return nil
 }
 
