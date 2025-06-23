@@ -65,7 +65,20 @@ func NewExecutor() *Executor {
 	return &Executor{}
 }
 
-// Execute executes all operations in the queue
+// Execute executes all operations in the queue.
+//
+// Current transactional behavior:
+// - If an error occurs during an individual operation's Execute method, the executor will log the error
+//   and mark that operation as failed in the results.
+// - However, the executor will CONTINUE to process subsequent operations in the queue.
+// - After attempting all operations, a `Rollback` function is provided in the `Result`.
+//   This function, if called, will attempt to roll back all operations that *successfully completed*
+//   execution during this run.
+// - Rollback is NOT automatically invoked by the executor upon encountering an error. The caller
+//   is responsible for deciding whether to call the returned `Rollback` function based on the `Result`.
+//
+// Future enhancements might include options for stricter transactional atomicity (e.g., stop on first error
+// and automatically attempt rollback).
 func (e *Executor) Execute(ctx context.Context, queue Queue, fs FileSystem, opts ...ExecuteOption) *Result {
 	config := &ExecuteConfig{}
 	for _, opt := range opts {

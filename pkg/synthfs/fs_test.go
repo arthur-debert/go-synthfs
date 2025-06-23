@@ -1,9 +1,11 @@
 package synthfs_test
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -137,6 +139,65 @@ func TestOSFileSystem(t *testing.T) {
 		_, err = osfs.Stat(invalidPath)
 		if err == nil {
 			t.Errorf("Expected Stat to fail with invalid path")
+		}
+	})
+
+	t.Run("ErrorConditions", func(t *testing.T) {
+		// Setup: file 'existing_file.txt', directory 'existing_dir'
+		existingFilePath := "existing_file.txt"
+		existingDirPath := "existing_dir"
+		nestedFilePath := filepath.Join(existingDirPath, "nested_file.txt")
+
+		if err := osfs.WriteFile(existingFilePath, []byte("i am a file"), 0644); err != nil {
+			t.Fatalf("Setup: WriteFile failed for existing_file.txt: %v", err)
+		}
+		if err := osfs.MkdirAll(existingDirPath, 0755); err != nil {
+			t.Fatalf("Setup: MkdirAll failed for existing_dir: %v", err)
+		}
+		if err := osfs.WriteFile(nestedFilePath, []byte("i am nested"), 0644); err != nil {
+			t.Fatalf("Setup: WriteFile failed for nested_file.txt: %v", err)
+		}
+
+		// Test WriteFile to a path where a directory already exists
+		err := osfs.WriteFile(existingDirPath, []byte("overwrite dir?"), 0644)
+		if err == nil {
+			t.Errorf("Expected WriteFile to fail when path is an existing directory, but it succeeded")
+		}
+		// Note: The exact error varies by OS (e.g., "is a directory" on Linux, "Access is denied" on Windows when trying to write to a dir).
+		// A generic check for non-nil error is usually sufficient for this kind of test.
+
+		// Test MkdirAll when a file exists at the target path
+		err = osfs.MkdirAll(existingFilePath, 0755)
+		if err == nil {
+			t.Errorf("Expected MkdirAll to fail when path is an existing file, but it succeeded")
+		} else {
+			// Check if error indicates file exists or similar (os.ErrExist is often wrapped)
+			// For now, a non-nil error is the main check. More specific check:
+			if !errors.Is(err, fs.ErrExist) && !strings.Contains(err.Error(), "file exists") && !strings.Contains(err.Error(), "not a directory") {
+				// This can be OS-dependent. "not a directory" is common for trying to mkdir on a file path component.
+				// "file exists" if the final component itself is a file.
+				// t.Logf("MkdirAll on existing file error (for info): %v", err) // temp log
+			}
+		}
+
+
+		// Test Remove on a non-empty directory
+		err = osfs.Remove(existingDirPath)
+		if err == nil {
+			t.Errorf("Expected Remove to fail on non-empty directory %s, but it succeeded", existingDirPath)
+		} else {
+			// This error can also be OS-dependent, e.g. "directory not empty"
+			// t.Logf("Remove on non-empty dir error (for info): %v", err) // temp log
+		}
+
+
+		// Test Remove on a non-existent file
+		nonExistentPath := "non_existent_file.txt"
+		err = osfs.Remove(nonExistentPath)
+		if err == nil {
+			t.Errorf("Expected Remove to fail on non-existent file %s, but it succeeded", nonExistentPath)
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("Expected Remove on non-existent file to return fs.ErrNotExist, got %v", err)
 		}
 	})
 }
