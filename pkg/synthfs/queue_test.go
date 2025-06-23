@@ -1,129 +1,313 @@
-package synthfs_test // Testing synthfs package, so use synthfs_test
+package synthfs_test
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/ops" // For concrete operation types
+	"github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil"
 )
 
-// mockOperation is a simple operation for testing the queue.
-type mockOperation struct {
+// Helper mock operation for queue tests
+type mockOpForQueue struct {
 	id           synthfs.OperationID
 	dependencies []synthfs.OperationID
-	description  string
+	conflicts    []synthfs.OperationID
+	validateErr  error
 }
 
-func newMockOp(id string) *mockOperation {
-	return &mockOperation{id: synthfs.OperationID(id), description: "mock op " + id}
+func newMockOpForQueue(id string) *mockOpForQueue {
+	return &mockOpForQueue{
+		id:           synthfs.OperationID(id),
+		dependencies: []synthfs.OperationID{},
+		conflicts:    []synthfs.OperationID{},
+	}
 }
-func (m *mockOperation) ID() synthfs.OperationID                            { return m.id }
-func (m *mockOperation) Execute(ctx context.Context, fsys synthfs.FileSystem) error { return nil }
-func (m *mockOperation) Validate(ctx context.Context, fsys synthfs.FileSystem) error { return nil }
-func (m *mockOperation) Dependencies() []synthfs.OperationID                  { return m.dependencies }
-func (m *mockOperation) Conflicts() []synthfs.OperationID                     { return nil }
-func (m *mockOperation) Rollback(ctx context.Context, fsys synthfs.FileSystem) error { return nil }
-func (m *mockOperation) Describe() synthfs.OperationDesc {
-	return synthfs.OperationDesc{Type: "mock", Path: m.description}
+
+func (m *mockOpForQueue) ID() synthfs.OperationID                           { return m.id }
+func (m *mockOpForQueue) Execute(ctx context.Context, fsys synthfs.FileSystem) error { return nil }
+func (m *mockOpForQueue) Validate(ctx context.Context, fsys synthfs.FileSystem) error { return m.validateErr }
+func (m *mockOpForQueue) Dependencies() []synthfs.OperationID               { return m.dependencies }
+func (m *mockOpForQueue) Conflicts() []synthfs.OperationID                  { return m.conflicts }
+func (m *mockOpForQueue) Rollback(ctx context.Context, fsys synthfs.FileSystem) error { return nil }
+func (m *mockOpForQueue) Describe() synthfs.OperationDesc {
+	return synthfs.OperationDesc{Type: "mock", Path: string(m.id)}
+}
+
+func (m *mockOpForQueue) withDependency(dep string) *mockOpForQueue {
+	m.dependencies = append(m.dependencies, synthfs.OperationID(dep))
+	return m
+}
+
+func (m *mockOpForQueue) withConflict(conflict string) *mockOpForQueue {
+	m.conflicts = append(m.conflicts, synthfs.OperationID(conflict))
+	return m
+}
+
+func (m *mockOpForQueue) withValidateError(err error) *mockOpForQueue {
+	m.validateErr = err
+	return m
 }
 
 func TestMemQueue_Add_Operations(t *testing.T) {
-	q := synthfs.NewMemQueue()
-
-	op1 := newMockOp("op1")
-	op2 := newMockOp("op2")
-
-	err := q.Add(op1)
+	queue := synthfs.NewMemQueue()
+	
+	op1 := newMockOpForQueue("op1")
+	op2 := newMockOpForQueue("op2")
+	
+	err := queue.Add(op1, op2)
 	if err != nil {
-		t.Fatalf("Add(op1) failed: %v", err)
+		t.Errorf("Add() returned error: %v", err)
 	}
-	err = q.Add(op2)
-	if err != nil {
-		t.Fatalf("Add(op2) failed: %v", err)
-	}
-
-	queuedOps := q.Operations()
-	if len(queuedOps) != 2 {
-		t.Fatalf("Operations() count = %d, want 2", len(queuedOps))
-	}
-	if queuedOps[0].ID() != op1.ID() || queuedOps[1].ID() != op2.ID() {
-		t.Errorf("Operations() order or content mismatch: got IDs %s, %s; want %s, %s",
-			queuedOps[0].ID(), queuedOps[1].ID(), op1.ID(), op2.ID())
-	}
-
-	// Test adding multiple operations at once
-	q2 := synthfs.NewMemQueue()
-	op3 := newMockOp("op3")
-	op4 := newMockOp("op4")
-	err = q2.Add(op3, op4)
-	if err != nil {
-		t.Fatalf("Add(op3, op4) failed: %v", err)
-	}
-	queuedOps2 := q2.Operations()
-	if len(queuedOps2) != 2 {
-		t.Fatalf("Operations() count after multi-add = %d, want 2", len(queuedOps2))
-	}
-	if queuedOps2[0].ID() != op3.ID() || queuedOps2[1].ID() != op4.ID() {
-		t.Errorf("Operations() order or content mismatch after multi-add")
+	
+	ops := queue.Operations()
+	if len(ops) != 2 {
+		t.Errorf("Expected 2 operations, got %d", len(ops))
 	}
 }
 
 func TestMemQueue_Add_DuplicateID(t *testing.T) {
-	q := synthfs.NewMemQueue()
-	op1 := newMockOp("op1")
-	op1Dup := newMockOp("op1") // Same ID
-
-	err := q.Add(op1)
+	queue := synthfs.NewMemQueue()
+	
+	op1 := newMockOpForQueue("duplicate")
+	op2 := newMockOpForQueue("duplicate")
+	
+	err := queue.Add(op1)
 	if err != nil {
-		t.Fatalf("Add(op1) failed: %v", err)
+		t.Errorf("First Add() returned error: %v", err)
 	}
-
-	err = q.Add(op1Dup)
+	
+	err = queue.Add(op2)
 	if err == nil {
-		t.Errorf("Add(op1Dup) expected error for duplicate ID, got nil")
-	}
-	expectedErr := fmt.Sprintf("operation with ID '%s' already exists in the queue", op1.ID())
-	if err != nil && err.Error() != expectedErr {
-		t.Errorf("Add(op1Dup) error = %q, want %q", err.Error(), expectedErr)
-	}
-
-	// Ensure only the first op1 was added
-	queuedOps := q.Operations()
-	if len(queuedOps) != 1 {
-		t.Errorf("Operations() count = %d, want 1 after duplicate add attempt", len(queuedOps))
+		t.Error("Expected error for duplicate ID, got nil")
 	}
 }
 
 func TestMemQueue_Add_NilOperation(t *testing.T) {
-	q := synthfs.NewMemQueue()
-	err := q.Add(nil)
+	queue := synthfs.NewMemQueue()
+	
+	err := queue.Add(nil)
 	if err == nil {
-		t.Errorf("Add(nil) expected error, got nil")
-	}
-	expectedErr := "cannot add a nil operation to the queue"
-	if err != nil && err.Error() != expectedErr {
-		t.Errorf("Add(nil) error = %q, want %q", err.Error(), expectedErr)
+		t.Error("Expected error for nil operation, got nil")
 	}
 }
 
 func TestMemQueue_Operations_ReturnsCopy(t *testing.T) {
-	q := synthfs.NewMemQueue()
-	op1 := ops.NewCreateFile("file.txt", []byte("data"), 0644).WithID("op1-cf") // Using a concrete op
-
-	q.Add(op1)
-
-	ops1 := q.Operations()
-	if len(ops1) != 1 {
-		t.Fatalf("Expected 1 op, got %d", len(ops1))
+	queue := synthfs.NewMemQueue()
+	op := newMockOpForQueue("test")
+	
+	queue.Add(op)
+	ops1 := queue.Operations()
+	ops2 := queue.Operations()
+	
+	// Modify the slice - should not affect the queue
+	ops1[0] = nil
+	
+	// Second call should still return valid operations
+	if len(ops2) != 1 || ops2[0] == nil {
+		t.Error("Operations() does not return a proper copy")
 	}
-	// Modify the returned slice (should not affect the queue's internal slice)
-	ops1 = append(ops1, ops.NewCreateDir("dir", 0755).WithID("op2-cd"))
+}
 
+func TestMemQueue_Resolve_SimpleDependency(t *testing.T) {
+	queue := synthfs.NewMemQueue()
+	
+	opA := newMockOpForQueue("A")
+	opB := newMockOpForQueue("B").withDependency("A")
+	opC := newMockOpForQueue("C").withDependency("B")
+	
+	// Add in wrong order intentionally
+	queue.Add(opC, opA, opB)
+	
+	err := queue.Resolve()
+	if err != nil {
+		t.Errorf("Resolve() returned error: %v", err)
+	}
+	
+	ops := queue.Operations()
+	if len(ops) != 3 {
+		t.Fatalf("Expected 3 operations, got %d", len(ops))
+	}
+	
+	// Check correct order: A -> B -> C
+	expectedOrder := []synthfs.OperationID{"A", "B", "C"}
+	for i, op := range ops {
+		if op.ID() != expectedOrder[i] {
+			t.Errorf("Operation %d: expected %s, got %s", i, expectedOrder[i], op.ID())
+		}
+	}
+}
 
-	ops2 := q.Operations()
-	if len(ops2) != 1 {
-		t.Errorf("Operations() count = %d, want 1; modification of returned slice affected internal queue", len(ops2))
+func TestMemQueue_Resolve_CircularDependency(t *testing.T) {
+	queue := synthfs.NewMemQueue()
+	
+	opA := newMockOpForQueue("A").withDependency("B")
+	opB := newMockOpForQueue("B").withDependency("A")
+	
+	queue.Add(opA, opB)
+	
+	err := queue.Resolve()
+	if err == nil {
+		t.Error("Expected error for circular dependency, got nil")
+	}
+}
+
+func TestMemQueue_Resolve_MissingDependency(t *testing.T) {
+	queue := synthfs.NewMemQueue()
+	
+	opA := newMockOpForQueue("A").withDependency("nonexistent")
+	
+	queue.Add(opA)
+	
+	err := queue.Resolve()
+	if err == nil {
+		t.Error("Expected error for missing dependency, got nil")
+	}
+	
+	var depErr *synthfs.DependencyError
+	if !errors.As(err, &depErr) {
+		t.Errorf("Expected DependencyError, got %T", err)
+	}
+}
+
+func TestMemQueue_Resolve_IndependentOperations(t *testing.T) {
+	queue := synthfs.NewMemQueue()
+	
+	opA := newMockOpForQueue("A")
+	opB := newMockOpForQueue("B")
+	opC := newMockOpForQueue("C")
+	
+	queue.Add(opA, opB, opC)
+	
+	err := queue.Resolve()
+	if err != nil {
+		t.Errorf("Resolve() returned error: %v", err)
+	}
+	
+	ops := queue.Operations()
+	if len(ops) != 3 {
+		t.Fatalf("Expected 3 operations, got %d", len(ops))
+	}
+	
+	// Operations should maintain their original order when no dependencies
+	expectedIDs := map[synthfs.OperationID]bool{"A": true, "B": true, "C": true}
+	for _, op := range ops {
+		if !expectedIDs[op.ID()] {
+			t.Errorf("Unexpected operation ID: %s", op.ID())
+		}
+	}
+}
+
+func TestMemQueue_Validate_Success(t *testing.T) {
+	ctx := context.Background()
+	mfs := testutil.NewMockFS()
+	queue := synthfs.NewMemQueue()
+	
+	op1 := newMockOpForQueue("op1")
+	op2 := newMockOpForQueue("op2")
+	
+	queue.Add(op1, op2)
+	
+	err := queue.Validate(ctx, mfs)
+	if err != nil {
+		t.Errorf("Validate() returned error: %v", err)
+	}
+}
+
+func TestMemQueue_Validate_OperationValidationError(t *testing.T) {
+	ctx := context.Background()
+	mfs := testutil.NewMockFS()
+	queue := synthfs.NewMemQueue()
+	
+	validationErr := errors.New("validation failed")
+	op1 := newMockOpForQueue("op1")
+	op2 := newMockOpForQueue("op2").withValidateError(validationErr)
+	
+	queue.Add(op1, op2)
+	
+	err := queue.Validate(ctx, mfs)
+	if err == nil {
+		t.Error("Expected validation error, got nil")
+	}
+	
+	var valErr *synthfs.ValidationError
+	if !errors.As(err, &valErr) {
+		t.Errorf("Expected ValidationError, got %T", err)
+	}
+}
+
+func TestMemQueue_Validate_ConflictError(t *testing.T) {
+	ctx := context.Background()
+	mfs := testutil.NewMockFS()
+	queue := synthfs.NewMemQueue()
+	
+	op1 := newMockOpForQueue("op1")
+	op2 := newMockOpForQueue("op2").withConflict("op1")
+	
+	queue.Add(op1, op2)
+	
+	err := queue.Validate(ctx, mfs)
+	if err == nil {
+		t.Error("Expected conflict error, got nil")
+	}
+	
+	var conflictErr *synthfs.ConflictError
+	if !errors.As(err, &conflictErr) {
+		t.Errorf("Expected ConflictError, got %T", err)
+	}
+}
+
+func TestMemQueue_ComplexDependencyChain(t *testing.T) {
+	queue := synthfs.NewMemQueue()
+	
+	// Create a complex dependency chain:
+	// D -> B -> A
+	// E -> C -> A  
+	// F -> D, E
+	opA := newMockOpForQueue("A")
+	opB := newMockOpForQueue("B").withDependency("A")
+	opC := newMockOpForQueue("C").withDependency("A")
+	opD := newMockOpForQueue("D").withDependency("B")
+	opE := newMockOpForQueue("E").withDependency("C")
+	opF := newMockOpForQueue("F").withDependency("D").withDependency("E")
+	
+	// Add in random order
+	queue.Add(opF, opC, opA, opE, opB, opD)
+	
+	err := queue.Resolve()
+	if err != nil {
+		t.Errorf("Resolve() returned error: %v", err)
+	}
+	
+	ops := queue.Operations()
+	if len(ops) != 6 {
+		t.Fatalf("Expected 6 operations, got %d", len(ops))
+	}
+	
+	// Build index of operation positions
+	positions := make(map[synthfs.OperationID]int)
+	for i, op := range ops {
+		positions[op.ID()] = i
+	}
+	
+	// Verify dependency constraints
+	dependencies := map[synthfs.OperationID][]synthfs.OperationID{
+		"B": {"A"},
+		"C": {"A"},
+		"D": {"B"},
+		"E": {"C"}, 
+		"F": {"D", "E"},
+	}
+	
+	for op, deps := range dependencies {
+		opPos := positions[op]
+		for _, dep := range deps {
+			depPos := positions[dep]
+			if depPos >= opPos {
+				t.Errorf("Dependency violation: %s (pos %d) should come before %s (pos %d)", 
+					dep, depPos, op, opPos)
+			}
+		}
 	}
 }

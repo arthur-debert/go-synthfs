@@ -1,0 +1,36 @@
+This document contains the implementation status for the docs/dev/design/README.md planning.
+This is a plain text only document, no markdown.
+
+How we work. 
+For each master phase we'll crete a branch and a pr. 
+for example, when in phase 3, we will use the impl/phase-3/initial-work branch. 
+subitems must be sepparated by commits. 
+
+commit messages must have a Phase X.Y: <thing done> 
+
+when each master phase is done, you can submmit to review by me. 
+gotestsum -> scrpits/test must always pass.
+
+1. Phase 1: Core Foundation
+    1.1 Define core interfaces based on io/fs (ReadFS, WriteFS, FileSystem) ✓
+    1.2 Implement basic operations (Create, Delete, Copy, Move) with dependency support ✓
+    1.3 Build simple executor with dependency resolution ✓
+    1.4 Create operation builders with chainable API (partial)
+
+2. Phase 2: Advanced Features
+    2.1 Add dependency resolution with topological sorting ✓
+    2.2 Implement conflict detection for concurrent operations ✓
+    2.3 Add transactional rollback support ✓
+    2.4 Implement operation validation with rich error types ✓
+
+3. Phase 3: Ecosystem Integration
+    3.1 Create io/fs compatible filesystem implementations (partial)
+    3.2 Implement testing utilities with testing/fstest integration (partial)
+    3.3 Create CLI tool with operation serialization
+    3.4 Add progress reporting and streaming execution
+
+4. Phase 4: Production Features
+    4.1 Add observability hooks (logging only, use zerolog, have a universal log level for the library)
+    4.2 Performance optimizations and benchmarks, not important, this is a small scales helper for devs
+    4.3 Add comprehensive examples and documentation, good
+    4.4 Create integration guides for popular frameworks, pick 2 only. 
