@@ -173,15 +173,14 @@ func (mfs *MockFS) MkdirAll(name string, perm fs.FileMode) error {
 	currentPath := ""
 	parts := strings.Split(name, "/")
 	if len(parts) == 0 || (len(parts) == 1 && parts[0] == "") { // Handle "." or ""
-	    if name == "." { // MkdirAll on "." is a no-op if it exists
-	        if _, ok := mfs.files["."]; !ok {
-                 mfs.files["."] = &mockFile{mode: fs.ModeDir | (perm & fs.ModePerm), modTime: time.Now()}
-            }
-	        return nil
-	    }
-	    // Other empty/invalid path cases might be caught by ValidPath or need specific handling
+		if name == "." { // MkdirAll on "." is a no-op if it exists
+			if _, ok := mfs.files["."]; !ok {
+				mfs.files["."] = &mockFile{mode: fs.ModeDir | (perm & fs.ModePerm), modTime: time.Now()}
+			}
+			return nil
+		}
+		// Other empty/invalid path cases might be caught by ValidPath or need specific handling
 	}
-
 
 	for i, part := range parts {
 		if part == "" {
@@ -195,7 +194,7 @@ func (mfs *MockFS) MkdirAll(name string, perm fs.FileMode) error {
 		if currentPath == "/" {
 			currentPath += part
 		} else if currentPath == "" {
-		    currentPath = part
+			currentPath = part
 		} else {
 			currentPath += "/" + part
 		}
@@ -232,17 +231,19 @@ func (mfs *MockFS) Remove(name string) error {
 
 	if f.mode.IsDir() {
 		if name == "." {
-		    return fmt.Errorf("cannot remove current directory \".\"")
+			return fmt.Errorf("cannot remove current directory \".\"")
 		}
 		prefix := name + "/"
 		if name == "/" { // Cannot remove root if not empty
-		    prefix = "/"
+			prefix = "/"
 		}
 
 		for p := range mfs.files {
 			if p != name && strings.HasPrefix(p, prefix) {
 				// For root, check if any file exists other than root itself
-				if name == "/" && p == "/" { continue }
+				if name == "/" && p == "/" {
+					continue
+				}
 				return &fs.PathError{Op: "remove", Path: name, Err: syscall.ENOTEMPTY}
 			}
 		}
@@ -261,15 +262,15 @@ func (mfs *MockFS) RemoveAll(name string) error {
 	}
 
 	if name == "." || name == "/" { // Remove all entries if root is specified
-        for k := range mfs.files {
-            delete(mfs.files, k)
-        }
-        // Add back the root if it was "/"
-        if name == "/" {
-             mfs.files["/"] = &mockFile{mode: fs.ModeDir | 0755, modTime: time.Now()}
-        }
-        return nil
-    }
+		for k := range mfs.files {
+			delete(mfs.files, k)
+		}
+		// Add back the root if it was "/"
+		if name == "/" {
+			mfs.files["/"] = &mockFile{mode: fs.ModeDir | 0755, modTime: time.Now()}
+		}
+		return nil
+	}
 
 	// Check if the path itself exists. If not, it's a no-op.
 	if _, ok := mfs.files[name]; !ok {
@@ -316,13 +317,13 @@ func (fi *mockFileInfo) IsDir() bool        { return fi.isDir || fi.mode.IsDir()
 func (fi *mockFileInfo) Sys() interface{}   { return nil }
 
 type mockFileHandle struct {
-	info    mockFileInfo
-	data    []byte
-	offset  int64
+	info   mockFileInfo
+	data   []byte
+	offset int64
 	// path    string // No longer needed directly here for readdir
 	// mfs     *MockFS // No longer needed directly here for readdir
 	// readDirNames []string // No longer needed directly here for readdir
-	isDir   bool
+	isDir bool
 }
 
 func newMockFileHandle(name string, data []byte, mode fs.FileMode, modTime time.Time) *mockFileHandle {
@@ -334,7 +335,7 @@ func newMockFileHandle(name string, data []byte, mode fs.FileMode, modTime time.
 			modTime: modTime,
 			isDir:   mode.IsDir(),
 		},
-		data:  data,
+		data: data,
 		// path:  name, // Store full path if needed for other methods
 		isDir: mode.IsDir(),
 	}
@@ -355,13 +356,13 @@ func (mfh *mockFileHandle) Read(b []byte) (int, error) {
 func (mfh *mockFileHandle) Close() error { return nil }
 
 type mockDirEntry struct {
-	name    string
-	path    string
-	mfs     *MockFS
-	mode    fs.FileMode
-	modTime time.Time
+	name          string
+	path          string
+	mfs           *MockFS
+	mode          fs.FileMode
+	modTime       time.Time
 	readDirOffset int
-	entries []fs.DirEntry
+	entries       []fs.DirEntry
 }
 
 func (mde *mockDirEntry) Name() string               { return mde.name }
@@ -387,14 +388,20 @@ func (mde *mockDirEntry) ReadDir(n int) ([]fs.DirEntry, error) {
 
 		// Normalize base path for comparison
 		basePath := path.Clean(mde.path)
-		if basePath == "." { basePath = "" } // Treat "." as root for prefix matching ""
+		if basePath == "." {
+			basePath = ""
+		} // Treat "." as root for prefix matching ""
 		if basePath != "" && !strings.HasSuffix(basePath, "/") {
 			basePath += "/"
 		}
-		if basePath == "/" { basePath = "" } // Special case for root, prefix is effectively empty string for direct children
+		if basePath == "/" {
+			basePath = ""
+		} // Special case for root, prefix is effectively empty string for direct children
 
 		for p, f := range mde.mfs.files {
-			if p == path.Clean(mde.path) { continue } // Skip the directory itself
+			if p == path.Clean(mde.path) {
+				continue
+			} // Skip the directory itself
 
 			// Check if p is a direct child of basePath
 			var entryName string
@@ -414,8 +421,9 @@ func (mde *mockDirEntry) ReadDir(n int) ([]fs.DirEntry, error) {
 					continue
 				}
 			}
-			if entryName == "" { continue }
-
+			if entryName == "" {
+				continue
+			}
 
 			if _, exists := directChildren[entryName]; !exists {
 				directChildren[entryName] = true
@@ -430,28 +438,30 @@ func (mde *mockDirEntry) ReadDir(n int) ([]fs.DirEntry, error) {
 		// Add implicit directories
 		implicitDirs := make(map[string]bool)
 		for p := range mde.mfs.files {
-			if p == path.Clean(mde.path) { continue }
+			if p == path.Clean(mde.path) {
+				continue
+			}
 
 			var relPath string
 			if basePath == "" { // Root
-			    relPath = p
+				relPath = p
 			} else if strings.HasPrefix(p, basePath) {
-			    relPath = strings.TrimPrefix(p, basePath)
+				relPath = strings.TrimPrefix(p, basePath)
 			} else {
-			    continue
+				continue
 			}
 
 			slashIdx := strings.Index(relPath, "/")
 			if slashIdx > 0 {
-			    dirName := relPath[:slashIdx]
-			    if _, exists := directChildren[dirName]; !exists && !implicitDirs[dirName] {
-			        implicitDirs[dirName] = true
-                     mde.entries = append(mde.entries, &mockDirEntryChild{
-                        name: dirName,
-                        mode: fs.ModeDir,
-                        info: &mockFileInfo{name: dirName, mode: fs.ModeDir | 0755, modTime: time.Now(), isDir:true },
-                    })
-			    }
+				dirName := relPath[:slashIdx]
+				if _, exists := directChildren[dirName]; !exists && !implicitDirs[dirName] {
+					implicitDirs[dirName] = true
+					mde.entries = append(mde.entries, &mockDirEntryChild{
+						name: dirName,
+						mode: fs.ModeDir,
+						info: &mockFileInfo{name: dirName, mode: fs.ModeDir | 0755, modTime: time.Now(), isDir: true},
+					})
+				}
 			}
 		}
 
@@ -461,7 +471,9 @@ func (mde *mockDirEntry) ReadDir(n int) ([]fs.DirEntry, error) {
 	}
 
 	if mde.readDirOffset >= len(mde.entries) {
-		if n <= 0 { return nil, nil }
+		if n <= 0 {
+			return nil, nil
+		}
 		return nil, io.EOF // Use standard io.EOF
 	}
 
@@ -507,21 +519,23 @@ func (mfs *MockFS) Exists(name string) bool {
 
 // GetMode retrieves the mode of a path in the MockFS.
 func (mfs *MockFS) GetMode(name string) (fs.FileMode, error) {
-    mfs.mu.RLock()
-    defer mfs.mu.RUnlock()
-    cleanName := path.Clean(name)
-    f, ok := mfs.files[cleanName]
-    if !ok {
-        // Check for implicit directory
-        prefix := cleanName + "/"
-        if cleanName == "." { prefix = "./" } // Avoid just "/" for "."
+	mfs.mu.RLock()
+	defer mfs.mu.RUnlock()
+	cleanName := path.Clean(name)
+	f, ok := mfs.files[cleanName]
+	if !ok {
+		// Check for implicit directory
+		prefix := cleanName + "/"
+		if cleanName == "." {
+			prefix = "./"
+		} // Avoid just "/" for "."
 
-        for p := range mfs.files {
-            if strings.HasPrefix(p, prefix) {
-                return fs.ModeDir | 0755, nil // Implicit directory
-            }
-        }
-        return 0, &fs.PathError{Op: "getmode", Path: name, Err: fs.ErrNotExist}
-    }
-    return f.mode, nil
+		for p := range mfs.files {
+			if strings.HasPrefix(p, prefix) {
+				return fs.ModeDir | 0755, nil // Implicit directory
+			}
+		}
+		return 0, &fs.PathError{Op: "getmode", Path: name, Err: fs.ErrNotExist}
+	}
+	return f.mode, nil
 }
