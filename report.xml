@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="54" failures="0" errors="0" time="0.017695">
+	<testsuite tests="1" failures="0" time="0.010000" name="github.com/arthur-debert/synthfs/cmd/synthfs" timestamp="2025-06-23T01:26:37Z">
+		<properties>
+			<property name="go.version" value="go1.24.3 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/arthur-debert/synthfs/cmd/synthfs" name="TestRootCmdSetup" time="0.000000"></testcase>
+	</testsuite>
+	<testsuite tests="18" failures="0" time="0.013000" name="github.com/arthur-debert/synthfs/pkg/synthfs" timestamp="2025-06-23T01:26:37Z">
+		<properties>
+			<property name="go.version" value="go1.24.3 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestExecutor_Execute_SimpleSuccess" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestExecutor_Execute_ValidationError" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestExecutor_Execute_ExecutionError" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestExecutor_Execute_WithDryRun" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestExecutor_Execute_DryRun_WithValidationError" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestExecutor_Execute_EmptyQueue" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestMemQueue_Add_Operations" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestMemQueue_Add_DuplicateID" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestMemQueue_Add_NilOperation" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestMemQueue_Operations_ReturnsCopy" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestMemQueue_Resolve_SimpleDependency" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestMemQueue_Resolve_CircularDependency" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestMemQueue_Resolve_MissingDependency" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestMemQueue_Resolve_IndependentOperations" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestMemQueue_Validate_Success" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestMemQueue_Validate_OperationValidationError" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestMemQueue_Validate_ConflictError" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestMemQueue_ComplexDependencyChain" time="0.000000"></testcase>
+	</testsuite>
+	<testsuite tests="14" failures="0" time="0.008000" name="github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil" timestamp="2025-06-23T01:26:37Z">
+		<properties>
+			<property name="go.version" value="go1.24.3 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil" name="TestMockFS_WriteFile_ReadFile" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil" name="TestMockFS_WriteFile_Errors" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil" name="TestMockFS_MkdirAll" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil" name="TestMockFS_Stat" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil" name="TestMockFS_Open_File" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil" name="TestMockFS_Open_Directory_ReadDir" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil" name="TestMockFS_Remove_File" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil" name="TestMockFS_Remove_Directory" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil" name="TestMockFS_RemoveAll" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil" name="TestMockFS_CleanPaths/WriteFile_with_." time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil" name="TestMockFS_CleanPaths/MkdirAll_with_.." time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil" name="TestMockFS_CleanPaths/ReadFile_with_trailing_slash_(on_existing_file)" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil" name="TestMockFS_CleanPaths" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil" name="TestMockFS_GetMode" time="0.000000"></testcase>
+	</testsuite>
+	<testsuite tests="21" failures="0" time="0.008000" name="github.com/arthur-debert/synthfs/pkg/synthfs/ops" timestamp="2025-06-23T01:26:37Z">
+		<properties>
+			<property name="go.version" value="go1.24.3 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateDirOperation_Execute" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateDirOperation_Rollback/simple_rollback" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateDirOperation_Rollback/rollback_of_MkdirAll_(only_target_dir)" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateDirOperation_Rollback/rollback_of_non-empty_directory_(should_fail)" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateDirOperation_Rollback" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateDirOperation_Validate/valid_operation" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateDirOperation_Validate/valid_operation_(perms_only)" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateDirOperation_Validate/empty_path" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateDirOperation_Validate/invalid_mode_(non-permission_bits,_excluding_ModeDir)" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateDirOperation_Validate" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateDirOperation_Describe" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateDirOperation_WithID_WithDependency" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateFileOperation_Execute" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateFileOperation_Rollback" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateFileOperation_Validate/valid_operation" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateFileOperation_Validate/empty_path" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateFileOperation_Validate/invalid_mode_(non-permission_bits)" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateFileOperation_Validate/valid_mode_(permission_bits_only)" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateFileOperation_Validate" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateFileOperation_Describe" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs/ops" name="TestCreateFileOperation_WithID_WithDependency" time="0.000000"></testcase>
+	</testsuite>
+</testsuites>

@@ -88,16 +88,25 @@ func (e *Executor) Execute(ctx context.Context, queue Queue, fsys FileSystem, op
 		return overallResult
 	}
 
-	// Phase 2: Check for dependency and conflict issues only (not individual operation validation)
-	if err := e.validateDependenciesAndConflicts(queue); err != nil {
+	// Phase 2: Validate the entire queue (dependencies, individual ops, conflicts)
+	// Note: queue.Validate() is expected to be called after queue.Resolve()
+	if err := queue.Validate(ctx, fsys); err != nil {
 		overallResult.Success = false
+		// Attempt to cast to specific error types to provide more granular results if needed
+		// For now, append the raw error.
+		// If err is a ValidationError, we might want to populate opResult for the specific op.
 		overallResult.Errors = append(overallResult.Errors, fmt.Errorf("queue validation failed: %w", err))
 		overallResult.Duration = time.Since(startTime)
+		// TODO: If queue.Validate fails due to a specific operation,
+		// we should ideally populate an OperationResult for that operation.
+		// This requires queue.Validate to return more structured error information or
+		// for the executor to iterate and validate if it needs to populate individual results.
+		// For now, a general error is added.
 		return overallResult
 	}
 
-	// Phase 3: Execute operations in dependency-resolved order with individual validation
-	queuedOps := queue.Operations() // Now in dependency-resolved order
+	// Phase 3: Execute operations in dependency-resolved order
+	queuedOps := queue.Operations() // Now in dependency-resolved order and validated
 	executedOps := make([]Operation, 0)
 
 	for _, op := range queuedOps {
@@ -107,24 +116,16 @@ func (e *Executor) Execute(ctx context.Context, queue Queue, fsys FileSystem, op
 			Operation:   op,
 		}
 
-		// Validate each operation individually (as before)
-		err := op.Validate(ctx, fsys)
-		if err != nil {
-			opResult.Status = StatusValidation
-			opResult.Error = fmt.Errorf("validation failed for operation %s (%s): %w", op.ID(), op.Describe().Path, err)
-			opResult.Duration = time.Since(opStartTime)
-			overallResult.Operations = append(overallResult.Operations, opResult)
-			overallResult.Errors = append(overallResult.Errors, opResult.Error)
-			overallResult.Success = false
-			continue // Continue with next operation (old behavior)
-		}
+		// Individual operation validation has already been done by queue.Validate().
+		// We proceed to check for DryRun and then execute.
 
 		// Check for DryRun
 		if config.DryRun {
 			opResult.Status = StatusSkipped
-			opResult.Error = fmt.Errorf("operation %s (%s) skipped due to dry run", op.ID(), op.Describe().Path)
+			// opResult.Error = nil; // No actual error occurred
 			opResult.Duration = time.Since(opStartTime)
 			overallResult.Operations = append(overallResult.Operations, opResult)
+			// Dry run operations are considered "successful" in terms of queue processing flow
 			continue
 		}
 
@@ -155,22 +156,6 @@ func (e *Executor) Execute(ctx context.Context, queue Queue, fsys FileSystem, op
 
 	overallResult.Duration = time.Since(startTime)
 	return overallResult
-}
-
-// validateDependenciesAndConflicts checks for dependency and conflict issues only
-func (e *Executor) validateDependenciesAndConflicts(queue Queue) error {
-	// Cast to our concrete type to access the helper methods
-	if mq, ok := queue.(*memQueue); ok {
-		// Validate dependencies exist
-		if err := mq.validateDependencies(); err != nil {
-			return err
-		}
-		// Check for conflicts
-		if err := mq.validateConflicts(); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // createRollbackFunc creates a rollback function that can undo executed operations.
