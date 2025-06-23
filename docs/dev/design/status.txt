@@ -11,6 +11,8 @@ commit messages must have a Phase X.Y: <thing done>
 when each master phase is done, you can submmit to review by me. 
 gotestsum -> scrpits/test must always pass.
 
+As you finish any subphase / phase, mark them with the done checkmark (✓
+
 1. Phase 1: Core Foundation
     1.1 Define core interfaces based on io/fs (ReadFS, WriteFS, FileSystem) ✓
     1.2 Implement basic operations (Create, Delete, Copy, Move) with dependency support ✓
