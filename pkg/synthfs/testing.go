@@ -44,6 +44,17 @@ func (tfs *TestFileSystem) MkdirAll(path string, perm fs.FileMode) error {
 	if !fs.ValidPath(path) {
 		return &fs.PathError{Op: "mkdirall", Path: path, Err: fs.ErrInvalid}
 	}
+
+	// Check if a file (not directory) already exists at this path
+	if existing, exists := tfs.MapFS[path]; exists {
+		if !existing.Mode.IsDir() {
+			// Can't create directory where file exists
+			return &fs.PathError{Op: "mkdirall", Path: path, Err: fs.ErrExist}
+		}
+		// Directory already exists, that's fine for MkdirAll
+		return nil
+	}
+
 	tfs.MapFS[path] = &fstest.MapFile{
 		Mode: perm | fs.ModeDir,
 	}
@@ -232,8 +243,14 @@ func (th *TestHelper) ExecuteAndExpectError(queue Queue, opts ...ExecuteOption) 
 func ValidateTestFS(t *testing.T, testFS *TestFileSystem) {
 	t.Helper()
 
+	// Collect expected files from the filesystem
+	expectedFiles := make([]string, 0, len(testFS.MapFS))
+	for path := range testFS.MapFS {
+		expectedFiles = append(expectedFiles, path)
+	}
+
 	// Use testing/fstest to validate the filesystem
-	if err := fstest.TestFS(testFS.MapFS, ""); err != nil {
+	if err := fstest.TestFS(testFS.MapFS, expectedFiles...); err != nil {
 		t.Fatalf("TestFileSystem validation failed: %v", err)
 	}
 }

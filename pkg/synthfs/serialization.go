@@ -43,11 +43,44 @@ func MarshalPlan(plan *OperationPlan) ([]byte, error) {
 
 // UnmarshalPlan deserializes an operation plan from JSON
 func UnmarshalPlan(data []byte) (*OperationPlan, error) {
-	var plan OperationPlan
-	if err := json.Unmarshal(data, &plan); err != nil {
+	// First unmarshal into a raw structure to handle the operations manually
+	var rawPlan struct {
+		Operations []json.RawMessage `json:"operations"`
+		Metadata   PlanMetadata      `json:"metadata"`
+	}
+
+	if err := json.Unmarshal(data, &rawPlan); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal operation plan: %w", err)
 	}
-	return &plan, nil
+
+	plan := &OperationPlan{
+		Operations: make([]SerializableOperation, 0, len(rawPlan.Operations)),
+		Metadata:   rawPlan.Metadata,
+	}
+
+	// Unmarshal each operation based on its type
+	for _, rawOp := range rawPlan.Operations {
+		var opType struct {
+			Type string `json:"type"`
+		}
+
+		if err := json.Unmarshal(rawOp, &opType); err != nil {
+			return nil, fmt.Errorf("failed to determine operation type: %w", err)
+		}
+
+		switch opType.Type {
+		case "create_file":
+			var op SerializableCreateFileOperation
+			if err := op.UnmarshalJSON(rawOp); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal create_file operation: %w", err)
+			}
+			plan.Operations = append(plan.Operations, &op)
+		default:
+			return nil, fmt.Errorf("unknown operation type: %s", opType.Type)
+		}
+	}
+
+	return plan, nil
 }
 
 // NewOperationPlan creates a new operation plan
