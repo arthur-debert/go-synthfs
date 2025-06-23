@@ -51,6 +51,32 @@ func (op *CreateFileOperation) ID() synthfs.OperationID {
 
 // Execute creates the file with the specified data and mode.
 func (op *CreateFileOperation) Execute(ctx context.Context, fsys synthfs.FileSystem) error {
+	synthfs.Logger().Trace().
+		Interface("create_file_full_context", map[string]interface{}{
+			"operation": map[string]interface{}{
+				"id":           string(op.id),
+				"path":         op.path,
+				"mode":         op.mode.String(),
+				"content_size": len(op.data),
+				"content_preview": func() string {
+					if len(op.data) <= 100 {
+						return string(op.data)
+					}
+					return string(op.data[:100]) + "... (truncated)"
+				}(),
+				"content_hex": func() string {
+					if len(op.data) <= 50 {
+						return fmt.Sprintf("%x", op.data)
+					}
+					return fmt.Sprintf("%x... (truncated)", op.data[:50])
+				}(),
+				"dependencies": op.dependencies,
+			},
+			"context":    fmt.Sprintf("%+v", ctx),
+			"filesystem": fmt.Sprintf("%T", fsys),
+		}).
+		Msg("executing CreateFile with complete data dump")
+
 	synthfs.Logger().Info().
 		Str("op_id", string(op.id)).
 		Str("path", op.path).
@@ -60,6 +86,20 @@ func (op *CreateFileOperation) Execute(ctx context.Context, fsys synthfs.FileSys
 
 	err := fsys.WriteFile(op.path, op.data, op.mode)
 	if err != nil {
+		synthfs.Logger().Trace().
+			Interface("create_file_error_context", map[string]interface{}{
+				"operation": map[string]interface{}{
+					"id":           string(op.id),
+					"path":         op.path,
+					"mode":         op.mode.String(),
+					"content_size": len(op.data),
+				},
+				"error":      err.Error(),
+				"error_type": fmt.Sprintf("%T", err),
+				"filesystem": fmt.Sprintf("%T", fsys),
+			}).
+			Msg("CreateFile execution failed - complete error context")
+
 		synthfs.Logger().Info().
 			Str("op_id", string(op.id)).
 			Str("path", op.path).

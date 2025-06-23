@@ -55,6 +55,19 @@ func (op *CreateDirOperation) ID() synthfs.OperationID {
 
 // Execute creates the directory using MkdirAll and tracks what was created.
 func (op *CreateDirOperation) Execute(ctx context.Context, fsys synthfs.FileSystem) error {
+	synthfs.Logger().Trace().
+		Interface("create_dir_full_context", map[string]interface{}{
+			"operation": map[string]interface{}{
+				"id":           string(op.id),
+				"path":         op.path,
+				"mode":         op.mode.String(),
+				"dependencies": op.dependencies,
+			},
+			"context":    fmt.Sprintf("%+v", ctx),
+			"filesystem": fmt.Sprintf("%T", fsys),
+		}).
+		Msg("executing CreateDir with complete context dump")
+
 	synthfs.Logger().Info().
 		Str("op_id", string(op.id)).
 		Str("path", op.path).
@@ -67,6 +80,14 @@ func (op *CreateDirOperation) Execute(ctx context.Context, fsys synthfs.FileSyst
 	// Build path components to track creation
 	pathParts := strings.Split(strings.Trim(op.path, "/"), "/")
 	currentPath := ""
+
+	synthfs.Logger().Trace().
+		Interface("path_analysis", map[string]interface{}{
+			"target_path": op.path,
+			"path_parts":  pathParts,
+			"total_parts": len(pathParts),
+		}).
+		Msg("analyzing path components for directory creation")
 
 	for _, part := range pathParts {
 		if part == "" {
@@ -84,16 +105,42 @@ func (op *CreateDirOperation) Execute(ctx context.Context, fsys synthfs.FileSyst
 			// Directory already exists, just check if it's actually a directory
 			if info, statErr := file.Stat(); statErr == nil && info.IsDir() {
 				file.Close()
+				synthfs.Logger().Trace().
+					Str("existing_path", currentPath).
+					Str("existing_mode", info.Mode().String()).
+					Msg("path component already exists as directory")
 				continue // Directory exists, skip creation
 			} else {
 				file.Close()
+				synthfs.Logger().Trace().
+					Str("conflicting_path", currentPath).
+					Bool("is_directory", info != nil && info.IsDir()).
+					Msg("path component exists but is not a directory")
 				return fmt.Errorf("path %s exists but is not a directory", currentPath)
 			}
 		}
 	}
 
 	// Execute MkdirAll
+	synthfs.Logger().Trace().
+		Str("mkdir_path", op.path).
+		Str("mkdir_mode", op.mode.String()).
+		Msg("executing filesystem MkdirAll")
+
 	if err := fsys.MkdirAll(op.path, op.mode); err != nil {
+		synthfs.Logger().Trace().
+			Interface("create_dir_error_context", map[string]interface{}{
+				"operation": map[string]interface{}{
+					"id":   string(op.id),
+					"path": op.path,
+					"mode": op.mode.String(),
+				},
+				"error":      err.Error(),
+				"error_type": fmt.Sprintf("%T", err),
+				"filesystem": fmt.Sprintf("%T", fsys),
+			}).
+			Msg("CreateDir execution failed - complete error context")
+
 		synthfs.Logger().Info().
 			Str("op_id", string(op.id)).
 			Str("path", op.path).
@@ -121,6 +168,18 @@ func (op *CreateDirOperation) Execute(ctx context.Context, fsys synthfs.FileSyst
 		// In a more sophisticated implementation, we'd track exactly what was created
 		op.createdPaths = append(op.createdPaths, currentPath)
 	}
+
+	synthfs.Logger().Trace().
+		Interface("create_dir_success_context", map[string]interface{}{
+			"operation": map[string]interface{}{
+				"id":   string(op.id),
+				"path": op.path,
+				"mode": op.mode.String(),
+			},
+			"created_paths": op.createdPaths,
+			"path_count":    len(op.createdPaths),
+		}).
+		Msg("CreateDir execution succeeded - complete success context")
 
 	synthfs.Logger().Info().
 		Str("op_id", string(op.id)).

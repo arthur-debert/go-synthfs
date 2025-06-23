@@ -72,6 +72,12 @@ func (e *Executor) Execute(ctx context.Context, queue Queue, fs FileSystem, opts
 		opt(config)
 	}
 
+	Logger().Trace().
+		Interface("execute_config", config).
+		Str("context", fmt.Sprintf("%+v", ctx)).
+		Str("filesystem_type", fmt.Sprintf("%T", fs)).
+		Msg("execute called with full context")
+
 	Logger().Info().
 		Int("operation_count", len(queue.Operations())).
 		Bool("dry_run", config.DryRun).
@@ -87,6 +93,11 @@ func (e *Executor) Execute(ctx context.Context, queue Queue, fs FileSystem, opts
 	// Resolve dependencies first
 	Logger().Info().Msg("resolving operation dependencies")
 	if err := queue.Resolve(); err != nil {
+		Logger().Trace().
+			Interface("queue_operations", queue.Operations()).
+			Err(err).
+			Msg("dependency resolution failed - full queue state")
+
 		Logger().Info().
 			Err(err).
 			Msg("dependency resolution failed")
@@ -97,9 +108,39 @@ func (e *Executor) Execute(ctx context.Context, queue Queue, fs FileSystem, opts
 	}
 	Logger().Info().Msg("dependency resolution completed successfully")
 
+	// Log the resolved queue state at trace level
+	resolvedOps := queue.Operations()
+	Logger().Trace().
+		Int("resolved_operation_count", len(resolvedOps)).
+		Interface("resolved_operations", func() []map[string]interface{} {
+			var ops []map[string]interface{}
+			for i, op := range resolvedOps {
+				ops = append(ops, map[string]interface{}{
+					"index":        i,
+					"id":           string(op.ID()),
+					"type":         op.Describe().Type,
+					"path":         op.Describe().Path,
+					"details":      op.Describe().Details,
+					"dependencies": op.Dependencies(),
+					"conflicts":    op.Conflicts(),
+				})
+			}
+			return ops
+		}()).
+		Msg("complete resolved queue state")
+
 	// Validate the queue
 	Logger().Info().Msg("validating operation queue")
 	if err := queue.Validate(ctx, fs); err != nil {
+		Logger().Trace().
+			Interface("validation_context", map[string]interface{}{
+				"queue_state":      resolvedOps,
+				"filesystem_type":  fmt.Sprintf("%T", fs),
+				"validation_error": err.Error(),
+				"error_type":       fmt.Sprintf("%T", err),
+			}).
+			Msg("queue validation failed - complete context dump")
+
 		Logger().Debug().
 			Err(err).
 			Str("error_type", fmt.Sprintf("%T", err)).
@@ -145,6 +186,23 @@ func (e *Executor) Execute(ctx context.Context, queue Queue, fs FileSystem, opts
 	rollbackOps := make([]Operation, 0, len(operations))
 
 	if config.DryRun {
+		Logger().Trace().
+			Interface("dry_run_operations", func() []map[string]interface{} {
+				var ops []map[string]interface{}
+				for _, op := range operations {
+					ops = append(ops, map[string]interface{}{
+						"id":           string(op.ID()),
+						"type":         op.Describe().Type,
+						"path":         op.Describe().Path,
+						"details":      op.Describe().Details,
+						"dependencies": op.Dependencies(),
+						"conflicts":    op.Conflicts(),
+					})
+				}
+				return ops
+			}()).
+			Msg("dry-run mode - complete operations that will be skipped")
+
 		Logger().Info().Msg("executing in dry-run mode - no actual changes will be made")
 		for _, op := range operations {
 			Logger().Info().
@@ -175,6 +233,22 @@ func (e *Executor) Execute(ctx context.Context, queue Queue, fs FileSystem, opts
 
 	// Execute operations
 	for i, op := range operations {
+		Logger().Trace().
+			Interface("operation_full_context", map[string]interface{}{
+				"index":           i,
+				"total":           len(operations),
+				"id":              string(op.ID()),
+				"type":            op.Describe().Type,
+				"path":            op.Describe().Path,
+				"details":         op.Describe().Details,
+				"dependencies":    op.Dependencies(),
+				"conflicts":       op.Conflicts(),
+				"executed_so_far": len(rollbackOps),
+				"remaining":       len(operations) - i,
+				"filesystem_type": fmt.Sprintf("%T", fs),
+			}).
+			Msg("about to execute operation - complete context")
+
 		Logger().Info().
 			Str("op_id", string(op.ID())).
 			Str("op_type", op.Describe().Type).
@@ -194,6 +268,31 @@ func (e *Executor) Execute(ctx context.Context, queue Queue, fs FileSystem, opts
 		}
 
 		if err != nil {
+			Logger().Trace().
+				Interface("operation_failure_context", map[string]interface{}{
+					"operation": map[string]interface{}{
+						"id":           string(op.ID()),
+						"type":         op.Describe().Type,
+						"path":         op.Describe().Path,
+						"details":      op.Describe().Details,
+						"dependencies": op.Dependencies(),
+						"conflicts":    op.Conflicts(),
+					},
+					"error":        err.Error(),
+					"error_type":   fmt.Sprintf("%T", err),
+					"duration":     opDuration,
+					"executed_ops": len(rollbackOps),
+					"rollback_ops": func() []string {
+						var ids []string
+						for _, rop := range rollbackOps {
+							ids = append(ids, string(rop.ID()))
+						}
+						return ids
+					}(),
+					"filesystem_type": fmt.Sprintf("%T", fs),
+				}).
+				Msg("operation execution failed - complete failure context")
+
 			Logger().Info().
 				Str("op_id", string(op.ID())).
 				Str("op_type", op.Describe().Type).
@@ -207,6 +306,20 @@ func (e *Executor) Execute(ctx context.Context, queue Queue, fs FileSystem, opts
 			result.Success = false
 			result.Errors = append(result.Errors, fmt.Errorf("operation %s failed: %w", op.ID(), err))
 		} else {
+			Logger().Trace().
+				Interface("operation_success_context", map[string]interface{}{
+					"operation": map[string]interface{}{
+						"id":      string(op.ID()),
+						"type":    op.Describe().Type,
+						"path":    op.Describe().Path,
+						"details": op.Describe().Details,
+					},
+					"duration":        opDuration,
+					"executed_ops":    len(rollbackOps) + 1,
+					"filesystem_type": fmt.Sprintf("%T", fs),
+				}).
+				Msg("operation execution succeeded - complete success context")
+
 			Logger().Info().
 				Str("op_id", string(op.ID())).
 				Str("op_type", op.Describe().Type).

@@ -46,6 +46,53 @@ func NewMemQueue() Queue {
 
 // Add appends operations to the queue.
 func (mq *memQueue) Add(ops ...Operation) error {
+	Logger().Trace().
+		Interface("queue_add_full_context", map[string]interface{}{
+			"existing_queue_state": func() []map[string]interface{} {
+				var existing []map[string]interface{}
+				for i, op := range mq.ops {
+					existing = append(existing, map[string]interface{}{
+						"index":        i,
+						"id":           string(op.ID()),
+						"type":         op.Describe().Type,
+						"path":         op.Describe().Path,
+						"details":      op.Describe().Details,
+						"dependencies": op.Dependencies(),
+						"conflicts":    op.Conflicts(),
+					})
+				}
+				return existing
+			}(),
+			"new_operations": func() []map[string]interface{} {
+				var newOps []map[string]interface{}
+				for _, op := range ops {
+					if op == nil {
+						newOps = append(newOps, map[string]interface{}{
+							"id":           "<nil>",
+							"type":         "<nil>",
+							"path":         "<nil>",
+							"details":      nil,
+							"dependencies": nil,
+							"conflicts":    nil,
+						})
+					} else {
+						newOps = append(newOps, map[string]interface{}{
+							"id":           string(op.ID()),
+							"type":         op.Describe().Type,
+							"path":         op.Describe().Path,
+							"details":      op.Describe().Details,
+							"dependencies": op.Dependencies(),
+							"conflicts":    op.Conflicts(),
+						})
+					}
+				}
+				return newOps
+			}(),
+			"queue_resolved": mq.resolved,
+			"queue_size":     len(mq.ops),
+		}).
+		Msg("queue add operation - complete state dump")
+
 	Logger().Info().
 		Int("existing_operations", len(mq.ops)).
 		Int("new_operations", len(ops)).
@@ -138,11 +185,61 @@ func (mq *memQueue) Resolve() error {
 	// Perform topological sort
 	sortedIDs, err := toposort.Toposort(edges)
 	if err != nil {
+		Logger().Trace().
+			Interface("topological_sort_failure", map[string]interface{}{
+				"edges": func() []map[string]interface{} {
+					var edgeList []map[string]interface{}
+					for _, edge := range edges {
+						edgeList = append(edgeList, map[string]interface{}{
+							"from": edge[0],
+							"to":   edge[1],
+						})
+					}
+					return edgeList
+				}(),
+				"operation_dependencies": func() []map[string]interface{} {
+					var opDeps []map[string]interface{}
+					for _, op := range mq.ops {
+						opDeps = append(opDeps, map[string]interface{}{
+							"id":           string(op.ID()),
+							"dependencies": op.Dependencies(),
+						})
+					}
+					return opDeps
+				}(),
+				"error":      err.Error(),
+				"error_type": fmt.Sprintf("%T", err),
+			}).
+			Msg("topological sort failed - complete dependency graph dump")
+
 		Logger().Info().
 			Err(err).
 			Msg("topological sort failed - circular dependency detected")
 		return fmt.Errorf("circular dependency detected: %w", err)
 	}
+
+	Logger().Trace().
+		Interface("topological_sort_success", map[string]interface{}{
+			"sorted_ids": sortedIDs,
+			"edges": func() []map[string]interface{} {
+				var edgeList []map[string]interface{}
+				for _, edge := range edges {
+					edgeList = append(edgeList, map[string]interface{}{
+						"from": edge[0],
+						"to":   edge[1],
+					})
+				}
+				return edgeList
+			}(),
+			"original_order": func() []string {
+				var ids []string
+				for _, op := range mq.ops {
+					ids = append(ids, string(op.ID()))
+				}
+				return ids
+			}(),
+		}).
+		Msg("topological sort succeeded - complete sorting details")
 
 	// Rebuild operations slice in topologically sorted order
 	resolvedOps := make([]Operation, 0, len(mq.ops))
