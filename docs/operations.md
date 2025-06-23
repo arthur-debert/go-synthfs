@@ -2,6 +2,8 @@
 
 This document outlines the implementation plan for expanding synthfs to support creation, deletion, copying, and moving of files, directories, symlinks, and archives.
 
+This is a signifcant change in design. This is yet unreleased software, which means there is no backwards compatibility to keep, in fact, it's part of the work to adapt the current code and tests to the new design.  This is much cheaper than forking and keeping two concurrent designs for which one has no users. Don't keep backwards compatibility.
+
 ## How we work
 
 We are currently in the design phase, reviewing and improving the design before implementation.
@@ -25,7 +27,7 @@ Which are equivalent to :
     scripts/lint
     scripts/test
 
-Do read the docs/intro-to-synthfs.txxxt file for a prmier on the concepts and limitations of the system.
+Do read the `docs/dev/intro-to-synthfs.txt` file for a primer on the concepts and limitations of the system.
 
 ## Current Status
 
@@ -37,7 +39,7 @@ Do read the docs/intro-to-synthfs.txxxt file for a prmier on the concepts and li
 
 **Architecture Pattern:**
 
-```go
+```golang
 // Existing pattern that works well
 op := ops.NewCreateFile("config.json", []byte("data"), 0644)
     .WithID("create-config")
@@ -48,15 +50,23 @@ op := ops.NewCreateFile("config.json", []byte("data"), 0644)
 
 We'll implement foundation work first to establish consistent patterns, then expand operation by operation to ensure all targets follow the same design.
 
+### API Design Philosophy
+
+To provide a powerful and consistent API, we will adopt a single, unified strategy. The legacy builder pattern (`ops.NewCreateFile`) will be removed.
+
+1. **Item-Based Creation:** For `Create` operations, the caller will use `FsItem` objects (`NewFile`, `NewDirectory`) to provide a declarative, type-safe way to define what should be created.
+
+2. **Unified Manipulation:** For `Delete`, `Copy`, and `Move` operations, the caller will use simple, unified functions that operate on paths. These operations will be smart enough to inspect the path and perform the correct action for the given filesystem item (file, directory, etc.).
+
 ### Phase 0: Foundation Work
 
-**Goal:** Establish the hybrid API pattern without breaking existing code.
+**Goal:** Establish the new unified API and refactor existing code to use it.
 
 **Deliverables:**
 
 1. **Define FsItem interface and builders** (`pkg/synthfs/items.go`)
 
-   ```go
+   ```golang
    type FsItem interface {
        Path() string
        Type() string
@@ -74,23 +84,23 @@ We'll implement foundation work first to establish consistent patterns, then exp
    func NewArchive(path string) *ArchiveItem
    ```
 
-2. **Generic operation wrappers** (`pkg/synthfs/ops/generic.go`)
+2. **Unified operation constructors** (`pkg/synthfs/ops/generic.go`)
 
-   ```go
+   ```golang
    func Create(item FsItem) Operation
    func Delete(path string) Operation
    func Copy(src, dst string) Operation  
    func Move(src, dst string) Operation
    ```
 
-3. **Verification with existing operations**
-   - Ensure `Create(NewFile(...))` produces same result as `NewCreateFile(...)`
-   - All existing tests continue to pass
-   - Both APIs work interchangeably
+3. **Refactor Existing Code**
+   - Refactor `CreateFile` and `CreateDirectory` operations to use the new `Create(FsItem)` pattern.
+   - Update all existing tests to use the new API.
+   - Remove the old builder-style constructors (`ops.NewCreateFile`, etc.).
 
 ### Phase 1: Complete Create Operations
 
-**Goal:** Support creation of all filesystem item types.
+**Goal:** Support creation of all filesystem item types using the new API.
 
 **Deliverables:**
 
@@ -110,7 +120,7 @@ We'll implement foundation work first to establish consistent patterns, then exp
 
 3. **Archive format support** (`pkg/synthfs/archive.go`)
 
-   ```go
+   ```golang
    type ArchiveFormat int
    const (
        ArchiveFormatTarGz ArchiveFormat = iota
@@ -124,57 +134,39 @@ We'll implement foundation work first to establish consistent patterns, then exp
 
 ### Phase 2: Delete Operations
 
-**Goal:** Support deletion of all filesystem item types.
+**Goal:** Support deletion of any filesystem item using a single, unified operation.
 
 **Deliverables:**
 
-1. **DeleteFile operation** (`pkg/synthfs/ops/delete_file.go`)
-2. **DeleteDirectory operation** (`pkg/synthfs/ops/delete_dir.go`)  
-3. **DeleteSymlink operation** (`pkg/synthfs/ops/delete_symlink.go`)
-4. **DeleteArchive operation** (`pkg/synthfs/ops/delete_archive.go`)
-
-**Shared patterns:**
-
-- Constructor: `NewDeleteFile(path string)`, etc.
-- Validation: Check item exists and is correct type
-- Execution: Use appropriate `FileSystem.Remove*()` method
-- Rollback: Restore deleted item (challenging - may need backup)
+1. **Unified Delete operation** (`pkg/synthfs/ops/delete.go`)
+   - Constructor: `NewDelete(path string)`
+   - Validation: Check that the path exists.
+   - Execution: Inspect the item at `path` and use the appropriate `FileSystem` method (`Remove` for files/symlinks, `RemoveAll` for directories).
+   - Rollback: Restore the deleted item. This is challenging and may require caching the item's content (for files) or metadata before deletion. A robust strategy for directory rollback needs to be designed.
 
 ### Phase 3: Copy Operations
 
-**Goal:** Support copying between filesystem items.
+**Goal:** Support copying any filesystem item using a single, unified operation.
 
 **Deliverables:**
 
-1. **CopyFile operation** (`pkg/synthfs/ops/copy_file.go`)
-2. **CopyDirectory operation** (`pkg/synthfs/ops/copy_dir.go`)
-3. **CopySymlink operation** (`pkg/synthfs/ops/copy_symlink.go`)
-4. **CopyArchive operation** (`pkg/synthfs/ops/copy_archive.go`)
-
-**Shared patterns:**
-
-- Constructor: `NewCopyFile(src, dst string)`, etc.
-- Validation: Source exists, destination path valid
-- Execution: Type-appropriate copy logic
-- Rollback: Remove copied item
+1. **Unified Copy operation** (`pkg/synthfs/ops/copy.go`)
+   - Constructor: `NewCopy(src, dst string)`
+   - Validation: Check that the source path exists and the destination is valid.
+   - Execution: Inspect the item at `src` and perform a type-appropriate copy (e.g., recursive for directories).
+   - Rollback: Remove the item created at `dst`.
 
 ### Phase 4: Move Operations
 
-**Goal:** Support moving/renaming filesystem items.
+**Goal:** Support moving/renaming any filesystem item using a single, unified operation.
 
 **Deliverables:**
 
-1. **MoveFile operation** (`pkg/synthfs/ops/move_file.go`)
-2. **MoveDirectory operation** (`pkg/synthfs/ops/move_dir.go`)
-3. **MoveSymlink operation** (`pkg/synthfs/ops/move_symlink.go`)
-4. **MoveArchive operation** (`pkg/synthfs/ops/move_archive.go`)
-
-**Shared patterns:**
-
-- Constructor: `NewMoveFile(src, dst string)`, etc.
-- Validation: Source exists, destination path valid
-- Execution: Use `FileSystem.Rename()` where possible
-- Rollback: Move back to original location
+1. **Unified Move operation** (`pkg/synthfs/ops/move.go`)
+    - Constructor: `NewMove(src, dst string)`
+    - Validation: Check that the source path exists and the destination is valid.
+    - Execution: Use `FileSystem.Rename()` for atomic moves. If `Rename` is not possible across devices, this may need to be implemented as a Copy-then-Delete operation.
+    - Rollback: Move the item from `dst` back to `src`.
 
 ## Implementation Notes
 
@@ -182,7 +174,7 @@ We'll implement foundation work first to establish consistent patterns, then exp
 
 May need to extend `FileSystem` interface for new operations:
 
-```go
+```golang
 type FileSystem interface {
     ReadFS
     WriteFS
@@ -223,7 +215,7 @@ Each phase should include:
 
 ## Success Criteria
 
-- All operations work with both old and new APIs
+- A single, consistent, and declarative API for all filesystem operations.
 - Comprehensive test coverage (>90%)
 - Consistent behavior patterns across operations
 - Full rollback support for transactional execution
