@@ -312,3 +312,211 @@ func TestExecutor_Execute_EmptyQueue(t *testing.T) {
 		t.Errorf("len(result.Errors) = %d, want 0 for empty queue", len(result.Errors))
 	}
 }
+
+func TestExecutor_Execute_RollbackCalled(t *testing.T) {
+	ctx := context.Background()
+	mfs := testutil.NewMockFS()
+	executor := synthfs.NewExecutor()
+	queue := synthfs.NewMemQueue()
+
+	op1 := newControllableMockOp("op1_rb_ok")
+	op2 := newControllableMockOp("op2_rb_ok")
+	op3ExecuteErr := errors.New("op3 failed execution")
+	op3 := newControllableMockOp("op3_rb_fail_exec")
+	op3.executeErr = op3ExecuteErr // op3 will fail to execute
+	op4 := newControllableMockOp("op4_rb_not_run") // op4 will not run if op3 fails and executor stops (current executor continues)
+
+	// Rollback tracking
+	var rollbackOrder []string
+	op1.rollbackFunc = func(ctx context.Context, fsys synthfs.FileSystem) error {
+		rollbackOrder = append(rollbackOrder, "op1")
+		return nil
+	}
+	op2.rollbackFunc = func(ctx context.Context, fsys synthfs.FileSystem) error {
+		rollbackOrder = append(rollbackOrder, "op2")
+		return nil
+	}
+	op3.rollbackFunc = func(ctx context.Context, fsys synthfs.FileSystem) error {
+		rollbackOrder = append(rollbackOrder, "op3")
+		// This t.Error is an assertion helper within the mock. If op3's Execute fails,
+		// its Rollback should not be part of the created rollback chain.
+		t.Error("op3.Rollback should not be called if its Execute failed and it's not in rollbackOps")
+		return nil
+	}
+	op4.rollbackFunc = func(ctx context.Context, fsys synthfs.FileSystem) error {
+		// op4 executes successfully in the current model, so its rollback IS called.
+		// The t.Error here was based on a misinterpretation of when it would be called.
+		// Removing it as the main test assertions for op4.rollbackCount cover this.
+		rollbackOrder = append(rollbackOrder, "op4")
+		return nil
+	}
+
+	_ = queue.Add(op1, op2, op3, op4)
+	result := executor.Execute(ctx, queue, mfs)
+
+	// Current executor behavior: op3 fails, op4 still runs.
+	// result.Success will be false.
+	if result.Success {
+		t.Errorf("Expected result.Success to be false due to op3 failure, got true")
+	}
+
+	if op1.executeCount != 1 { t.Errorf("op1 execute count: got %d, want 1", op1.executeCount) }
+	if op2.executeCount != 1 { t.Errorf("op2 execute count: got %d, want 1", op2.executeCount) }
+	if op3.executeCount != 1 { t.Errorf("op3 execute count: got %d, want 1", op3.executeCount) } // op3 attempts execution
+	if op4.executeCount != 1 { t.Errorf("op4 execute count: got %d, want 1", op4.executeCount) } // op4 also executes
+
+	// Call the rollback function
+	if result.Rollback == nil {
+		t.Fatal("result.Rollback function is nil")
+	}
+	err := result.Rollback(ctx)
+	if err != nil {
+		t.Errorf("result.Rollback returned error: %v", err)
+	}
+
+	// Check rollback counts
+	if op1.rollbackCount != 1 {
+		t.Errorf("op1 rollbackCount = %d, want 1", op1.rollbackCount)
+	}
+	if op2.rollbackCount != 1 {
+		t.Errorf("op2 rollbackCount = %d, want 1", op2.rollbackCount)
+	}
+	if op3.rollbackCount != 0 { // op3 failed execution, so its Rollback should not be called by createRollbackFunc
+		t.Errorf("op3 rollbackCount = %d, want 0", op3.rollbackCount)
+	}
+	if op4.rollbackCount != 1 { // op4 executed successfully, so its Rollback *should* be called
+		t.Errorf("op4 rollbackCount = %d, want 1", op4.rollbackCount)
+	}
+
+	// Check rollback order: op4, then op2, then op1. op3 is skipped.
+	// The rollbackOps list in executor.Execute includes all successfully executed ops.
+	// So, op1, op2, op4. Rollback order is reverse: op4, op2, op1.
+	expectedRollbackOrder := []string{"op4", "op2", "op1"}
+	if len(rollbackOrder) != len(expectedRollbackOrder) {
+		t.Errorf("Rollback order length: got %d, want %d. Order: %v", len(rollbackOrder), len(expectedRollbackOrder), rollbackOrder)
+	} else {
+		for i := range expectedRollbackOrder {
+			if rollbackOrder[i] != expectedRollbackOrder[i] {
+				t.Errorf("Rollback order at index %d: got %s, want %s. Full order: %v", i, rollbackOrder[i], expectedRollbackOrder[i], rollbackOrder)
+				break
+			}
+		}
+	}
+}
+
+func TestExecutor_Rollback_ErrorDuringRollback(t *testing.T) {
+	ctx := context.Background()
+	mfs := testutil.NewMockFS()
+	executor := synthfs.NewExecutor()
+	queue := synthfs.NewMemQueue()
+
+	op1RollbackErr := errors.New("op1 failed to rollback")
+	op1 := newControllableMockOp("op1_fail_rb")
+	op1.rollbackErr = op1RollbackErr
+
+	op2 := newControllableMockOp("op2_success_rb")
+
+	_ = queue.Add(op1, op2) // Both will execute successfully
+	result := executor.Execute(ctx, queue, mfs)
+
+	if !result.Success {
+		t.Fatalf("Executor.Execute failed unexpectedly: %v", result.Errors)
+	}
+
+	if result.Rollback == nil {
+		t.Fatal("result.Rollback function is nil")
+	}
+	err := result.Rollback(ctx)
+
+	if err == nil {
+		t.Fatalf("result.Rollback expected an error, got nil")
+	}
+	if !strings.Contains(err.Error(), op1RollbackErr.Error()) {
+		t.Errorf("result.Rollback error string %q does not contain expected error %q", err.Error(), op1RollbackErr.Error())
+	}
+
+	// Check that both rollbacks were attempted
+	if op1.rollbackCount != 1 {
+		t.Errorf("op1 rollbackCount = %d, want 1", op1.rollbackCount)
+	}
+	if op2.rollbackCount != 1 { // op2's rollback should still be called even if op1's failed
+		t.Errorf("op2 rollbackCount = %d, want 1", op2.rollbackCount)
+	}
+}
+
+func TestExecutor_Execute_DependencyResolutionFailure(t *testing.T) {
+	ctx := context.Background()
+	mfs := testutil.NewMockFS()
+	executor := synthfs.NewExecutor()
+	queue := synthfs.NewMemQueue()
+
+	op1 := newControllableMockOp("op1_dep_fail")
+	op1.dependencies = []synthfs.OperationID{"non_existent_op"} // Depends on an op not in the queue
+
+	op2 := newControllableMockOp("op2_dep_fail") // Will also be in queue but not directly causing failure
+
+	err := queue.Add(op1, op2)
+	if err != nil {
+		t.Fatalf("queue.Add failed: %v", err)
+	}
+
+	result := executor.Execute(ctx, queue, mfs)
+
+	if result.Success {
+		t.Errorf("result.Success = true, want false for dependency resolution failure")
+	}
+
+	if len(result.Errors) == 0 {
+		t.Fatal("result.Errors is empty, want error for dependency resolution failure")
+	} else {
+		// Check for a specific type of error if possible, or string content
+		// The error comes from queue.Resolve(), which wraps errors from toposort or custom checks.
+		// For MemQueue, it's likely a synthfs.DependencyError or an error wrapping it.
+		foundDepError := false
+		for _, resErr := range result.Errors {
+			// MemQueue.Resolve() wraps the error from validateDependencyReferences
+			// which returns a DependencyError.
+			// So we expect the error chain to contain a DependencyError.
+			var depErr *synthfs.DependencyError
+			if errors.As(resErr, &depErr) {
+				foundDepError = true
+				if depErr.Operation.ID() != op1.ID() {
+					t.Errorf("DependencyError operation ID got %s, want %s", depErr.Operation.ID(), op1.ID())
+				}
+				if len(depErr.Missing) == 0 || depErr.Missing[0] != "non_existent_op" {
+					t.Errorf("DependencyError missing got %v, want ['non_existent_op']", depErr.Missing)
+				}
+				break
+			}
+			// Fallback to string check if not a direct DependencyError in result.Errors[0]
+			// (e.g. if it's further wrapped by executor)
+			if strings.Contains(resErr.Error(), "dependency") && strings.Contains(resErr.Error(), "non_existent_op") {
+				foundDepError = true
+				// t.Logf("Found dependency error by string match: %v", resErr) // For debugging
+				break
+			}
+		}
+		if !foundDepError {
+			t.Errorf("result.Errors does not contain a recognizable dependency error. Got: %v", result.Errors)
+		}
+	}
+
+	// No operations should have been validated or executed
+	if op1.validateCount != 0 {
+		t.Errorf("op1 validateCount = %d, want 0", op1.validateCount)
+	}
+	if op1.executeCount != 0 {
+		t.Errorf("op1 executeCount = %d, want 0", op1.executeCount)
+	}
+	if op2.validateCount != 0 {
+		t.Errorf("op2 validateCount = %d, want 0", op2.validateCount)
+	}
+	if op2.executeCount != 0 {
+		t.Errorf("op2 executeCount = %d, want 0", op2.executeCount)
+	}
+
+	// result.Operations should be empty as execution phase was not reached
+	if len(result.Operations) != 0 {
+		t.Errorf("len(result.Operations) = %d, want 0", len(result.Operations))
+	}
+}

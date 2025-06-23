@@ -2,6 +2,7 @@ package synthfs_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
@@ -25,7 +26,7 @@ func TestValidationError(t *testing.T) {
 		}
 
 		// Should contain operation ID and reason
-		if !contains(errMsg, "invalid path") {
+		if !strings.Contains(errMsg, "invalid path") {
 			t.Errorf("Expected error message to contain reason 'invalid path', got %q", errMsg)
 		}
 	})
@@ -61,7 +62,7 @@ func TestDependencyError(t *testing.T) {
 		}
 
 		// Should contain information about missing dependencies
-		if !contains(errMsg, "dep1") {
+		if !strings.Contains(errMsg, "dep1") {
 			t.Errorf("Expected error message to contain missing dependency 'dep1', got %q", errMsg)
 		}
 	})
@@ -83,7 +84,7 @@ func TestConflictError(t *testing.T) {
 		}
 
 		// Should contain information about conflicts
-		if !contains(errMsg, "conflict") {
+		if !strings.Contains(errMsg, "conflict") {
 			t.Errorf("Expected error message to contain 'conflict', got %q", errMsg)
 		}
 	})
@@ -154,22 +155,4 @@ func TestErrorTypesWithNilCause(t *testing.T) {
 	if errMsg == "" {
 		t.Errorf("Expected non-empty error message even with nil cause")
 	}
-}
-
-// Helper function to check if a string contains a substring
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr ||
-		(len(s) > len(substr) &&
-			(s[:len(substr)] == substr ||
-				s[len(s)-len(substr):] == substr ||
-				containsSubstring(s, substr))))
-}
-
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
