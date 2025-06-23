@@ -70,4 +70,4 @@ END {
         gsub(/^total:/, "TOTAL:", total_line);
         color_line(total_line, total_coverage);
     }
-}' 
+}'

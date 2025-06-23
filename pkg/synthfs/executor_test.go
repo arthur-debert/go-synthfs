@@ -74,7 +74,7 @@ func TestExecutor_Execute_SimpleSuccess(t *testing.T) {
 	op1 := newControllableMockOp("op1")
 	op2 := newControllableMockOp("op2")
 
-	queue.Add(op1, op2)
+	_ = queue.Add(op1, op2)
 
 	result := executor.Execute(ctx, queue, mfs)
 
@@ -107,7 +107,7 @@ func TestExecutor_Execute_ValidationError(t *testing.T) {
 	op2.validateErr = op2ValidateErr
 	op3 := newControllableMockOp("op3_after_invalid")
 
-	queue.Add(op1, op2, op3)
+	_ = queue.Add(op1, op2, op3)
 	result := executor.Execute(ctx, queue, mfs)
 
 	if result.Success {
@@ -162,8 +162,7 @@ func TestExecutor_Execute_ExecutionError(t *testing.T) {
 	op2.executeErr = op2ExecuteErr
 	op3 := newControllableMockOp("op3_after_exec_fail")
 
-
-	queue.Add(op1, op2, op3)
+	_ = queue.Add(op1, op2, op3)
 	result := executor.Execute(ctx, queue, mfs)
 
 	if result.Success {
@@ -177,7 +176,7 @@ func TestExecutor_Execute_ExecutionError(t *testing.T) {
 	if op1.validateCount != 1 || op1.executeCount != 1 {
 		t.Errorf("op1 counts: validate=%d, execute=%d; want 1, 1", op1.validateCount, op1.executeCount)
 	}
-    if result.Operations[0].Status != synthfs.StatusSuccess {
+	if result.Operations[0].Status != synthfs.StatusSuccess {
 		t.Errorf("op1 status = %s, want SUCCESS", result.Operations[0].Status)
 	}
 
@@ -196,7 +195,7 @@ func TestExecutor_Execute_ExecutionError(t *testing.T) {
 	if op3.validateCount != 1 || op3.executeCount != 1 {
 		t.Errorf("op3 counts: validate=%d, execute=%d; want 1, 1", op3.validateCount, op3.executeCount)
 	}
-    if result.Operations[2].Status != synthfs.StatusSuccess {
+	if result.Operations[2].Status != synthfs.StatusSuccess {
 		t.Errorf("op3 status = %s, want SUCCESS", result.Operations[2].Status)
 	}
 
@@ -214,7 +213,7 @@ func TestExecutor_Execute_WithDryRun(t *testing.T) {
 	op1 := newControllableMockOp("op1_dryrun")
 	op2 := ops.NewCreateFile("test_dryrun.txt", []byte("data"), 0644).WithID("op2_createfile_dryrun")
 
-	queue.Add(op1, op2)
+	_ = queue.Add(op1, op2)
 	result := executor.Execute(ctx, queue, mfs, synthfs.WithDryRun(true))
 
 	if !result.Success { // Dry run with no validation errors should be Success=true
@@ -258,7 +257,7 @@ func TestExecutor_Execute_DryRun_WithValidationError(t *testing.T) {
 	opInvalidValidate := newControllableMockOp("op_invalid_validate_for_dry_run")
 	opInvalidValidate.validateErr = errors.New("dry run validation fail")
 
-	queue.Add(opValid, opInvalidValidate)
+	_ = queue.Add(opValid, opInvalidValidate)
 	result := executor.Execute(ctx, queue, mfs, synthfs.WithDryRun(true))
 
 	if result.Success { // Dry run with validation error should be Success=false

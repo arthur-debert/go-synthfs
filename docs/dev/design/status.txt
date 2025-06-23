@@ -26,13 +26,12 @@ As you finish any subphase / phase, mark them with the done checkmark (✓
     2.4 Implement operation validation with rich error types ✓
 
 3. Phase 3: Ecosystem Integration
-    3.1 Create io/fs compatible filesystem implementations (partial)
-    3.2 Implement testing utilities with testing/fstest integration (partial)
-    3.3 Create CLI tool with operation serialization
-    3.4 Add progress reporting and streaming execution
+    3.1 Create io/fs compatible filesystem implementations ✓
+    3.2 Implement testing utilities with testing/fstest integration ✓
+    3.3 Create CLI tool with operation serialization ✓
+    3.4 Add progress reporting and streaming execution ✓
 
 4. Phase 4: Production Features
     4.1 Add observability hooks (logging only, use zerolog, have a universal log level for the library)
-    4.2 Performance optimizations and benchmarks, not important, this is a small scales helper for devs
-    4.3 Add comprehensive examples and documentation, good
-    4.4 Create integration guides for popular frameworks, pick 2 only. 
+    4.2 Add comprehensive examples and documentation, good
+    4.3 Create integration guides for popular frameworks, pick 2 only. 
