@@ -33,6 +33,5 @@ As you finish any subphase / phase, mark them with the done checkmark (✓
 
 4. Phase 4: Production Features
     4.1 Add observability hooks (logging only, use zerolog, have a universal log level for the library)
-    4.2 Performance optimizations and benchmarks, not important, this is a small scales helper for devs
-    4.3 Add comprehensive examples and documentation, good
-    4.4 Create integration guides for popular frameworks, pick 2 only. 
+    4.2 Add comprehensive examples and documentation, good
+    4.3 Create integration guides for popular frameworks, pick 2 only. 
