@@ -1,37 +1,48 @@
-This document contains the implementation status for the docs/dev/design/README.md planning.
-This is a plain text only document, no markdown.
+# go-synthfs Implementation Status
 
-How we work. 
-For each master phase we'll crete a branch and a pr. 
-for example, when in phase 3, we will use the impl/phase-3/initial-work branch. 
-subitems must be sepparated by commits. 
+## Completed Phases ✓
 
-commit messages must have a Phase X.Y: <thing done> 
+### Phase 1: Core Foundation ✓
+✓ 1.1: Core interfaces and types
+✓ 1.2: Basic operations (CreateFile, CreateDir) 
+✓ 1.3: Simple executor
+✓ 1.4: Operation builders with chainable API
 
-when each master phase is done, you can submmit to review by me. 
-gotestsum -> scrpits/test must always pass.
+### Phase 2: Advanced Features ✓
+✓ 2.1: Dependency resolution with topological sorting
+✓ 2.2: Conflict detection for concurrent operations
+✓ 2.3: Transactional rollback support
+✓ 2.4: Rich error types (ValidationError, DependencyError, ConflictError)
 
-As you finish any subphase / phase, mark them with the done checkmark (✓
+### Phase 3: Ecosystem Integration ✓
+✓ 3.1: io/fs compatible filesystem implementations
+✓ 3.2: Testing utilities with testing/fstest integration  
+✓ 3.3: CLI tool with operation serialization
+✓ 3.4: Progress reporting and streaming execution
 
-1. Phase 1: Core Foundation
-    1.1 Define core interfaces based on io/fs (ReadFS, WriteFS, FileSystem) ✓
-    1.2 Implement basic operations (Create, Delete, Copy, Move) with dependency support ✓
-    1.3 Build simple executor with dependency resolution ✓
-    1.4 Create operation builders with chainable API (partial)
+### Phase 4: Production Features (In Progress)
+✓ 4.1: Observability - Logging
+  ✓ 4.1a: Central logging infrastructure with zerolog
+  ✓ 4.1b: Info-level logging for operation flow visibility
+  ✓ 4.1c: Debug-level logging for branching logic and validation
+  ✓ 4.1d: Trace-level logging with full data dumps
+◯ 4.2: Performance optimization and benchmarking
+◯ 4.3: Comprehensive examples and documentation
+◯ 4.4: Integration guides for popular frameworks
 
-2. Phase 2: Advanced Features
-    2.1 Add dependency resolution with topological sorting ✓
-    2.2 Implement conflict detection for concurrent operations ✓
-    2.3 Add transactional rollback support ✓
-    2.4 Implement operation validation with rich error types ✓
+## Implementation Notes
 
-3. Phase 3: Ecosystem Integration
-    3.1 Create io/fs compatible filesystem implementations ✓
-    3.2 Implement testing utilities with testing/fstest integration ✓
-    3.3 Create CLI tool with operation serialization ✓
-    3.4 Add progress reporting and streaming execution ✓
+### Phase 4.1 Logging - COMPLETED ✓
+- Comprehensive logging infrastructure using zerolog
+- 4 logging levels: Info (flow), Debug (decisions), Trace (data dumps), Warn (default)
+- Central configuration with application-controllable log levels
+- Test integration with -v flag mapping (warn/info/debug/trace)
+- Complete operation lifecycle logging with structured fields
+- Detailed validation and dependency resolution logging
+- Full data dumps at trace level for complete debugging
+- Developer documentation with usage examples and configuration guide
 
-4. Phase 4: Production Features
-    4.1 Add observability hooks (logging only, use zerolog, have a universal log level for the library)
-    4.2 Add comprehensive examples and documentation, good
-    4.3 Create integration guides for popular frameworks, pick 2 only. 
+## Next Steps
+- Phase 4.2: Performance optimization and benchmarking
+- Phase 4.3: Documentation and examples
+- Phase 4.4: Integration guides 
