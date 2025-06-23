@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+
+# Check if we're in the correct directory
+if [[ ! -f "go.mod" ]]; then
+    echo "Error: go.mod not found. Please run this script from the project root."
+    exit 1
+fi
+
+gotestsum --format pkgname -- -coverprofile=coverage.out ./... && go tool cover -func=coverage.out | awk '
+function color_line(line, coverage_val) {
+    if (coverage_val >= 80) {
+        printf "\033[32m%s\033[0m\n", line;  # Green
+    } else if (coverage_val >= 60) {
+        printf "\033[33m%s\033[0m\n", line;  # Yellow
+    } else {
+        printf "\033[31m%s\033[0m\n", line;  # Red
+    }
+}
+BEGIN { 
+    header = "";
+    total_line = "";
+    count = 0;
+}
+{
+    if (NR == 1) {
+        header = $0;
+    } else if ($1 == "total:") {
+        total_line = $0;
+    } else {
+        lines[count] = $0;
+        coverage = $NF;
+        sub(/%/, "", coverage);
+        coverage_vals[count] = coverage + 0;  # Force numeric conversion
+        count++;
+    }
+}
+END {
+    # Print header
+    print header;
+    
+    # Sort lines by coverage (bubble sort for simplicity)
+    for (i = 0; i < count-1; i++) {
+        for (j = 0; j < count-1-i; j++) {
+            if (coverage_vals[j] < coverage_vals[j+1]) {
+                # Swap lines
+                temp_line = lines[j];
+                lines[j] = lines[j+1];
+                lines[j+1] = temp_line;
+                # Swap coverage values
+                temp_cov = coverage_vals[j];
+                coverage_vals[j] = coverage_vals[j+1];
+                coverage_vals[j+1] = temp_cov;
+            }
+        }
+    }
+    
+    # Print sorted function lines with colors
+    for (i = 0; i < count; i++) {
+        color_line(lines[i], coverage_vals[i]);
+    }
+    
+    # Print total line with color
+    if (total_line != "") {
+        print "";  # Add blank line before total
+        split(total_line, fields);
+        total_coverage = fields[length(fields)];
+        sub(/%/, "", total_coverage);
+        total_coverage = total_coverage + 0;
+        # Replace "total:" with "TOTAL:" in the line
+        gsub(/^total:/, "TOTAL:", total_line);
+        color_line(total_line, total_coverage);
+    }
+}' 

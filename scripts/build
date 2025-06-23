@@ -1,0 +1,61 @@
+#!/bin/bash
+
+# Go build script
+# This script builds all packages and the CLI binary
+
+set -e
+
+# Create a temporary directory for test files
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}🔨 Building Go packages...${NC}"
+
+# Build all packages
+echo -e "${BLUE}Building all packages...${NC}"
+if go build -v ./...; then
+    echo -e "${GREEN}✅ All packages built successfully!${NC}"
+else
+    echo -e "${RED}❌ Package build failed.${NC}"
+    exit 1
+fi
+
+# Create bin directory if it doesn't exist
+mkdir -p bin
+
+# Get git info for development builds
+GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+DEV_VERSION="dev"
+
+# Build with version info
+LDFLAGS="-s -w -X main.version=${DEV_VERSION} -X main.commit=${GIT_COMMIT} -X main.date=${BUILD_DATE}"
+
+# Build CLI binary
+echo -e "${BLUE}Building CLI binary with version info...${NC}"
+if go build -ldflags "${LDFLAGS}" -o bin/PKG_NAME_PLACEHOLDER ./cmd/PKG_NAME_PLACEHOLDER; then
+    echo -e "${GREEN}✅ CLI binary built successfully: bin/PKG_NAME_PLACEHOLDER${NC}"
+else
+    echo -e "${RED}❌ CLI binary build failed.${NC}"
+    exit 1
+fi
+
+# Test CLI binary
+echo -e "${BLUE}Testing CLI binary...${NC}"
+echo "This is a test" >"$TMPDIR/test.txt"
+
+if ./bin/PKG_NAME_PLACEHOLDER --help >/dev/null; then
+    echo -e "${GREEN}✅ CLI binary help test passed!${NC}"
+else
+    echo -e "${RED}❌ CLI binary help test failed.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}🎉 Build completed successfully!${NC}"

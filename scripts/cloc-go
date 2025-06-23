@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+
+# Get the target path (default to "pkg" if not provided)
+TARGET_PATH="${1:-pkg}"
+
+# Convert to absolute path if it's a relative path
+if [[ ! "$TARGET_PATH" = /* ]]; then
+    TARGET_PATH="$(pwd)/$TARGET_PATH"
+fi
+
+# Check if path exists
+if [[ ! -d "$TARGET_PATH" ]]; then
+    echo "Error: Directory '$TARGET_PATH' does not exist"
+    exit 1
+fi
+
+# Temporary files to store cloc output
+CODE_OUTPUT=$(mktemp)
+TEST_OUTPUT=$(mktemp)
+
+# Function to cleanup temp files
+cleanup() {
+    rm -f "$CODE_OUTPUT" "$TEST_OUTPUT"
+}
+trap cleanup EXIT
+
+# Run cloc for code files (excluding tests)
+cloc "$TARGET_PATH" --not-match-f='_test\.go$' --quiet --csv >"$CODE_OUTPUT"
+
+# Run cloc for test files only
+cloc "$TARGET_PATH" --match-f='_test\.go$' --quiet --csv >"$TEST_OUTPUT"
+
+# Function to parse cloc CSV output and extract Go stats
+parse_cloc_output() {
+    local file="$1"
+    # Look for the "Go" language line in CSV format
+    # CSV format: files,language,blank,comment,code
+    grep "^[0-9]*,Go," "$file" 2>/dev/null | head -1 | cut -d',' -f1,3,4,5
+}
+
+# Parse the outputs
+CODE_STATS=$(parse_cloc_output "$CODE_OUTPUT")
+TEST_STATS=$(parse_cloc_output "$TEST_OUTPUT")
+
+# Extract individual values
+if [[ -n "$CODE_STATS" ]]; then
+    CODE_FILES=$(echo "$CODE_STATS" | cut -d',' -f1)
+    CODE_BLANK=$(echo "$CODE_STATS" | cut -d',' -f2)
+    CODE_COMMENT=$(echo "$CODE_STATS" | cut -d',' -f3)
+    CODE_CODE=$(echo "$CODE_STATS" | cut -d',' -f4)
+else
+    CODE_FILES=0
+    CODE_BLANK=0
+    CODE_COMMENT=0
+    CODE_CODE=0
+fi
+
+if [[ -n "$TEST_STATS" ]]; then
+    TEST_FILES=$(echo "$TEST_STATS" | cut -d',' -f1)
+    TEST_BLANK=$(echo "$TEST_STATS" | cut -d',' -f2)
+    TEST_COMMENT=$(echo "$TEST_STATS" | cut -d',' -f3)
+    TEST_CODE=$(echo "$TEST_STATS" | cut -d',' -f4)
+else
+    TEST_FILES=0
+    TEST_BLANK=0
+    TEST_COMMENT=0
+    TEST_CODE=0
+fi
+
+# Calculate totals
+TOTAL_FILES=$((CODE_FILES + TEST_FILES))
+TOTAL_BLANK=$((CODE_BLANK + TEST_BLANK))
+TOTAL_COMMENT=$((CODE_COMMENT + TEST_COMMENT))
+TOTAL_CODE=$((CODE_CODE + TEST_CODE))
+
+# Display the results in the requested format
+echo "-------------------------------------------------------------------------------"
+printf "%-35s %10s %10s %10s %10s\n" "" "files" "blank" "comment" "code"
+echo "-------------------------------------------------------------------------------"
+printf "%-35s %10s %10s %10s %10s\n" "pkg" "$CODE_FILES" "$CODE_BLANK" "$CODE_COMMENT" "$CODE_CODE"
+echo "-------------------------------------------------------------------------------"
+printf "%-35s %10s %10s %10s %10s\n" "test" "$TEST_FILES" "$TEST_BLANK" "$TEST_COMMENT" "$TEST_CODE"
+echo "-------------------------------------------------------------------------------"
+printf "%-35s %10s %10s %10s %10s\n" "SUM:" "$TOTAL_FILES" "$TOTAL_BLANK" "$TOTAL_COMMENT" "$TOTAL_CODE"
+echo "-------------------------------------------------------------------------------"

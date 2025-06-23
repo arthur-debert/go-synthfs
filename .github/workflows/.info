@@ -1,0 +1,6 @@
+release.yml
+# GoReleaser automation
+
+test.yml
+# CI testing
+

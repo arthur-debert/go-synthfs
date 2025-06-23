@@ -1,0 +1,23 @@
+pkg/
+
+scripts/
+# All executable (chmod +x applied)
+
+.goreleaser.yml
+# With DEBUG flag support
+
+.goreleaser.yml.template
+# Alternative template version
+
+go.mod
+# Go module template
+
+LICENSE
+# MIT license template
+
+README.md
+# Comprehensive documentation
+
+TEMPLATE_USAGE.md
+# Detailed setup instructions
+

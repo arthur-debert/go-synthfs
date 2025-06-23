@@ -1,0 +1,21 @@
+build
+# Build with version info
+
+cloc-go
+# Line counting
+
+lint
+# golangci-lint automation
+
+pre-commit
+# Git hooks
+
+release-new
+# Version management
+
+test
+# Test runner with coverage
+
+test-with-coverage
+# Detailed coverage report
+
