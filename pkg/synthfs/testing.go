@@ -94,7 +94,7 @@ func (tfs *TestFileSystem) Stat(name string) (fs.FileInfo, error) {
 	}
 
 	// Use Open to get the file and then get its info
-	file, err := tfs.Open(name)
+	file, err := tfs.MapFS.Open(name) // Use the embedded MapFS to call Open
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,7 @@ func (th *TestHelper) Context() context.Context {
 func (th *TestHelper) AssertFileExists(path string, expectedContent ...[]byte) {
 	th.t.Helper()
 
-	file, err := th.fs.Open(path)
+	file, err := th.fs.MapFS.Open(path) // Use the embedded MapFS to call Open
 	if err != nil {
 		th.t.Fatalf("Expected file %s to exist, but got error: %v", path, err)
 	}
