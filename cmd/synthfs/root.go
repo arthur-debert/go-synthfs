@@ -39,8 +39,8 @@ func init() {
 	// Add version command
 	rootCmd.AddCommand(versionCmd)
 
-	// Add subcommands
-	rootCmd.AddCommand(newPlanCommand())
+	// Plan commands temporarily removed during v2 migration
+	// rootCmd.AddCommand(newPlanCommand())
 }
 
 var versionCmd = &cobra.Command{

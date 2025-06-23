@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	v2 "github.com/arthur-debert/synthfs/pkg/v2/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs"
 )
 
 func TestFileItem(t *testing.T) {
@@ -13,7 +13,7 @@ func TestFileItem(t *testing.T) {
 	fileContent := []byte("hello world")
 	fileMode := fs.FileMode(0600)
 
-	file := v2.NewFile(filePath).
+	file := synthfs.NewFile(filePath).
 		WithContent(fileContent).
 		WithMode(fileMode)
 
@@ -31,7 +31,7 @@ func TestFileItem(t *testing.T) {
 	}
 
 	// Test default mode
-	defaultModeFile := v2.NewFile("default.txt")
+	defaultModeFile := synthfs.NewFile("default.txt")
 	if defaultModeFile.Mode() != 0644 {
 		t.Errorf("Expected default mode 0644, got %v", defaultModeFile.Mode())
 	}
@@ -41,7 +41,7 @@ func TestDirectoryItem(t *testing.T) {
 	dirPath := "/tmp/testdir"
 	dirMode := fs.FileMode(0700)
 
-	dir := v2.NewDirectory(dirPath).
+	dir := synthfs.NewDirectory(dirPath).
 		WithMode(dirMode)
 
 	if dir.Path() != dirPath {
@@ -55,7 +55,7 @@ func TestDirectoryItem(t *testing.T) {
 	}
 
 	// Test default mode
-	defaultModeDir := v2.NewDirectory("defaultdir")
+	defaultModeDir := synthfs.NewDirectory("defaultdir")
 	if defaultModeDir.Mode() != 0755 {
 		t.Errorf("Expected default mode 0755, got %v", defaultModeDir.Mode())
 	}
@@ -65,7 +65,7 @@ func TestSymlinkItem(t *testing.T) {
 	linkPath := "/tmp/testlink"
 	targetPath := "/tmp/originalfile"
 
-	link := v2.NewSymlink(linkPath, targetPath)
+	link := synthfs.NewSymlink(linkPath, targetPath)
 
 	if link.Path() != linkPath {
 		t.Errorf("Expected path %s, got %s", linkPath, link.Path())
@@ -81,9 +81,9 @@ func TestSymlinkItem(t *testing.T) {
 func TestArchiveItem(t *testing.T) {
 	archivePath := "/tmp/testarchive.tar.gz"
 	sources := []string{"/tmp/file1", "/tmp/dir1"}
-	format := v2.ArchiveFormatTarGz
+	format := synthfs.ArchiveFormatTarGz
 
-	archive := v2.NewArchive(archivePath, format, sources)
+	archive := synthfs.NewArchive(archivePath, format, sources)
 
 	if archive.Path() != archivePath {
 		t.Errorf("Expected path %s, got %s", archivePath, archive.Path())
