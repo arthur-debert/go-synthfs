@@ -1,0 +1,47 @@
+Intro to Synthfs
+
+
+1. What problem synthfs solves? 
+
+	Anything that writes to the filesystem is always a blind spot in development: hard to test, hard to reason about and has to be carefully managed and mocked. For non server-client software, like desktop applications , the file system is every where.
+
+	synthfs, synthetic file system gives you tools to isolate file system operations as a regular api: make a call, get some data back, without side-effects. This are operations in synthfs: allowing you to reason about fs related code like anything else: ease and safe to unitest, no setup needed, fast to run.  At some point you can realize the operations, executing them in a actual file system.  
+
+	Operations can be though of as reverse receipt, you get a stub that you can convert for the real thing later. But operations are useless if you can't converting the stub, that is execute the changes.  
+
+	That's why operations in synthfs are usefull: :they follow fs semantics and are validated at their creation too. For example an operation to create the file hello.txt in directory $HOME/data will fail if the directory doesn't exist. And operation that moves files will verify that source and target exist and you have the right permissions.
+
+	This means that you can validate data, and provide user feedback prior to the actual execution of the fs change, allowing you to program and tests for errors in the same side-effect free way while giving timely feedback.
+
+	synth fs has operations for creating, editing, copying, moving and deleting files, directories and links.
+	All these are atomic operations in file systems, but often, from an application point of view one will compose several of these , like creating a directory, adding a file to it and changing it's contents and execute them in sequence.
+
+
+2. Model and Guarantees
+
+	If it sounds  too good to be true, it's because it is.  Conceptually, fsynth works like a write ahead log, but one that you can postpone and start executing at your convenience.
+
+	This is just not possible: you can't give guarantees for a file system's' state or behavior at an arbitrary point in the future, *while allowing* changes to the file system between the opearation is created and executed. That's how real WAL works. By sequencing operations and being the exclusive executor of these, it can gives you a strong guarantee. 
+
+	By synthfs is nothing like that: the operating system, the user, others applications can alter data betwen an operation's creation and execution.  It's critical to understand this: synthfs validation presumes no concurrent changes to file system.  
+
+	This has clear implications: synthfs is a usefull tool and abstraction for tightly  controlled environments, and should never be used under concurrency (not even low concerrency) and mission critical data.  But for software that runs on the user's machine, in locations that the application controls, it's usually safe enough. If the execution encounters an issue : either because an operation files, or we detect a change to the data we're dealing with we'll stop and, to the best extend possible revert the previous state.
+
+	synthfs does some good sanity checking for conflicts and checking that data has not changed between cheduling and running (with some limits, not a true deep validation but for the files at hand). These are here to make sure that simple bugs (in synthfs and your app) are safer,  and as a sanity check. But don't see these as strong guaratees of any sort, because they are not.
+
+
+3. Understanding Use Cases
+
+	Say that your application allows uses to bundle a few photos and send them to a friend on discord.  You can use synthfs to copy these photos to a working directory, then zip them and finally uploading them to discord.
+
+	There is a myriad ways in which this could go wrong: 
+		- The disk has no space to create the zip files.
+		- Bewtween the user selecting the images and the application reading them, another process deleted them.
+		- Permissions are altered for one or more files. 
+		- The user account is removed between steps.
+
+	And we could go on and on.  Note that many of these, are direct fs changtes too. When using the os. yuo can copy the files successfully only to have the archive operation fail for insuficient disk space. 
+
+	But if your files are in control of this applications, under normal conditions things will work. It's just paramount to have the correct expections here.
+
+	First , no-concurrency:  anythin that is multi user or multi-processor writing to the same locations won't work.  Secondly, no strong guarantees: even if the data has not changed, a host of other reasons can break the exectuion phase: no disk space , user permissions change and so on.
