@@ -66,10 +66,10 @@ type ValidationError struct {
 
 func (e *ValidationError) Error() string {
 	if e.Cause != nil {
-		return fmt.Sprintf("validation error for operation %s (%s): %s: %v", 
+		return fmt.Sprintf("validation error for operation %s (%s): %s: %v",
 			e.Operation.ID(), e.Operation.Describe().Path, e.Reason, e.Cause)
 	}
-	return fmt.Sprintf("validation error for operation %s (%s): %s", 
+	return fmt.Sprintf("validation error for operation %s (%s): %s",
 		e.Operation.ID(), e.Operation.Describe().Path, e.Reason)
 }
 
@@ -85,7 +85,7 @@ type DependencyError struct {
 }
 
 func (e *DependencyError) Error() string {
-	return fmt.Sprintf("dependency error for operation %s: missing dependencies %v (required: %v)", 
+	return fmt.Sprintf("dependency error for operation %s: missing dependencies %v (required: %v)",
 		e.Operation.ID(), e.Missing, e.Dependencies)
 }
 
@@ -96,6 +96,6 @@ type ConflictError struct {
 }
 
 func (e *ConflictError) Error() string {
-	return fmt.Sprintf("conflict error for operation %s: conflicts with operations %v", 
+	return fmt.Sprintf("conflict error for operation %s: conflicts with operations %v",
 		e.Operation.ID(), e.Conflicts)
 }
