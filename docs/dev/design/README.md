@@ -230,13 +230,8 @@ func TestOperations(t *testing.T) {
 ### 2. **Observability**
 
 - Support structured logging (logrus, zap)
-- Provide OpenTelemetry tracing hooks
-- Emit metrics compatible with Prometheus
 
-```go
-func WithLogger(logger Logger) ExecuteOption
-func WithTracer(tracer trace.Tracer) ExecuteOption
-```
+``
 
 ### 3. **CLI Integration**
 
@@ -278,7 +273,6 @@ type SerializableOperation interface {
 ### Phase 4: Production Features
 
 1. Add observability hooks (logging, tracing, metrics)
-2. Performance optimizations and benchmarks
 3. Add comprehensive examples and documentation
 4. Create integration guides for popular frameworks
 
