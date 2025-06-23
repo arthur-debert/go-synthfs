@@ -76,18 +76,104 @@ func (op *CreateFileOperation) Execute(ctx context.Context, fsys synthfs.FileSys
 	return nil
 }
 
-// Validate checks if the operation parameters are sensible.
-// For CreateFile, this is a basic check, more complex validation
-// (e.g., path conflicts if not handled by dependencies) could be added.
+// Validate checks if the file creation is valid.
 func (op *CreateFileOperation) Validate(ctx context.Context, fsys synthfs.FileSystem) error {
+	synthfs.Logger().Debug().
+		Str("op_id", string(op.id)).
+		Str("path", op.path).
+		Int("content_size", len(op.data)).
+		Str("mode", op.mode.String()).
+		Msg("starting file creation validation")
+
+	// Validate path format
+	if !fs.ValidPath(op.path) {
+		synthfs.Logger().Debug().
+			Str("op_id", string(op.id)).
+			Str("path", op.path).
+			Msg("path validation failed - invalid format")
+		return fmt.Errorf("invalid path: %s", op.path)
+	}
+
+	// Validate path is not empty
 	if op.path == "" {
+		synthfs.Logger().Debug().
+			Str("op_id", string(op.id)).
+			Msg("path validation failed - empty path")
 		return fmt.Errorf("CreateFileOperation: path cannot be empty")
 	}
-	if op.mode&^fs.ModePerm != 0 { // Check if mode contains non-permission bits
+
+	// Validate file mode - only permission bits allowed
+	if op.mode&^fs.ModePerm != 0 {
+		synthfs.Logger().Debug().
+			Str("op_id", string(op.id)).
+			Str("path", op.path).
+			Str("mode", op.mode.String()).
+			Uint32("invalid_bits", uint32(op.mode&^fs.ModePerm)).
+			Msg("mode validation failed - contains non-permission bits")
 		return fmt.Errorf("CreateFileOperation: invalid file mode: %o", op.mode)
 	}
-	// Further validation could involve checking if the parent directory
-	// is expected to exist (if not managed by a dependency).
+
+	synthfs.Logger().Debug().
+		Str("op_id", string(op.id)).
+		Str("path", op.path).
+		Msg("path format validation passed")
+
+	// Check if file already exists and analyze the situation
+	if file, err := fsys.Open(op.path); err == nil {
+		synthfs.Logger().Debug().
+			Str("op_id", string(op.id)).
+			Str("path", op.path).
+			Msg("target path already exists - checking if it's a file")
+
+		if info, statErr := file.Stat(); statErr == nil {
+			file.Close()
+			if info.IsDir() {
+				synthfs.Logger().Debug().
+					Str("op_id", string(op.id)).
+					Str("path", op.path).
+					Bool("is_directory", true).
+					Msg("target path is a directory - conflict will be handled during execution")
+				// Don't fail validation here - let execution handle the conflict
+			} else {
+				synthfs.Logger().Debug().
+					Str("op_id", string(op.id)).
+					Str("path", op.path).
+					Int64("existing_size", info.Size()).
+					Str("existing_mode", info.Mode().String()).
+					Int("new_content_size", len(op.data)).
+					Str("new_mode", op.mode.String()).
+					Msg("target path is an existing file - will be overwritten")
+			}
+		} else {
+			file.Close()
+			synthfs.Logger().Debug().
+				Str("op_id", string(op.id)).
+				Str("path", op.path).
+				Err(statErr).
+				Msg("could not stat existing file")
+		}
+	} else {
+		synthfs.Logger().Debug().
+			Str("op_id", string(op.id)).
+			Str("path", op.path).
+			Msg("target path does not exist - new file will be created")
+	}
+
+	// Validate content size
+	if len(op.data) > 1024*1024*100 { // 100MB limit for example
+		synthfs.Logger().Debug().
+			Str("op_id", string(op.id)).
+			Str("path", op.path).
+			Int("content_size", len(op.data)).
+			Int("max_allowed_size", 1024*1024*100).
+			Msg("validation warning - large file content")
+	}
+
+	synthfs.Logger().Debug().
+		Str("op_id", string(op.id)).
+		Str("path", op.path).
+		Msg("file creation validation completed successfully")
+
 	return nil
 }
 

@@ -184,57 +184,164 @@ func (mq *memQueue) Resolve() error {
 
 // Validate checks if all operations in the queue are valid.
 func (mq *memQueue) Validate(ctx context.Context, fs FileSystem) error {
+	Logger().Debug().
+		Int("total_operations", len(mq.ops)).
+		Bool("resolved", mq.resolved).
+		Msg("starting comprehensive queue validation")
+
 	// First validate dependencies exist
+	Logger().Debug().Msg("validating operation dependencies")
 	if err := mq.validateDependencies(); err != nil {
+		Logger().Debug().
+			Err(err).
+			Msg("dependency validation failed")
 		return err
 	}
+	Logger().Debug().Msg("dependency validation completed successfully")
 
 	// Validate each operation individually
-	for _, op := range mq.ops {
+	Logger().Debug().Msg("validating individual operations")
+	for i, op := range mq.ops {
+		Logger().Debug().
+			Int("operation_index", i+1).
+			Int("total_operations", len(mq.ops)).
+			Str("op_id", string(op.ID())).
+			Str("op_type", op.Describe().Type).
+			Str("path", op.Describe().Path).
+			Msg("validating individual operation")
+
 		if err := op.Validate(ctx, fs); err != nil {
+			Logger().Debug().
+				Str("op_id", string(op.ID())).
+				Str("op_type", op.Describe().Type).
+				Str("path", op.Describe().Path).
+				Err(err).
+				Msg("individual operation validation failed")
 			return &ValidationError{
 				Operation: op,
 				Reason:    "operation validation failed",
 				Cause:     err,
 			}
 		}
+
+		Logger().Debug().
+			Str("op_id", string(op.ID())).
+			Str("op_type", op.Describe().Type).
+			Str("path", op.Describe().Path).
+			Msg("individual operation validation passed")
 	}
+	Logger().Debug().
+		Int("validated_operations", len(mq.ops)).
+		Msg("individual operation validation completed successfully")
 
 	// Check for conflicts
+	Logger().Debug().Msg("validating operation conflicts")
 	if err := mq.validateConflicts(); err != nil {
+		Logger().Debug().
+			Err(err).
+			Msg("conflict validation failed")
 		return err
 	}
+	Logger().Debug().Msg("conflict validation completed successfully")
+
+	Logger().Debug().
+		Int("total_operations", len(mq.ops)).
+		Msg("comprehensive queue validation completed successfully")
 
 	return nil
 }
 
 // validateDependencies ensures all referenced dependencies exist in the queue.
 func (mq *memQueue) validateDependencies() error {
+	Logger().Debug().
+		Int("operations_to_check", len(mq.ops)).
+		Msg("checking dependency references")
+
+	dependencyCount := 0
 	for _, op := range mq.ops {
-		for _, depID := range op.Dependencies() {
+		deps := op.Dependencies()
+		dependencyCount += len(deps)
+
+		Logger().Debug().
+			Str("op_id", string(op.ID())).
+			Str("op_type", op.Describe().Type).
+			Interface("dependencies", deps).
+			Int("dependency_count", len(deps)).
+			Msg("checking operation dependencies")
+
+		for _, depID := range deps {
 			if _, exists := mq.idIndex[depID]; !exists {
+				Logger().Debug().
+					Str("op_id", string(op.ID())).
+					Str("missing_dependency", string(depID)).
+					Interface("all_dependencies", deps).
+					Msg("dependency reference validation failed - missing dependency")
 				return &DependencyError{
 					Operation:    op,
 					Dependencies: op.Dependencies(),
 					Missing:      []OperationID{depID},
 				}
+			} else {
+				Logger().Debug().
+					Str("op_id", string(op.ID())).
+					Str("dependency", string(depID)).
+					Msg("dependency reference found")
 			}
 		}
 	}
+
+	Logger().Debug().
+		Int("total_dependencies", dependencyCount).
+		Int("operations_checked", len(mq.ops)).
+		Msg("dependency reference validation completed")
+
 	return nil
 }
 
 // validateConflicts checks for operations that conflict with each other.
 func (mq *memQueue) validateConflicts() error {
+	Logger().Debug().
+		Int("operations_to_check", len(mq.ops)).
+		Msg("checking operation conflicts")
+
+	conflictCount := 0
 	for _, op := range mq.ops {
-		for _, conflictID := range op.Conflicts() {
+		conflicts := op.Conflicts()
+		conflictCount += len(conflicts)
+
+		if len(conflicts) > 0 {
+			Logger().Debug().
+				Str("op_id", string(op.ID())).
+				Str("op_type", op.Describe().Type).
+				Interface("conflicts", conflicts).
+				Int("conflict_count", len(conflicts)).
+				Msg("checking operation conflicts")
+		}
+
+		for _, conflictID := range conflicts {
 			if _, exists := mq.idIndex[conflictID]; exists {
+				Logger().Debug().
+					Str("op_id", string(op.ID())).
+					Str("conflicting_operation", string(conflictID)).
+					Interface("all_conflicts", conflicts).
+					Msg("conflict validation failed - conflicting operation found in queue")
 				return &ConflictError{
 					Operation: op,
 					Conflicts: []OperationID{conflictID},
 				}
+			} else {
+				Logger().Debug().
+					Str("op_id", string(op.ID())).
+					Str("potential_conflict", string(conflictID)).
+					Msg("potential conflict not in queue - no actual conflict")
 			}
 		}
 	}
+
+	Logger().Debug().
+		Int("total_potential_conflicts", conflictCount).
+		Int("operations_checked", len(mq.ops)).
+		Msg("conflict validation completed - no conflicts found")
+
 	return nil
 }

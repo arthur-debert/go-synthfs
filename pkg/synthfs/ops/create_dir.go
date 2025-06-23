@@ -130,31 +130,132 @@ func (op *CreateDirOperation) Execute(ctx context.Context, fsys synthfs.FileSyst
 	return nil
 }
 
-// Validate checks if the operation parameters are sensible.
+// Validate checks if the directory creation is valid.
 func (op *CreateDirOperation) Validate(ctx context.Context, fsys synthfs.FileSystem) error {
+	synthfs.Logger().Debug().
+		Str("op_id", string(op.id)).
+		Str("path", op.path).
+		Str("mode", op.mode.String()).
+		Msg("starting directory creation validation")
+
+	// Validate path format
+	if !fs.ValidPath(op.path) {
+		synthfs.Logger().Debug().
+			Str("op_id", string(op.id)).
+			Str("path", op.path).
+			Msg("path validation failed - invalid format")
+		return fmt.Errorf("invalid path: %s", op.path)
+	}
+
+	// Validate path is not empty
 	if op.path == "" {
+		synthfs.Logger().Debug().
+			Str("op_id", string(op.id)).
+			Msg("path validation failed - empty path")
 		return fmt.Errorf("CreateDirOperation: path cannot be empty")
 	}
 
 	// Check for invalid path patterns
 	if strings.Contains(op.path, "..") {
+		synthfs.Logger().Debug().
+			Str("op_id", string(op.id)).
+			Str("path", op.path).
+			Msg("path validation failed - contains '..' segments")
 		return fmt.Errorf("CreateDirOperation: path cannot contain '..' segments: %s", op.path)
 	}
 
-	// For directories, we allow ModeDir bit and permission bits
-	// Extract just the permission bits to validate
-	permBits := op.mode & fs.ModePerm
-
-	// Check for invalid non-permission, non-directory mode bits
+	// Validate mode - only permission bits and ModeDir allowed
 	invalidBits := op.mode &^ (fs.ModePerm | fs.ModeDir)
 	if invalidBits != 0 {
+		synthfs.Logger().Debug().
+			Str("op_id", string(op.id)).
+			Str("path", op.path).
+			Str("mode", op.mode.String()).
+			Uint32("invalid_bits", uint32(invalidBits)).
+			Msg("mode validation failed - contains invalid bits beyond permissions and ModeDir")
 		return fmt.Errorf("CreateDirOperation: invalid directory mode bits: %o", op.mode)
 	}
 
-	// Permission bits should be valid (0-0777)
+	// Validate permission bits are reasonable
+	permBits := op.mode & fs.ModePerm
 	if permBits > 0777 {
+		synthfs.Logger().Debug().
+			Str("op_id", string(op.id)).
+			Str("path", op.path).
+			Uint32("perm_bits", uint32(permBits)).
+			Msg("mode validation failed - permission bits exceed 0777")
 		return fmt.Errorf("CreateDirOperation: invalid permission bits: %o", permBits)
 	}
+
+	synthfs.Logger().Debug().
+		Str("op_id", string(op.id)).
+		Str("path", op.path).
+		Msg("path format validation passed")
+
+	// Check if path already exists and analyze the situation
+	if file, err := fsys.Open(op.path); err == nil {
+		synthfs.Logger().Debug().
+			Str("op_id", string(op.id)).
+			Str("path", op.path).
+			Msg("target path already exists - analyzing existing entry")
+
+		if info, statErr := file.Stat(); statErr == nil {
+			file.Close()
+			if info.IsDir() {
+				synthfs.Logger().Debug().
+					Str("op_id", string(op.id)).
+					Str("path", op.path).
+					Str("existing_mode", info.Mode().String()).
+					Str("target_mode", op.mode.String()).
+					Bool("mode_matches", info.Mode().Perm() == op.mode.Perm()).
+					Msg("target path is already a directory - operation will be idempotent")
+			} else {
+				synthfs.Logger().Debug().
+					Str("op_id", string(op.id)).
+					Str("path", op.path).
+					Bool("is_directory", false).
+					Int64("file_size", info.Size()).
+					Msg("target path is a file - conflict will be handled during execution")
+				// Don't fail validation here - let execution handle the conflict
+			}
+		} else {
+			file.Close()
+			synthfs.Logger().Debug().
+				Str("op_id", string(op.id)).
+				Str("path", op.path).
+				Err(statErr).
+				Msg("could not stat existing path")
+		}
+	} else {
+		synthfs.Logger().Debug().
+			Str("op_id", string(op.id)).
+			Str("path", op.path).
+			Msg("target path does not exist - new directory will be created")
+	}
+
+	// Validate directory permissions
+	if op.mode.Perm() == 0 {
+		synthfs.Logger().Debug().
+			Str("op_id", string(op.id)).
+			Str("path", op.path).
+			Str("mode", op.mode.String()).
+			Msg("validation warning - directory has no permissions")
+	}
+
+	// Check for directory mode bits
+	if op.mode&fs.ModeDir != 0 {
+		synthfs.Logger().Debug().
+			Str("op_id", string(op.id)).
+			Str("path", op.path).
+			Str("mode", op.mode.String()).
+			Msg("validation note - mode includes directory bit (will be set automatically)")
+	}
+
+	synthfs.Logger().Debug().
+		Str("op_id", string(op.id)).
+		Str("path", op.path).
+		Msg("directory creation validation completed successfully")
+
 	return nil
 }
 

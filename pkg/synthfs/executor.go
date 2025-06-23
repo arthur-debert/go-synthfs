@@ -100,6 +100,37 @@ func (e *Executor) Execute(ctx context.Context, queue Queue, fs FileSystem, opts
 	// Validate the queue
 	Logger().Info().Msg("validating operation queue")
 	if err := queue.Validate(ctx, fs); err != nil {
+		Logger().Debug().
+			Err(err).
+			Str("error_type", fmt.Sprintf("%T", err)).
+			Msg("analyzing queue validation failure")
+
+		// Debug: analyze the type of validation error for better understanding
+		switch e := err.(type) {
+		case *ValidationError:
+			Logger().Debug().
+				Str("failed_op_id", string(e.Operation.ID())).
+				Str("failed_op_type", e.Operation.Describe().Type).
+				Str("failed_op_path", e.Operation.Describe().Path).
+				Str("validation_reason", e.Reason).
+				Msg("individual operation validation failed")
+		case *DependencyError:
+			Logger().Debug().
+				Str("failed_op_id", string(e.Operation.ID())).
+				Interface("required_dependencies", e.Dependencies).
+				Interface("missing_dependencies", e.Missing).
+				Msg("dependency validation failed")
+		case *ConflictError:
+			Logger().Debug().
+				Str("failed_op_id", string(e.Operation.ID())).
+				Interface("conflicting_operations", e.Conflicts).
+				Msg("conflict validation failed")
+		default:
+			Logger().Debug().
+				Str("error_details", err.Error()).
+				Msg("unknown validation error type")
+		}
+
 		Logger().Info().
 			Err(err).
 			Msg("queue validation failed")
