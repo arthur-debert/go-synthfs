@@ -120,10 +120,18 @@ func (mfs *MockFS) WriteFile(name string, data []byte, perm fs.FileMode) error {
 	mfs.mu.Lock()
 	defer mfs.mu.Unlock()
 
+	originalName := name // Keep original name for certain checks if needed, though not used in this revision.
 	name = path.Clean(name)
-	if !fs.ValidPath(name) || strings.HasSuffix(name, "/") {
-		return &fs.PathError{Op: "writefile", Path: name, Err: fs.ErrInvalid}
+
+	// fs.ValidPath checks for invalid characters or empty names.
+	// path.Clean handles ".." , ".", and trailing slashes.
+	// So, after cleaning, "dir/" becomes "dir". "invalid/../path.txt" becomes "path.txt".
+	if !fs.ValidPath(name) {
+		return &fs.PathError{Op: "writefile", Path: originalName, Err: fs.ErrInvalid}
 	}
+	// If the original path explicitly ended with a slash, it might indicate an attempt to write to a directory.
+	// However, standard os.WriteFile("path/to/dir/", data) on Unix might create a file named "dir" if "path/to" exists.
+	// For simplicity, we'll rely on the parent dir check. If 'name' refers to an existing directory, it should fail there.
 
 	parent := path.Dir(name)
 	if parent != "." && parent != "/" {
