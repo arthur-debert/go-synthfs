@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 
-	"go-synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs"
 )
 
 // CreateDirOperation represents an operation to create a directory.
@@ -58,7 +58,9 @@ func (op *CreateDirOperation) Validate(ctx context.Context, fsys synthfs.FileSys
 	if op.path == "" {
 		return fmt.Errorf("CreateDirOperation: path cannot be empty")
 	}
-	if op.mode&^fs.ModePerm != 0 { // Check if mode contains non-permission bits
+	// Allow only permission bits and fs.ModeDir.
+	// Any other mode bits (like ModeSymlink, ModeDevice, etc.) are invalid for directory creation.
+	if op.mode&^(fs.ModePerm|fs.ModeDir) != 0 {
 		// Note: fs.ModeDir is also a non-permission bit, but MkdirAll expects it.
 		// We are primarily concerned with bits outside of ModePerm and ModeDir.
 		// However, standard practice is to just pass ModePerm bits to MkdirAll

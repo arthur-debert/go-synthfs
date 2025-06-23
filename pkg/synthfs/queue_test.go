@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"go-synthfs/pkg/synthfs"
-	"go-synthfs/pkg/synthfs/ops" // For concrete operation types
+	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/ops" // For concrete operation types
 )
 
 // mockOperation is a simple operation for testing the queue.

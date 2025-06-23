@@ -2,7 +2,7 @@ package synthfs
 
 import (
 	"context"
-	"io/fs"
+	// "io/fs" // Removed unused import
 )
 
 // OperationID is a unique identifier for an operation.

@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"go-synthfs/pkg/synthfs" // Assuming this is the main package path
+	"github.com/arthur-debert/synthfs/pkg/synthfs" // Corrected import path
 )
 
 // MockFile represents a file in the mock filesystem.

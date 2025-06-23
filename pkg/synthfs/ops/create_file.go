@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 
-	"go-synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs"
 )
 
 // CreateFileOperation represents an operation to create a file.

@@ -6,9 +6,9 @@ import (
 	"io/fs"
 	"testing"
 
-	"go-synthfs/pkg/synthfs"
-	"go-synthfs/pkg/synthfs/internal/testutil"
-	"go-synthfs/pkg/synthfs/ops"
+	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/internal/testutil"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/ops"
 )
 
 func TestCreateFileOperation_Execute(t *testing.T) {
