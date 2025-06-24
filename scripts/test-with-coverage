@@ -6,7 +6,10 @@ if [[ ! -f "go.mod" ]]; then
     exit 1
 fi
 
-gotestsum --format pkgname -- -coverprofile=coverage.out ./... && go tool cover -func=coverage.out | awk '
+gotestsum --format pkgname -- -coverprofile=coverage.out -tags=coverage ./... &&
+    grep -v "testing\.go:" coverage.out | grep -v "testing_test\.go:" >coverage.filtered.out &&
+    mv coverage.filtered.out coverage.out &&
+    go tool cover -func=coverage.out | awk '
 function color_line(line, coverage_val) {
     if (coverage_val >= 80) {
         printf "\033[32m%s\033[0m\n", line;  # Green
@@ -22,6 +25,9 @@ BEGIN {
     count = 0;
 }
 {
+    # Strip module prefix from file paths
+    gsub(/github\.com\/arthur-debert\/synthfs\//, "", $0);
+    
     if (NR == 1) {
         header = $0;
     } else if ($1 == "total:") {

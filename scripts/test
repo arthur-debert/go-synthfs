@@ -33,11 +33,22 @@ if [[ "$1" == "--ci" ]]; then
 
     # Run all tests including E2E with gotestsum, race detection and coverage
     echo -e "${BLUE}Running all tests (including E2E) with gotestsum, race detection and coverage...${NC}"
-    if gotestsum --format dots-v2 -- -race -coverprofile=coverage.out -tags=testcoverage ./...; then
+    if gotestsum --format dots-v2 -- -race -coverprofile=coverage.out -tags=testcoverage,coverage ./...; then
         echo -e "${GREEN}✅ All tests passed!${NC}"
     else
         echo -e "${RED}❌ Some tests failed.${NC}"
         exit 1
+    fi
+
+    # Filter coverage output if .covignore exists
+    if [ -f ".covignore" ]; then
+        echo -e "${BLUE}Filtering coverage output using .covignore...${NC}"
+        if grep -v -E -f .covignore coverage.out >coverage.filtered.out; then
+            mv coverage.filtered.out coverage.out
+            echo -e "${GREEN}✅ Coverage filtered successfully${NC}"
+        else
+            echo -e "${YELLOW}⚠️  No patterns matched in coverage filtering${NC}"
+        fi
     fi
 
     # Generate coverage report
