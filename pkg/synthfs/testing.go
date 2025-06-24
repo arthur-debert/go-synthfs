@@ -87,6 +87,76 @@ func (tfs *TestFileSystem) RemoveAll(name string) error {
 	return nil
 }
 
+// Symlink implements WriteFS for testing
+func (tfs *TestFileSystem) Symlink(oldname, newname string) error {
+	if !fs.ValidPath(oldname) || !fs.ValidPath(newname) {
+		return &fs.PathError{Op: "symlink", Path: newname, Err: fs.ErrInvalid}
+	}
+
+	// Check if target exists
+	if _, exists := tfs.MapFS[oldname]; !exists {
+		// Unlike real symlinks, for testing we'll require the target to exist
+		return &fs.PathError{Op: "symlink", Path: oldname, Err: fs.ErrNotExist}
+	}
+
+	// Check if newname already exists
+	if _, exists := tfs.MapFS[newname]; exists {
+		return &fs.PathError{Op: "symlink", Path: newname, Err: fs.ErrExist}
+	}
+
+	// Create symlink as a special file with ModeSymlink
+	tfs.MapFS[newname] = &fstest.MapFile{
+		Data: []byte(oldname), // Store target path as data
+		Mode: fs.ModeSymlink | 0777,
+	}
+	return nil
+}
+
+// Readlink implements WriteFS for testing
+func (tfs *TestFileSystem) Readlink(name string) (string, error) {
+	if !fs.ValidPath(name) {
+		return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrInvalid}
+	}
+
+	file, exists := tfs.MapFS[name]
+	if !exists {
+		return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrNotExist}
+	}
+
+	if file.Mode&fs.ModeSymlink == 0 {
+		return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrInvalid}
+	}
+
+	return string(file.Data), nil
+}
+
+// Rename implements WriteFS for testing
+func (tfs *TestFileSystem) Rename(oldpath, newpath string) error {
+	if !fs.ValidPath(oldpath) || !fs.ValidPath(newpath) {
+		return &fs.PathError{Op: "rename", Path: newpath, Err: fs.ErrInvalid}
+	}
+
+	// Check if source exists
+	file, exists := tfs.MapFS[oldpath]
+	if !exists {
+		return &fs.PathError{Op: "rename", Path: oldpath, Err: fs.ErrNotExist}
+	}
+
+	// Check if destination already exists and is not a directory
+	if destFile, destExists := tfs.MapFS[newpath]; destExists {
+		if destFile.Mode.IsDir() {
+			return &fs.PathError{Op: "rename", Path: newpath, Err: fs.ErrExist}
+		}
+		// File exists, will be overwritten (matches os.Rename behavior)
+	}
+
+	// Move the file
+	tfs.MapFS[newpath] = file
+	delete(tfs.MapFS, oldpath)
+
+	return nil
+}
+
 // Stat implements StatFS for testing
 func (tfs *TestFileSystem) Stat(name string) (fs.FileInfo, error) {
 	if !fs.ValidPath(name) {

@@ -298,6 +298,93 @@ func (mfs *MockFS) RemoveAll(name string) error {
 	return nil
 }
 
+// Symlink implements WriteFS for MockFS
+func (mfs *MockFS) Symlink(oldname, newname string) error {
+	mfs.mu.Lock()
+	defer mfs.mu.Unlock()
+
+	oldname = path.Clean(oldname)
+	newname = path.Clean(newname)
+
+	if !fs.ValidPath(oldname) || !fs.ValidPath(newname) {
+		return &fs.PathError{Op: "symlink", Path: newname, Err: fs.ErrInvalid}
+	}
+
+	// Check if target exists
+	if _, exists := mfs.files[oldname]; !exists {
+		// For MockFS, we'll require the target to exist (stricter than OS)
+		return &fs.PathError{Op: "symlink", Path: oldname, Err: fs.ErrNotExist}
+	}
+
+	// Check if newname already exists
+	if _, exists := mfs.files[newname]; exists {
+		return &fs.PathError{Op: "symlink", Path: newname, Err: fs.ErrExist}
+	}
+
+	// Create symlink as a special file with ModeSymlink
+	mfs.files[newname] = &mockFile{
+		data:    []byte(oldname), // Store target path as data
+		mode:    fs.ModeSymlink | 0777,
+		modTime: time.Now(),
+	}
+	return nil
+}
+
+// Readlink implements WriteFS for MockFS
+func (mfs *MockFS) Readlink(name string) (string, error) {
+	mfs.mu.RLock()
+	defer mfs.mu.RUnlock()
+
+	name = path.Clean(name)
+	if !fs.ValidPath(name) {
+		return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrInvalid}
+	}
+
+	file, exists := mfs.files[name]
+	if !exists {
+		return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrNotExist}
+	}
+
+	if file.mode&fs.ModeSymlink == 0 {
+		return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrInvalid}
+	}
+
+	return string(file.data), nil
+}
+
+// Rename implements WriteFS for MockFS
+func (mfs *MockFS) Rename(oldpath, newpath string) error {
+	mfs.mu.Lock()
+	defer mfs.mu.Unlock()
+
+	oldpath = path.Clean(oldpath)
+	newpath = path.Clean(newpath)
+
+	if !fs.ValidPath(oldpath) || !fs.ValidPath(newpath) {
+		return &fs.PathError{Op: "rename", Path: newpath, Err: fs.ErrInvalid}
+	}
+
+	// Check if source exists
+	file, exists := mfs.files[oldpath]
+	if !exists {
+		return &fs.PathError{Op: "rename", Path: oldpath, Err: fs.ErrNotExist}
+	}
+
+	// Check if destination already exists and is a directory
+	if destFile, destExists := mfs.files[newpath]; destExists {
+		if destFile.mode.IsDir() {
+			return &fs.PathError{Op: "rename", Path: newpath, Err: fs.ErrExist}
+		}
+		// File exists, will be overwritten (matches os.Rename behavior)
+	}
+
+	// Move the file
+	mfs.files[newpath] = file
+	delete(mfs.files, oldpath)
+
+	return nil
+}
+
 // --- fs.File, fs.FileInfo, fs.DirEntry Implementations ---
 // These types remain unexported as they are internal to MockFS's implementation.
 

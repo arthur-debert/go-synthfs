@@ -31,6 +31,22 @@ type WriteFS interface {
 	// it encounters. If the path does not exist, RemoveAll
 	// returns nil (no error).
 	RemoveAll(name string) error
+
+	// Symlink creates newname as a symbolic link to oldname.
+	// On Windows, a symlink to a non-existent oldname creates a file symlink;
+	// if oldname is later created as a directory, the symlink will not work.
+	// If there is an error, it will be of type *LinkError.
+	Symlink(oldname, newname string) error
+
+	// Readlink returns the destination of the named symbolic link.
+	// If there is an error, it will be of type *PathError.
+	Readlink(name string) (string, error)
+
+	// Rename renames (moves) oldpath to newpath.
+	// If newpath already exists and is not a directory, Rename replaces it.
+	// OS-specific restrictions may apply when oldpath and newpath are in different directories.
+	// If there is an error, it will be of type *LinkError.
+	Rename(oldpath, newpath string) error
 }
 
 // FileSystem combines read and write operations.
@@ -113,6 +129,46 @@ func (osfs *OSFileSystem) RemoveAll(name string) error {
 	}
 	fullPath := filepath.Join(osfs.root, name)
 	return os.RemoveAll(fullPath)
+}
+
+// Symlink implements WriteFS
+func (osfs *OSFileSystem) Symlink(oldname, newname string) error {
+	if !fs.ValidPath(oldname) || !fs.ValidPath(newname) {
+		return &fs.PathError{Op: "symlink", Path: newname, Err: fs.ErrInvalid}
+	}
+	oldPath := filepath.Join(osfs.root, oldname)
+	newPath := filepath.Join(osfs.root, newname)
+	return os.Symlink(oldPath, newPath)
+}
+
+// Readlink implements WriteFS
+func (osfs *OSFileSystem) Readlink(name string) (string, error) {
+	if !fs.ValidPath(name) {
+		return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrInvalid}
+	}
+	fullPath := filepath.Join(osfs.root, name)
+	target, err := os.Readlink(fullPath)
+	if err != nil {
+		return "", err
+	}
+	// Convert absolute path back to relative if it's within our root
+	if filepath.IsAbs(target) && filepath.HasPrefix(target, osfs.root) {
+		rel, err := filepath.Rel(osfs.root, target)
+		if err == nil {
+			return rel, nil
+		}
+	}
+	return target, nil
+}
+
+// Rename implements WriteFS
+func (osfs *OSFileSystem) Rename(oldpath, newpath string) error {
+	if !fs.ValidPath(oldpath) || !fs.ValidPath(newpath) {
+		return &fs.PathError{Op: "rename", Path: newpath, Err: fs.ErrInvalid}
+	}
+	oldFullPath := filepath.Join(osfs.root, oldpath)
+	newFullPath := filepath.Join(osfs.root, newpath)
+	return os.Rename(oldFullPath, newFullPath)
 }
 
 // ReadOnlyWrapper wraps any fs.FS to provide StatFS functionality if possible
