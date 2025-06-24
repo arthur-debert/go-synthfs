@@ -8,6 +8,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
+	"path/filepath"
 	"strings"
 )
 
@@ -150,6 +152,8 @@ func (op *SimpleOperation) Execute(ctx context.Context, fsys FileSystem) error {
 		return op.executeCreateSymlink(ctx, fsys)
 	case "create_archive":
 		return op.executeCreateArchive(ctx, fsys)
+	case "unarchive":
+		return op.executeUnarchive(ctx, fsys)
 	case "copy":
 		return op.executeCopy(ctx, fsys)
 	case "move":
@@ -181,6 +185,8 @@ func (op *SimpleOperation) Validate(ctx context.Context, fsys FileSystem) error 
 		return op.validateCreateSymlink(ctx, fsys)
 	case "create_archive":
 		return op.validateCreateArchive(ctx, fsys)
+	case "unarchive":
+		return op.validateUnarchive(ctx, fsys)
 	case "copy":
 		return op.validateCopy(ctx, fsys)
 	case "move":
@@ -201,6 +207,9 @@ func (op *SimpleOperation) Rollback(ctx context.Context, fsys FileSystem) error 
 	case "create_file", "create_directory", "create_symlink", "create_archive":
 		// For create operations, rollback means removing what was created
 		return op.rollbackCreate(ctx, fsys)
+	case "unarchive":
+		// For unarchive operations, rollback means removing extracted files
+		return op.rollbackUnarchive(ctx, fsys)
 	case "copy":
 		// For copy operations, rollback means removing the destination
 		return op.rollbackCopy(ctx, fsys)
@@ -486,6 +495,279 @@ func (op *SimpleOperation) addToZipArchive(zipWriter *zip.Writer, sourcePath str
 	return nil
 }
 
+// executeUnarchive implements archive extraction
+func (op *SimpleOperation) executeUnarchive(ctx context.Context, fsys FileSystem) error {
+	if op.item == nil {
+		return fmt.Errorf("no unarchive item provided for unarchive operation")
+	}
+
+	unarchiveItem, ok := op.item.(*UnarchiveItem)
+	if !ok {
+		return fmt.Errorf("expected UnarchiveItem for unarchive operation, got %T", op.item)
+	}
+
+	// Determine archive format from file extension
+	archivePath := unarchiveItem.ArchivePath()
+	var format ArchiveFormat
+	if strings.HasSuffix(strings.ToLower(archivePath), ".tar.gz") || strings.HasSuffix(strings.ToLower(archivePath), ".tgz") {
+		format = ArchiveFormatTarGz
+	} else if strings.HasSuffix(strings.ToLower(archivePath), ".zip") {
+		format = ArchiveFormatZip
+	} else {
+		return fmt.Errorf("unsupported archive format for file: %s", archivePath)
+	}
+
+	switch format {
+	case ArchiveFormatTarGz:
+		return op.extractTarGzArchive(unarchiveItem, fsys)
+	case ArchiveFormatZip:
+		return op.extractZipArchive(unarchiveItem, fsys)
+	default:
+		return fmt.Errorf("unsupported archive format: %s", format.String())
+	}
+}
+
+// extractTarGzArchive extracts a tar.gz archive
+func (op *SimpleOperation) extractTarGzArchive(unarchiveItem *UnarchiveItem, fsys FileSystem) error {
+	// Open archive file
+	file, err := fsys.Open(unarchiveItem.ArchivePath())
+	if err != nil {
+		return fmt.Errorf("failed to open archive %s: %w", unarchiveItem.ArchivePath(), err)
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close archive file: %v\n", closeErr)
+		}
+	}()
+
+	// Create gzip reader
+	gzipReader, err := gzip.NewReader(file)
+	if err != nil {
+		return fmt.Errorf("failed to create gzip reader: %w", err)
+	}
+	defer func() {
+		if closeErr := gzipReader.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close gzip reader: %v\n", closeErr)
+		}
+	}()
+
+	// Create tar reader
+	tarReader := tar.NewReader(gzipReader)
+
+	// Extract files
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to read tar header: %w", err)
+		}
+
+		// Check if file matches patterns (if any)
+		if !op.matchesPatterns(header.Name, unarchiveItem.Patterns()) {
+			continue
+		}
+
+		// Determine extraction path
+		extractPath := filepath.Join(unarchiveItem.ExtractPath(), header.Name)
+
+		// Ensure extract path is safe (prevent directory traversal)
+		if !strings.HasPrefix(filepath.Clean(extractPath), filepath.Clean(unarchiveItem.ExtractPath())) {
+			return fmt.Errorf("unsafe path in archive: %s", header.Name)
+		}
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			// Create directory
+			if err := fsys.MkdirAll(extractPath, header.FileInfo().Mode()); err != nil {
+				return fmt.Errorf("failed to create directory %s: %w", extractPath, err)
+			}
+
+		case tar.TypeReg:
+			// Create file
+			if err := op.extractFileFromTar(tarReader, extractPath, header.FileInfo().Mode(), unarchiveItem.Overwrite(), fsys); err != nil {
+				return fmt.Errorf("failed to extract file %s: %w", extractPath, err)
+			}
+
+		case tar.TypeLink, tar.TypeSymlink:
+			// Skip symlinks and hard links for now
+			fmt.Printf("Warning: skipping link %s\n", header.Name)
+			continue
+
+		default:
+			fmt.Printf("Warning: skipping unsupported file type %c for %s\n", header.Typeflag, header.Name)
+		}
+	}
+
+	return nil
+}
+
+// extractZipArchive extracts a zip archive
+func (op *SimpleOperation) extractZipArchive(unarchiveItem *UnarchiveItem, fsys FileSystem) error {
+	// Read archive file content
+	file, err := fsys.Open(unarchiveItem.ArchivePath())
+	if err != nil {
+		return fmt.Errorf("failed to open archive %s: %w", unarchiveItem.ArchivePath(), err)
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close archive file: %v\n", closeErr)
+		}
+	}()
+
+	// Get file info for size
+	fullFS, ok := fsys.(FullFileSystem)
+	if !ok {
+		return fmt.Errorf("filesystem does not support Stat operation needed for zip extraction")
+	}
+
+	info, err := fullFS.Stat(unarchiveItem.ArchivePath())
+	if err != nil {
+		return fmt.Errorf("failed to stat archive file: %w", err)
+	}
+
+	// Read all content into memory (required for zip.NewReader)
+	content := make([]byte, info.Size())
+	_, err = file.Read(content)
+	if err != nil {
+		return fmt.Errorf("failed to read archive content: %w", err)
+	}
+
+	// Create zip reader
+	zipReader, err := zip.NewReader(bytes.NewReader(content), info.Size())
+	if err != nil {
+		return fmt.Errorf("failed to create zip reader: %w", err)
+	}
+
+	// Extract files
+	for _, f := range zipReader.File {
+		// Check if file matches patterns (if any)
+		if !op.matchesPatterns(f.Name, unarchiveItem.Patterns()) {
+			continue
+		}
+
+		// Determine extraction path
+		extractPath := filepath.Join(unarchiveItem.ExtractPath(), f.Name)
+
+		// Ensure extract path is safe (prevent directory traversal)
+		if !strings.HasPrefix(filepath.Clean(extractPath), filepath.Clean(unarchiveItem.ExtractPath())) {
+			return fmt.Errorf("unsafe path in archive: %s", f.Name)
+		}
+
+		if f.FileInfo().IsDir() {
+			// Create directory
+			if err := fsys.MkdirAll(extractPath, f.FileInfo().Mode()); err != nil {
+				return fmt.Errorf("failed to create directory %s: %w", extractPath, err)
+			}
+		} else {
+			// Extract file
+			if err := op.extractFileFromZip(f, extractPath, unarchiveItem.Overwrite(), fsys); err != nil {
+				return fmt.Errorf("failed to extract file %s: %w", extractPath, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// extractFileFromTar extracts a single file from a tar archive
+func (op *SimpleOperation) extractFileFromTar(tarReader *tar.Reader, extractPath string, mode fs.FileMode, overwrite bool, fsys FileSystem) error {
+	// Check if file already exists
+	if !overwrite {
+		if fullFS, ok := fsys.(FullFileSystem); ok {
+			if _, err := fullFS.Stat(extractPath); err == nil {
+				return fmt.Errorf("file already exists: %s", extractPath)
+			}
+		}
+	}
+
+	// Ensure parent directory exists
+	parentDir := filepath.Dir(extractPath)
+	if err := fsys.MkdirAll(parentDir, 0755); err != nil {
+		return fmt.Errorf("failed to create parent directory %s: %w", parentDir, err)
+	}
+
+	// Read file content
+	content, err := io.ReadAll(tarReader)
+	if err != nil {
+		return fmt.Errorf("failed to read file content: %w", err)
+	}
+
+	// Write file
+	return fsys.WriteFile(extractPath, content, mode)
+}
+
+// extractFileFromZip extracts a single file from a zip archive
+func (op *SimpleOperation) extractFileFromZip(f *zip.File, extractPath string, overwrite bool, fsys FileSystem) error {
+	// Check if file already exists
+	if !overwrite {
+		if fullFS, ok := fsys.(FullFileSystem); ok {
+			if _, err := fullFS.Stat(extractPath); err == nil {
+				return fmt.Errorf("file already exists: %s", extractPath)
+			}
+		}
+	}
+
+	// Ensure parent directory exists
+	parentDir := filepath.Dir(extractPath)
+	if err := fsys.MkdirAll(parentDir, 0755); err != nil {
+		return fmt.Errorf("failed to create parent directory %s: %w", parentDir, err)
+	}
+
+	// Open file in archive
+	reader, err := f.Open()
+	if err != nil {
+		return fmt.Errorf("failed to open file in archive: %w", err)
+	}
+	defer func() {
+		if closeErr := reader.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close zip file reader: %v\n", closeErr)
+		}
+	}()
+
+	// Read file content
+	content, err := io.ReadAll(reader)
+	if err != nil {
+		return fmt.Errorf("failed to read file content: %w", err)
+	}
+
+	// Write file
+	return fsys.WriteFile(extractPath, content, f.FileInfo().Mode())
+}
+
+// matchesPatterns checks if a file path matches any of the given patterns
+func (op *SimpleOperation) matchesPatterns(filePath string, patterns []string) bool {
+	// If no patterns specified, match all files
+	if len(patterns) == 0 {
+		return true
+	}
+
+	for _, pattern := range patterns {
+		// Use filepath.Match for simple patterns
+		if matched, err := filepath.Match(pattern, filePath); err == nil && matched {
+			return true
+		}
+
+		// Also handle directory-based patterns like "docs/**"
+		if strings.HasSuffix(pattern, "/**") {
+			dirPattern := strings.TrimSuffix(pattern, "/**")
+			if strings.HasPrefix(filePath, dirPattern+"/") || filePath == dirPattern {
+				return true
+			}
+		}
+
+		// Handle patterns with directory separators
+		if strings.Contains(pattern, "/") {
+			if matched, err := filepath.Match(pattern, filePath); err == nil && matched {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 // executeCopy implements file/directory copying
 func (op *SimpleOperation) executeCopy(ctx context.Context, fsys FileSystem) error {
 	if op.srcPath == "" || op.dstPath == "" {
@@ -644,6 +926,36 @@ func (op *SimpleOperation) validateCreateArchive(ctx context.Context, fsys FileS
 	return nil
 }
 
+// validateUnarchive validates unarchive operation
+func (op *SimpleOperation) validateUnarchive(ctx context.Context, fsys FileSystem) error {
+	if op.item == nil {
+		return &ValidationError{Operation: op, Reason: "no unarchive item provided"}
+	}
+
+	unarchiveItem, ok := op.item.(*UnarchiveItem)
+	if !ok {
+		return &ValidationError{Operation: op, Reason: fmt.Sprintf("expected UnarchiveItem, got %T", op.item)}
+	}
+
+	if unarchiveItem.ArchivePath() == "" {
+		return &ValidationError{Operation: op, Reason: "archive path cannot be empty"}
+	}
+
+	if unarchiveItem.ExtractPath() == "" {
+		return &ValidationError{Operation: op, Reason: "extract path cannot be empty"}
+	}
+
+	// Validate archive format is supported
+	archivePath := unarchiveItem.ArchivePath()
+	if !strings.HasSuffix(strings.ToLower(archivePath), ".tar.gz") &&
+		!strings.HasSuffix(strings.ToLower(archivePath), ".tgz") &&
+		!strings.HasSuffix(strings.ToLower(archivePath), ".zip") {
+		return &ValidationError{Operation: op, Reason: "unsupported archive format (supported: .tar.gz, .tgz, .zip)"}
+	}
+
+	return nil
+}
+
 // validateCopy validates copy operation
 func (op *SimpleOperation) validateCopy(ctx context.Context, fsys FileSystem) error {
 	if op.srcPath == "" {
@@ -705,4 +1017,11 @@ func (op *SimpleOperation) rollbackCopy(ctx context.Context, fsys FileSystem) er
 // rollbackMove moves the file back to its original location
 func (op *SimpleOperation) rollbackMove(ctx context.Context, fsys FileSystem) error {
 	return fsys.Rename(op.dstPath, op.srcPath)
+}
+
+// rollbackUnarchive removes extracted files (this is complex and potentially dangerous)
+func (op *SimpleOperation) rollbackUnarchive(ctx context.Context, fsys FileSystem) error {
+	// For safety, we don't automatically remove extracted files as it could be destructive
+	// A proper implementation would need to track what was extracted during the operation
+	return fmt.Errorf("rollback of unarchive operations is not automatically supported for safety reasons")
 }
