@@ -102,3 +102,20 @@ synthfs.LogValidationResult(opID, "CreateFile", "/path/to/file", false, "file al
 logger := synthfs.Logger()
 logger.Debug().Str("key", "value").Msg("custom debug message")
 ```
+
+## Coverage Exclusions
+
+Test utilities and mock implementations are excluded from code coverage using Go build tags to avoid skewing coverage metrics:
+
+```go
+//go:build !coverage
+
+package testutil
+```
+
+**Excluded files:**
+
+- `pkg/synthfs/testutil/` - Mock filesystem implementations for testing
+- `pkg/synthfs/testing.go` - Test helpers and utilities
+
+**Usage:** Coverage scripts automatically use `-tags=coverage` to exclude these files. No developer action required.
