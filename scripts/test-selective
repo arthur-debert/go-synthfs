@@ -1,17 +1,28 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
-# Check if we're in the correct directory
-if [[ ! -f "go.mod" ]]; then
-    echo "Error: go.mod not found. Please run this script from the project root."
-    exit 1
-fi
+# Alternative approach: Use -coverpkg to specify which packages to include
+# This excludes testutil and other unwanted packages by not mentioning them
 
-gotestsum --format pkgname -- -coverprofile=coverage.out -tags=coverage ./... &&
-    if [ -f ".covignore" ]; then
-        echo "Filtering coverage output using .covignore..."
-        grep -v -E -f .covignore coverage.out >coverage.filtered.out && mv coverage.filtered.out coverage.out
-    fi &&
-    go tool cover -func=coverage.out | awk '
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}Running tests with selective coverage (excluding testutil)...${NC}"
+
+# Define packages to include in coverage
+COVER_PKGS="github.com/arthur-debert/synthfs/cmd/synthfs,github.com/arthur-debert/synthfs/pkg/synthfs"
+
+# Run tests with selective coverage
+gotestsum --format pkgname -- -coverpkg="$COVER_PKGS" -coverprofile=coverage.out ./...
+
+# Generate coverage report
+echo -e "${BLUE}Generating coverage report...${NC}"
+go tool cover -func=coverage.out | awk '
 function color_line(line, coverage_val) {
     if (coverage_val >= 80) {
         printf "\033[32m%s\033[0m\n", line;  # Green
@@ -35,23 +46,19 @@ BEGIN {
         lines[count] = $0;
         coverage = $NF;
         sub(/%/, "", coverage);
-        coverage_vals[count] = coverage + 0;  # Force numeric conversion
+        coverage_vals[count] = coverage + 0;
         count++;
     }
 }
 END {
-    # Print header
     print header;
     
-    # Sort lines by coverage (bubble sort for simplicity)
     for (i = 0; i < count-1; i++) {
         for (j = 0; j < count-1-i; j++) {
             if (coverage_vals[j] < coverage_vals[j+1]) {
-                # Swap lines
                 temp_line = lines[j];
                 lines[j] = lines[j+1];
                 lines[j+1] = temp_line;
-                # Swap coverage values
                 temp_cov = coverage_vals[j];
                 coverage_vals[j] = coverage_vals[j+1];
                 coverage_vals[j+1] = temp_cov;
@@ -59,20 +66,17 @@ END {
         }
     }
     
-    # Print sorted function lines with colors
     for (i = 0; i < count; i++) {
         color_line(lines[i], coverage_vals[i]);
     }
     
-    # Print total line with color
     if (total_line != "") {
-        print "";  # Add blank line before total
+        print "";
         split(total_line, fields);
         total_coverage = fields[length(fields)];
         sub(/%/, "", total_coverage);
         total_coverage = total_coverage + 0;
-        # Replace "total:" with "TOTAL:" in the line
         gsub(/^total:/, "TOTAL:", total_line);
         color_line(total_line, total_coverage);
     }
-}'
+}' 
