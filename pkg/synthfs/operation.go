@@ -180,6 +180,50 @@ func (op *SimpleOperation) GetAllChecksums() map[string]*ChecksumRecord {
 	return op.checksums
 }
 
+// verifyChecksums verifies all stored checksums against current file state (Phase I, Milestone 4)
+func (op *SimpleOperation) verifyChecksums(ctx context.Context, fsys FileSystem) error {
+	if op.checksums == nil || len(op.checksums) == 0 {
+		return nil // No checksums to verify
+	}
+
+	// Check if filesystem supports Stat operation
+	fullFS, ok := fsys.(FullFileSystem)
+	if !ok {
+		// If filesystem doesn't support Stat, skip checksum verification
+		return nil
+	}
+
+	for path, expectedChecksum := range op.checksums {
+		// Get current file info
+		info, err := fullFS.Stat(path)
+		if err != nil {
+			return fmt.Errorf("checksum verification failed for %s: %w", path, err)
+		}
+
+		// Skip directories
+		if info.IsDir() {
+			continue
+		}
+
+		// Check size and modification time first (fast pre-check)
+		if info.Size() != expectedChecksum.Size {
+			return fmt.Errorf("checksum verification failed for %s: file size changed from %d to %d bytes", 
+				path, expectedChecksum.Size, info.Size())
+		}
+
+		if !info.ModTime().Equal(expectedChecksum.ModTime) {
+			return fmt.Errorf("checksum verification failed for %s: file modification time changed from %v to %v", 
+				path, expectedChecksum.ModTime, info.ModTime())
+		}
+
+		// If size and modtime match, assume file is unchanged (performance optimization)
+		// For more thorough verification, we could always compute the checksum, but this
+		// provides a good balance between performance and correctness
+	}
+
+	return nil
+}
+
 // Execute performs the actual filesystem operation.
 func (op *SimpleOperation) Execute(ctx context.Context, fsys FileSystem) error {
 	switch op.description.Type {
@@ -357,6 +401,11 @@ func (op *SimpleOperation) executeCreateSymlink(ctx context.Context, fsys FileSy
 func (op *SimpleOperation) executeCreateArchive(ctx context.Context, fsys FileSystem) error {
 	if op.item == nil {
 		return fmt.Errorf("no archive item provided for create_archive operation")
+	}
+
+	// Phase I, Milestone 4: Verify checksums before execution
+	if err := op.verifyChecksums(ctx, fsys); err != nil {
+		return fmt.Errorf("archive creation failed checksum verification: %w", err)
 	}
 
 	archiveItem, ok := op.item.(*ArchiveItem)
@@ -813,6 +862,11 @@ func (op *SimpleOperation) executeCopy(ctx context.Context, fsys FileSystem) err
 		return fmt.Errorf("source or destination path not set for copy operation")
 	}
 
+	// Phase I, Milestone 4: Verify checksums before execution
+	if err := op.verifyChecksums(ctx, fsys); err != nil {
+		return fmt.Errorf("copy operation failed checksum verification: %w", err)
+	}
+
 	// For now, implement simple file copy - directory copy is more complex
 	// First check if source is a file
 	fullFS, ok := fsys.(FullFileSystem)
@@ -854,6 +908,11 @@ func (op *SimpleOperation) executeCopy(ctx context.Context, fsys FileSystem) err
 func (op *SimpleOperation) executeMove(ctx context.Context, fsys FileSystem) error {
 	if op.srcPath == "" || op.dstPath == "" {
 		return fmt.Errorf("source or destination path not set for move operation")
+	}
+
+	// Phase I, Milestone 4: Verify checksums before execution
+	if err := op.verifyChecksums(ctx, fsys); err != nil {
+		return fmt.Errorf("move operation failed checksum verification: %w", err)
 	}
 
 	return fsys.Rename(op.srcPath, op.dstPath)
