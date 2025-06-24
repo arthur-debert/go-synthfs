@@ -45,3 +45,8 @@ Intro to Synthfs
 	But if your files are in control of this applications, under normal conditions things will work. It's just paramount to have the correct expections here.
 
 	First , no-concurrency:  anythin that is multi user or multi-processor writing to the same locations won't work.  Secondly, no strong guarantees: even if the data has not changed, a host of other reasons can break the exectuion phase: no disk space , user permissions change and so on.
+
+
+Components
+
+	At it's very core, synthfs gives you a way delcare / queue operations , work on the results and execute them later.  It provides some simple mechaniss for restore and can correctly report suceesess or failures.

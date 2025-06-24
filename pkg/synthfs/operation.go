@@ -17,7 +17,7 @@ type OperationDesc struct {
 	Details map[string]interface{} // Additional operation-specific details
 }
 
-// Operation defines a single abstract filesystem operation in the v2 API.
+// Operation defines a single abstract filesystem operation.
 type Operation interface {
 	// ID returns the unique identifier of the operation.
 	ID() OperationID
@@ -42,103 +42,144 @@ type Operation interface {
 	// Describe returns a structured description of the operation.
 	Describe() OperationDesc
 
-	// WithID sets the operation's ID.
-	// Returns the operation to allow chaining.
-	WithID(id OperationID) Operation
-
-	// WithDependency adds a dependency to the operation.
-	// Returns the operation to allow chaining.
-	WithDependency(depID OperationID) Operation
-
 	// GetItem returns the FsItem associated with this operation, if any.
 	// This is primarily relevant for Create operations.
 	// Returns nil if no item is directly associated (e.g., for Delete, Copy, Move by path).
 	GetItem() FsItem
 }
 
-// --- BaseOperation ---
+// --- SimpleOperation: Basic Operation Implementation ---
 
-// BaseOperation provides a basic implementation of common Operation methods.
-// Specific operations can embed this to reduce boilerplate.
-type BaseOperation struct {
+// SimpleOperation provides a straightforward implementation of Operation.
+// Operations are created complete and immutable - no post-creation modification.
+type SimpleOperation struct {
 	id           OperationID
 	dependencies []OperationID
 	description  OperationDesc
+	item         FsItem // For Create operations
+	srcPath      string // For Copy/Move operations
+	dstPath      string // For Copy/Move operations
 }
 
-// NewBaseOperation creates a new BaseOperation.
-// Typically called by specific operation constructors.
-func NewBaseOperation(id OperationID, descType string, path string) BaseOperation {
-	return BaseOperation{
+// NewSimpleOperation creates a new simple operation.
+func NewSimpleOperation(id OperationID, descType string, path string) *SimpleOperation {
+	return &SimpleOperation{
 		id: id,
 		description: OperationDesc{
 			Type:    descType,
 			Path:    path,
 			Details: make(map[string]interface{}),
 		},
+		dependencies: []OperationID{},
 	}
 }
 
 // ID returns the operation's ID.
-func (bo *BaseOperation) ID() OperationID {
-	return bo.id
+func (op *SimpleOperation) ID() OperationID {
+	return op.id
 }
 
 // Dependencies returns the list of operation dependencies.
-func (bo *BaseOperation) Dependencies() []OperationID {
-	return bo.dependencies
+func (op *SimpleOperation) Dependencies() []OperationID {
+	return op.dependencies
+}
+
+// Conflicts returns an empty list (conflicts not implemented yet).
+func (op *SimpleOperation) Conflicts() []OperationID {
+	return nil
 }
 
 // Describe returns the operation's description.
-func (bo *BaseOperation) Describe() OperationDesc {
-	return bo.description
+func (op *SimpleOperation) Describe() OperationDesc {
+	return op.description
 }
 
-// WithID sets the operation's ID.
-func (bo *BaseOperation) WithID(id OperationID) Operation {
-	bo.id = id
-	// This is tricky: BaseOperation itself doesn't implement Operation.
-	// The embedding struct must return itself. This method here
-	// is more of a template. Specific operations will need to implement this
-	// to return their own type.
-	// For now, returning nil to indicate it needs to be implemented by embedder.
-	// A better approach would be to have WithID/WithDependency modify the BaseOperation
-	// and the concrete type's WithID/WithDependency methods call this and return `self`.
-	panic("WithID must be implemented by the embedding Operation type and return itself")
+// GetItem returns the FsItem associated with this operation.
+func (op *SimpleOperation) GetItem() FsItem {
+	return op.item
 }
 
-// WithDependency adds a dependency.
-func (bo *BaseOperation) WithDependency(depID OperationID) Operation {
-	bo.dependencies = append(bo.dependencies, depID)
-	// Similar to WithID, this needs to be properly handled by the embedding type.
-	panic("WithDependency must be implemented by the embedding Operation type and return itself")
+// SetItem sets the FsItem for Create operations.
+func (op *SimpleOperation) SetItem(item FsItem) {
+	op.item = item
+}
+
+// SetPaths sets source and destination paths for Copy/Move operations.
+func (op *SimpleOperation) SetPaths(src, dst string) {
+	op.srcPath = src
+	op.dstPath = dst
+}
+
+// AddDependency adds a dependency to the operation.
+func (op *SimpleOperation) AddDependency(depID OperationID) {
+	op.dependencies = append(op.dependencies, depID)
 }
 
 // SetDescriptionDetail sets a detail in the operation's description.
-func (bo *BaseOperation) SetDescriptionDetail(key string, value interface{}) {
-	if bo.description.Details == nil {
-		bo.description.Details = make(map[string]interface{})
+func (op *SimpleOperation) SetDescriptionDetail(key string, value interface{}) {
+	if op.description.Details == nil {
+		op.description.Details = make(map[string]interface{})
 	}
-	bo.description.Details[key] = value
+	op.description.Details[key] = value
 }
 
-// --- Placeholder Operation Types (for generic constructors) ---
+// Execute (stub for Phase 0)
+func (op *SimpleOperation) Execute(ctx context.Context, fsys FileSystem) error {
+	fmt.Printf("Execute (stub): %s %s\n", op.description.Type, op.description.Path)
+	if op.item != nil {
+		fmt.Printf("  Item Type: %s\n", op.item.Type())
+	}
+	if op.srcPath != "" {
+		fmt.Printf("  Source: %s\n", op.srcPath)
+	}
+	if op.dstPath != "" {
+		fmt.Printf("  Destination: %s\n", op.dstPath)
+	}
+	return nil // Placeholder
+}
 
-// GenericOperation is a placeholder for operations created by the unified constructors.
-// It will embed BaseOperation and implement the Execute, Validate, Rollback methods
-// based on the specific action (Create, Delete, Copy, Move) and FsItem type.
-// For Phase 0, these methods can be stubs.
+// Validate (stub for Phase 0)
+func (op *SimpleOperation) Validate(ctx context.Context, fsys FileSystem) error {
+	fmt.Printf("Validate (stub): %s %s\n", op.description.Type, op.description.Path)
+
+	// Basic validation: reject empty paths for Phase 0
+	if op.description.Path == "" {
+		return &ValidationError{
+			Operation: op,
+			Reason:    "path cannot be empty",
+			Cause:     nil,
+		}
+	}
+
+	return nil // Placeholder
+}
+
+// Rollback (stub for Phase 0)
+func (op *SimpleOperation) Rollback(ctx context.Context, fsys FileSystem) error {
+	fmt.Printf("Rollback (stub): %s %s\n", op.description.Type, op.description.Path)
+	return nil // Placeholder
+}
+
+// --- Legacy GenericOperation (for backward compatibility during transition) ---
+
+// GenericOperation is kept for backward compatibility but should be replaced with SimpleOperation.
 type GenericOperation struct {
-	BaseOperation
-	// Item field will be used for Create operations
-	Item FsItem // The FsItem for Create operations
-	// SrcPath/DstPath fields for Copy/Move
-	SrcPath string
-	DstPath string
+	id           OperationID
+	dependencies []OperationID
+	description  OperationDesc
+	Item         FsItem // The FsItem for Create operations
+	SrcPath      string // Source path for Copy/Move
+	DstPath      string // Destination path for Copy/Move
 }
 
 // Ensure GenericOperation satisfies the Operation interface.
 var _ Operation = (*GenericOperation)(nil)
+
+func (op *GenericOperation) ID() OperationID             { return op.id }
+func (op *GenericOperation) Dependencies() []OperationID { return op.dependencies }
+func (op *GenericOperation) Conflicts() []OperationID    { return nil }
+func (op *GenericOperation) Describe() OperationDesc     { return op.description }
+func (op *GenericOperation) GetItem() FsItem             { return op.Item }
 
 // Execute (stub for Phase 0)
 func (op *GenericOperation) Execute(ctx context.Context, fsys FileSystem) error {
@@ -175,28 +216,6 @@ func (op *GenericOperation) Validate(ctx context.Context, fsys FileSystem) error
 func (op *GenericOperation) Rollback(ctx context.Context, fsys FileSystem) error {
 	fmt.Printf("Rollback (stub): %s %s\n", op.description.Type, op.description.Path)
 	return nil // Placeholder
-}
-
-// WithID sets the operation's ID for GenericOperation.
-func (op *GenericOperation) WithID(id OperationID) Operation {
-	op.id = id
-	return op
-}
-
-// WithDependency adds a dependency for GenericOperation.
-func (op *GenericOperation) WithDependency(depID OperationID) Operation {
-	op.dependencies = append(op.dependencies, depID)
-	return op
-}
-
-// GetItem returns the FsItem associated with this GenericOperation (primarily for Create).
-func (op *GenericOperation) GetItem() FsItem {
-	return op.Item
-}
-
-// Conflicts returns an empty list for GenericOperation (conflicts not implemented yet).
-func (op *GenericOperation) Conflicts() []OperationID {
-	return nil
 }
 
 // --- Error Types ---

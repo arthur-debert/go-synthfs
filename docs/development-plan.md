@@ -21,6 +21,61 @@ Some infrastructure is a **prerequisite** for operations and must be done first.
 
 ## 📋 Development Phases
 
+### **Phase 0.5: Core Code Simplification** ⏱️ 2-3 days
+
+**Goal:** Align current codebase with the simple vision from `intro-to-synthfs.txxt`.
+
+**Rationale:** The current code is over-engineered compared to the core vision of "queue operations, validate upfront, execute later with simple rollback." Remove complexity that doesn't serve the core use case.
+
+**Deliverables:**
+
+1. **Remove Progress Reporting System** (`pkg/synthfs/progress.go` → delete)
+
+   ```golang
+   // DELETE entire file (297 lines)
+   // Replace with simple Result.String() method for basic reporting
+   ```
+
+2. **Simplify Executor** (`pkg/synthfs/executor.go` → ~100 lines)
+
+   ```golang
+   // REMOVE: ExecuteConfig, ExecuteOption, WithDryRun, ProgressReportingExecutor
+   // REMOVE: ExecuteStream method
+   // KEEP: Simple Execute(ctx, queue, filesystem) method
+   // KEEP: Basic Result struct with success/failure + rollback function
+   ```
+
+3. **Simplify Operation Interface** (`pkg/synthfs/operation.go`)
+
+   ```golang
+   // REMOVE: BaseOperation struct, WithID(), WithDependency() chainable methods
+   // KEEP: Simple Operation interface: ID(), Execute(), Validate(), Rollback(), Describe()
+   // SIMPLIFY: Operations created complete, no post-creation modification
+   ```
+
+4. **Reduce Logging Verbosity**
+   - Keep INFO level for key events
+   - Remove excessive TRACE/DEBUG logging
+   - Focus on user-relevant messages
+
+**Success Criteria:**
+
+- [ ] `pkg/synthfs/progress.go` deleted
+- [ ] `pkg/synthfs/executor.go` reduced from 385 → ~100 lines  
+- [ ] No ExecuteConfig/ExecuteOption complexity
+- [ ] Operations created immutable (no WithID/WithDependency)
+- [ ] All existing tests still pass with simpler API
+- [ ] No breaking changes to core functionality
+
+**Expected Impact:**
+
+- **~500 lines removed** from core library
+- **Simpler mental model** aligned with intro vision
+- **Easier maintenance** and testing
+- **Clearer separation** between validation and execution
+
+---
+
 ### **Phase 1A: Critical FileSystem Extensions** ⏱️ 1 week
 
 **Goal:** Unblock Phase 1 operations by extending the FileSystem interface.
@@ -316,9 +371,18 @@ Some infrastructure is a **prerequisite** for operations and must be done first.
 
 ## 🎯 Immediate Next Steps
 
-### Current Sprint (Week 1)
+### Current Sprint (Next 2-3 Days)
 
-**Priority 1: FileSystem Interface Extensions**
+**Priority 1: Core Code Simplification (Phase 0.5)**
+
+1. **Remove progress reporting system** - Delete `pkg/synthfs/progress.go`
+2. **Simplify executor** - Remove ExecuteConfig, ExecuteOption, dry run complexity
+3. **Simplify operations** - Remove BaseOperation chaining, make operations immutable  
+4. **Reduce logging verbosity** - Focus on user-relevant INFO messages
+
+### Next Sprint (Week 1)
+
+**Priority 2: FileSystem Interface Extensions (Phase 1A)**
 
 1. **Update WriteFS interface** in `pkg/synthfs/fs.go`
 2. **Implement methods in OSFileSystem**

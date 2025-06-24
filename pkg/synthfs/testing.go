@@ -212,11 +212,11 @@ func (th *TestHelper) AssertNotExists(path string) {
 }
 
 // ExecuteAndAssert executes a queue and asserts it succeeds
-func (th *TestHelper) ExecuteAndAssert(queue Queue, opts ...ExecuteOption) *Result {
+func (th *TestHelper) ExecuteAndAssert(queue Queue) *Result {
 	th.t.Helper()
 
 	executor := NewExecutor()
-	result := executor.Execute(th.ctx, queue, th.fs, opts...)
+	result := executor.Execute(th.ctx, queue, th.fs)
 
 	if !result.Success {
 		th.t.Fatalf("Expected execution to succeed, but it failed with errors: %v", result.Errors)
@@ -226,11 +226,11 @@ func (th *TestHelper) ExecuteAndAssert(queue Queue, opts ...ExecuteOption) *Resu
 }
 
 // ExecuteAndExpectError executes a queue and expects it to fail
-func (th *TestHelper) ExecuteAndExpectError(queue Queue, opts ...ExecuteOption) *Result {
+func (th *TestHelper) ExecuteAndExpectError(queue Queue) *Result {
 	th.t.Helper()
 
 	executor := NewExecutor()
-	result := executor.Execute(th.ctx, queue, th.fs, opts...)
+	result := executor.Execute(th.ctx, queue, th.fs)
 
 	if result.Success {
 		th.t.Fatalf("Expected execution to fail, but it succeeded")
