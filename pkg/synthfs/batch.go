@@ -8,22 +8,119 @@ import (
 	"strings"
 )
 
+// PathTracker tracks operations by path to detect conflicts
+type PathTracker struct {
+	CreatedPaths  map[string]OperationID  // paths that will be created
+	DeletedPaths  map[string]OperationID  // paths that will be deleted
+	ModifiedPaths map[string]OperationID  // paths that will be modified
+}
+
+// NewPathTracker creates a new path tracker
+func NewPathTracker() *PathTracker {
+	return &PathTracker{
+		CreatedPaths:  make(map[string]OperationID),
+		DeletedPaths:  make(map[string]OperationID),
+		ModifiedPaths: make(map[string]OperationID),
+	}
+}
+
+// CheckPathConflict checks if adding an operation would conflict with existing operations
+func (pt *PathTracker) CheckPathConflict(opID OperationID, opType, path string, destPath string) error {
+	// Phase I, Milestone 2: Duplicate path detection
+	switch opType {
+	case "create_file", "create_directory":
+		if existingOpID, exists := pt.CreatedPaths[path]; exists {
+			return fmt.Errorf("operation %s conflicts with %s: cannot create %s - already scheduled for creation", 
+				opID, existingOpID, path)
+		}
+		if existingOpID, exists := pt.DeletedPaths[path]; exists {
+			return fmt.Errorf("operation %s conflicts with %s: cannot create %s - already scheduled for deletion", 
+				opID, existingOpID, path)
+		}
+		
+	case "delete":
+		if existingOpID, exists := pt.DeletedPaths[path]; exists {
+			return fmt.Errorf("operation %s conflicts with %s: cannot delete %s - already scheduled for deletion", 
+				opID, existingOpID, path)
+		}
+		
+	case "copy", "move":
+		// Check destination conflicts
+		if destPath != "" {
+			if existingOpID, exists := pt.CreatedPaths[destPath]; exists {
+				return fmt.Errorf("operation %s conflicts with %s: cannot %s to %s - already scheduled for creation", 
+					opID, existingOpID, opType, destPath)
+			}
+			if existingOpID, exists := pt.ModifiedPaths[destPath]; exists {
+				return fmt.Errorf("operation %s conflicts with %s: cannot %s to %s - already scheduled for modification", 
+					opID, existingOpID, opType, destPath)
+			}
+		}
+		
+	case "create_symlink":
+		if existingOpID, exists := pt.CreatedPaths[path]; exists {
+			return fmt.Errorf("operation %s conflicts with %s: cannot create symlink %s - already scheduled for creation", 
+				opID, existingOpID, path)
+		}
+		
+	case "create_archive":
+		if existingOpID, exists := pt.CreatedPaths[path]; exists {
+			return fmt.Errorf("operation %s conflicts with %s: cannot create archive %s - already scheduled for creation", 
+				opID, existingOpID, path)
+		}
+		
+	case "unarchive":
+		// Unarchive operations can conflict on extraction directory, but this is complex to predict
+		// For now, we'll rely on execution-time validation
+	}
+	
+	return nil
+}
+
+// RecordOperation records an operation in the path tracker
+func (pt *PathTracker) RecordOperation(opID OperationID, opType, path string, destPath string) {
+	// Phase I, Milestone 2: Record path usage
+	switch opType {
+	case "create_file", "create_directory", "create_symlink", "create_archive":
+		pt.CreatedPaths[path] = opID
+		
+	case "delete":
+		pt.DeletedPaths[path] = opID
+		
+	case "copy":
+		if destPath != "" {
+			pt.CreatedPaths[destPath] = opID
+		}
+		
+	case "move":
+		if destPath != "" {
+			pt.CreatedPaths[destPath] = opID
+		}
+		pt.DeletedPaths[path] = opID
+		
+	case "unarchive":
+		// Complex to predict all extracted paths, skip for now
+	}
+}
+
 // Batch represents a collection of filesystem operations that can be validated and executed as a unit.
 // It provides an imperative API with validate-as-you-go and automatic dependency resolution.
 type Batch struct {
-	operations []Operation
-	fs         FullFileSystem // Use FullFileSystem to have access to Stat method
-	ctx        context.Context
-	idCounter  int
+	operations  []Operation
+	fs          FullFileSystem // Use FullFileSystem to have access to Stat method
+	ctx         context.Context
+	idCounter   int
+	pathTracker *PathTracker // Phase I, Milestone 2: Track path conflicts
 }
 
 // NewBatch creates a new operation batch with default filesystem and context.
 func NewBatch() *Batch {
 	return &Batch{
-		operations: []Operation{},
-		fs:         NewOSFileSystem("."), // Use current directory as default root
-		ctx:        context.Background(),
-		idCounter:  0,
+		operations:  []Operation{},
+		fs:          NewOSFileSystem("."), // Use current directory as default root
+		ctx:         context.Background(),
+		idCounter:   0,
+		pathTracker: NewPathTracker(), // Phase I, Milestone 2: Initialize path tracker
 	}
 }
 

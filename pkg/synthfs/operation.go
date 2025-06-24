@@ -923,6 +923,20 @@ func (op *SimpleOperation) validateCreateArchive(ctx context.Context, fsys FileS
 		return &ValidationError{Operation: op, Reason: "archive must have at least one source"}
 	}
 
+	// Phase I, Milestone 1: Source existence validation
+	// Check if all source files/directories exist at validation time
+	if fullFS, ok := fsys.(FullFileSystem); ok {
+		for _, source := range archiveItem.Sources() {
+			if _, err := fullFS.Stat(source); err != nil {
+				return &ValidationError{
+					Operation: op, 
+					Reason:    fmt.Sprintf("archive source does not exist: %s", source),
+					Cause:     err,
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -953,6 +967,18 @@ func (op *SimpleOperation) validateUnarchive(ctx context.Context, fsys FileSyste
 		return &ValidationError{Operation: op, Reason: "unsupported archive format (supported: .tar.gz, .tgz, .zip)"}
 	}
 
+	// Phase I, Milestone 1: Source existence validation
+	// Check if archive file exists at validation time
+	if fullFS, ok := fsys.(FullFileSystem); ok {
+		if _, err := fullFS.Stat(archivePath); err != nil {
+			return &ValidationError{
+				Operation: op, 
+				Reason:    fmt.Sprintf("archive file does not exist: %s", archivePath),
+				Cause:     err,
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -966,9 +992,17 @@ func (op *SimpleOperation) validateCopy(ctx context.Context, fsys FileSystem) er
 		return &ValidationError{Operation: op, Reason: "copy destination path cannot be empty"}
 	}
 
-	// For copy operations, we don't check if source exists at validation time
-	// because it might be created by an earlier operation in the same batch.
-	// We'll check existence at execution time instead.
+	// Phase I, Milestone 1: Source existence validation
+	// Check if source file/directory exists at validation time
+	if fullFS, ok := fsys.(FullFileSystem); ok {
+		if _, err := fullFS.Stat(op.srcPath); err != nil {
+			return &ValidationError{
+				Operation: op, 
+				Reason:    fmt.Sprintf("copy source does not exist: %s", op.srcPath),
+				Cause:     err,
+			}
+		}
+	}
 
 	return nil
 }
@@ -983,9 +1017,17 @@ func (op *SimpleOperation) validateMove(ctx context.Context, fsys FileSystem) er
 		return &ValidationError{Operation: op, Reason: "move destination path cannot be empty"}
 	}
 
-	// For move operations, we don't check if source exists at validation time
-	// because it might be created by an earlier operation in the same batch.
-	// We'll check existence at execution time instead.
+	// Phase I, Milestone 1: Source existence validation
+	// Check if source file/directory exists at validation time
+	if fullFS, ok := fsys.(FullFileSystem); ok {
+		if _, err := fullFS.Stat(op.srcPath); err != nil {
+			return &ValidationError{
+				Operation: op, 
+				Reason:    fmt.Sprintf("move source does not exist: %s", op.srcPath),
+				Cause:     err,
+			}
+		}
+	}
 
 	return nil
 }

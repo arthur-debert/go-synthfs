@@ -120,12 +120,23 @@ func TestUnarchiveValidation(t *testing.T) {
 	t.Run("accepts supported formats", func(t *testing.T) {
 		supportedFormats := []string{"test.tar.gz", "test.tgz", "test.zip"}
 		
+		// Phase I, Milestone 1: Create dummy archive files since we now validate existence
+		testFS := NewOSFileSystem(".")
+		for _, format := range supportedFormats {
+			// Create a minimal dummy archive file for testing
+			err := testFS.WriteFile(format, []byte("dummy archive content"), 0644)
+			if err != nil {
+				t.Fatalf("Failed to create test archive %s: %v", format, err)
+			}
+			defer func() { _ = testFS.Remove(format) }() // Clean up
+		}
+		
 		for _, format := range supportedFormats {
 			op := NewSimpleOperation("test", "unarchive", format)
 			item := NewUnarchive(format, "extract/")
 			op.SetItem(item)
 			
-			err := op.Validate(ctx, fs)
+			err := op.Validate(ctx, testFS)
 			if err != nil {
 				t.Errorf("Expected no validation error for %s, got: %v", format, err)
 			}

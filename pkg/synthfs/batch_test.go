@@ -2,6 +2,7 @@ package synthfs_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
@@ -62,49 +63,26 @@ func TestBatchBasicUsage(t *testing.T) {
 	})
 
 	t.Run("Copy", func(t *testing.T) {
-		op, err := batch.Copy("source.txt", "destination.txt")
-		if err != nil {
-			t.Fatalf("Copy failed: %v", err)
+		// Phase I, Milestone 1: Copy operations now validate source existence at creation time
+		_, err := batch.Copy("source.txt", "destination.txt")
+		if err == nil {
+			t.Error("Expected validation error for non-existent source")
 		}
-
-		if op == nil {
-			t.Fatal("Copy returned nil operation")
-		}
-
-		desc := op.Describe()
-		if desc.Type != "copy" {
-			t.Errorf("Expected operation type 'copy', got '%s'", desc.Type)
-		}
-
-		if desc.Path != "source.txt" {
-			t.Errorf("Expected path 'source.txt', got '%s'", desc.Path)
-		}
-
-		// Check destination in details
-		if dest, exists := desc.Details["destination"]; !exists {
-			t.Error("Expected destination in operation details")
-		} else if dest != "destination.txt" {
-			t.Errorf("Expected destination 'destination.txt', got %v", dest)
+		
+		if !strings.Contains(err.Error(), "copy source does not exist") {
+			t.Errorf("Expected source existence error, got: %v", err)
 		}
 	})
 
 	t.Run("Move", func(t *testing.T) {
-		op, err := batch.Move("old-location.txt", "new-location.txt")
-		if err != nil {
-			t.Fatalf("Move failed: %v", err)
+		// Phase I, Milestone 1: Move operations now validate source existence at creation time
+		_, err := batch.Move("old-location.txt", "new-location.txt")
+		if err == nil {
+			t.Error("Expected validation error for non-existent source")
 		}
-
-		if op == nil {
-			t.Fatal("Move returned nil operation")
-		}
-
-		desc := op.Describe()
-		if desc.Type != "move" {
-			t.Errorf("Expected operation type 'move', got '%s'", desc.Type)
-		}
-
-		if desc.Path != "old-location.txt" {
-			t.Errorf("Expected path 'old-location.txt', got '%s'", desc.Path)
+		
+		if !strings.Contains(err.Error(), "move source does not exist") {
+			t.Errorf("Expected source existence error, got: %v", err)
 		}
 	})
 
@@ -130,7 +108,8 @@ func TestBatchBasicUsage(t *testing.T) {
 
 	t.Run("Operations", func(t *testing.T) {
 		ops := batch.Operations()
-		expectedCount := 5 // CreateDir, CreateFile, Copy, Move, Delete
+		// Phase I, Milestone 1: Copy and Move operations now fail validation, so we have fewer operations
+		expectedCount := 3 // CreateDir, CreateFile, Delete (Copy and Move failed validation)
 		if len(ops) != expectedCount {
 			t.Errorf("Expected %d operations in batch, got %d", expectedCount, len(ops))
 		}
