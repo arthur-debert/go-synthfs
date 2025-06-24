@@ -129,6 +129,16 @@ func (op *SimpleOperation) SetDescriptionDetail(key string, value interface{}) {
 	op.description.Details[key] = value
 }
 
+// GetSrcPath returns the source path for copy/move operations.
+func (op *SimpleOperation) GetSrcPath() string {
+	return op.srcPath
+}
+
+// GetDstPath returns the destination path for copy/move operations.
+func (op *SimpleOperation) GetDstPath() string {
+	return op.dstPath
+}
+
 // Execute performs the actual filesystem operation.
 func (op *SimpleOperation) Execute(ctx context.Context, fsys FileSystem) error {
 	switch op.description.Type {
