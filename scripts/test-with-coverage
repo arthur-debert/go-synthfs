@@ -27,6 +27,9 @@ BEGIN {
     count = 0;
 }
 {
+    # Strip module prefix from file paths
+    gsub(/github\.com\/arthur-debert\/synthfs\//, "", $0);
+    
     if (NR == 1) {
         header = $0;
     } else if ($1 == "total:") {
