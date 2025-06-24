@@ -111,7 +111,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 	})
 
 	t.Run("Complete workflow with all operations", func(t *testing.T) {
-		t.Skip("Skipping complex dependency workflow test - needs dependency resolution fixes")
+		// Test dependency resolution between operations
 
 		// Test will be re-enabled once dependency resolution between operations is fixed
 		fullBatch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())

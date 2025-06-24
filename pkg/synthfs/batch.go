@@ -298,6 +298,11 @@ func (b *Batch) Execute() (*Result, error) {
 		Int("operation_count", len(b.operations)).
 		Msg("executing batch")
 
+	// Resolve implicit dependencies before execution
+	if err := b.resolveImplicitDependencies(); err != nil {
+		return nil, fmt.Errorf("failed to resolve implicit dependencies: %w", err)
+	}
+
 	// Create executor and queue
 	executor := NewExecutor()
 	queue := NewMemQueue()
@@ -392,4 +397,152 @@ func (b *Batch) ensureParentDirectories(path string) []OperationID {
 		Msg("CreateDir operation auto-added to batch")
 
 	return dependencyIDs
+}
+
+// resolveImplicitDependencies analyzes all operations and adds dependencies to prevent conflicts.
+// This ensures operations that depend on the same files are executed in the correct order.
+func (b *Batch) resolveImplicitDependencies() error {
+	Logger().Info().
+		Int("operations", len(b.operations)).
+		Msg("resolving implicit dependencies between operations")
+
+	// Build maps of operations by the files they read/write/delete
+	fileReaders := make(map[string][]int)    // path -> operation indices that read this file
+	fileWriters := make(map[string][]int)    // path -> operation indices that write/create this file
+	fileMovers := make(map[string][]int)     // path -> operation indices that move/delete this file
+	symlinkTargets := make(map[string][]int) // target path -> operation indices that create symlinks to this target
+
+	for i, op := range b.operations {
+		desc := op.Describe()
+		
+		switch desc.Type {
+		case "create_file", "create_directory":
+			fileWriters[desc.Path] = append(fileWriters[desc.Path], i)
+			
+		case "copy":
+			// Copy reads source and writes destination
+			if simpleOp, ok := op.(*SimpleOperation); ok {
+				srcPath := simpleOp.GetSrcPath()
+				dstPath := simpleOp.GetDstPath()
+				if srcPath != "" {
+					fileReaders[srcPath] = append(fileReaders[srcPath], i)
+				}
+				if dstPath != "" {
+					fileWriters[dstPath] = append(fileWriters[dstPath], i)
+				}
+			}
+			
+		case "move":
+			// Move reads source and writes destination, then deletes source
+			if simpleOp, ok := op.(*SimpleOperation); ok {
+				srcPath := simpleOp.GetSrcPath()
+				dstPath := simpleOp.GetDstPath()
+				if srcPath != "" {
+					fileReaders[srcPath] = append(fileReaders[srcPath], i)
+					fileMovers[srcPath] = append(fileMovers[srcPath], i)
+				}
+				if dstPath != "" {
+					fileWriters[dstPath] = append(fileWriters[dstPath], i)
+				}
+			}
+			
+		case "delete":
+			fileMovers[desc.Path] = append(fileMovers[desc.Path], i)
+			
+		case "create_symlink":
+			// Symlink creation depends on the target existing
+			if target, ok := desc.Details["target"]; ok {
+				if targetPath, ok := target.(string); ok {
+					symlinkTargets[targetPath] = append(symlinkTargets[targetPath], i)
+				}
+			}
+			fileWriters[desc.Path] = append(fileWriters[desc.Path], i)
+			
+		case "create_archive":
+			// Archive reads all source files
+			if archiveItem := op.GetItem(); archiveItem != nil {
+				if archive, ok := archiveItem.(*ArchiveItem); ok {
+					for _, source := range archive.Sources() {
+						fileReaders[source] = append(fileReaders[source], i)
+					}
+				}
+			}
+			fileWriters[desc.Path] = append(fileWriters[desc.Path], i)
+		}
+	}
+
+	// Now add dependencies to ensure correct ordering
+	dependenciesAdded := 0
+	
+	// Rule 1: Operations that move/delete files must come after operations that read those files
+	for filePath, movers := range fileMovers {
+		if readers, hasReaders := fileReaders[filePath]; hasReaders {
+			for _, moverIdx := range movers {
+				for _, readerIdx := range readers {
+					if readerIdx != moverIdx {
+						// Reader must come before mover
+						if simpleOp, ok := b.operations[moverIdx].(*SimpleOperation); ok {
+							readerID := b.operations[readerIdx].ID()
+							// Check if dependency already exists
+							exists := false
+							for _, dep := range simpleOp.Dependencies() {
+								if dep == readerID {
+									exists = true
+									break
+								}
+							}
+							if !exists {
+								simpleOp.AddDependency(readerID)
+								dependenciesAdded++
+								Logger().Info().
+									Str("operation", string(simpleOp.ID())).
+									Str("depends_on", string(readerID)).
+									Str("reason", fmt.Sprintf("mover depends on reader of %s", filePath)).
+									Msg("added implicit dependency")
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	// Rule 2: Operations that create symlinks must come after operations that create their targets
+	for targetPath, symlinkCreators := range symlinkTargets {
+		if writers, hasWriters := fileWriters[targetPath]; hasWriters {
+			for _, symlinkIdx := range symlinkCreators {
+				for _, writerIdx := range writers {
+					if writerIdx != symlinkIdx {
+						// Writer must come before symlink creator
+						if simpleOp, ok := b.operations[symlinkIdx].(*SimpleOperation); ok {
+							writerID := b.operations[writerIdx].ID()
+							// Check if dependency already exists
+							exists := false
+							for _, dep := range simpleOp.Dependencies() {
+								if dep == writerID {
+									exists = true
+									break
+								}
+							}
+							if !exists {
+								simpleOp.AddDependency(writerID)
+								dependenciesAdded++
+								Logger().Info().
+									Str("operation", string(simpleOp.ID())).
+									Str("depends_on", string(writerID)).
+									Str("reason", fmt.Sprintf("symlink depends on target creation %s", targetPath)).
+									Msg("added implicit dependency")
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	Logger().Info().
+		Int("dependencies_added", dependenciesAdded).
+		Msg("implicit dependency resolution completed")
+
+	return nil
 }
