@@ -7,6 +7,8 @@ if [[ ! -f "go.mod" ]]; then
 fi
 
 gotestsum --format pkgname -- -coverprofile=coverage.out -tags=coverage ./... &&
+    grep -v "testing\.go:" coverage.out | grep -v "testing_test\.go:" >coverage.filtered.out &&
+    mv coverage.filtered.out coverage.out &&
     go tool cover -func=coverage.out | awk '
 function color_line(line, coverage_val) {
     if (coverage_val >= 80) {

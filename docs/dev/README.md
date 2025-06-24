@@ -105,7 +105,9 @@ logger.Debug().Str("key", "value").Msg("custom debug message")
 
 ## Coverage Exclusions
 
-Test utilities and mock implementations are excluded from code coverage using Go build tags to avoid skewing coverage metrics:
+Test utilities and mock implementations are excluded from code coverage to avoid skewing coverage metrics:
+
+**Build tag exclusions** (entire packages not built with coverage):
 
 ```go
 //go:build !coverage
@@ -113,9 +115,11 @@ Test utilities and mock implementations are excluded from code coverage using Go
 package testutil
 ```
 
-**Excluded files:**
-
 - `pkg/synthfs/testutil/` - Mock filesystem implementations for testing
-- `pkg/synthfs/testing.go` - Test helpers and utilities
 
-**Usage:** Coverage scripts automatically use `-tags=coverage` to exclude these files. No developer action required.
+**Grep filtering** (built but filtered from coverage output):
+
+- `pkg/synthfs/testing.go` - Test helpers and utilities  
+- `pkg/synthfs/testing_test.go` - Tests for test utilities
+
+**Usage:** Coverage scripts automatically handle exclusions. No developer action required.

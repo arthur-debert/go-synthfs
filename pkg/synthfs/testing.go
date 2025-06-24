@@ -1,5 +1,3 @@
-//go:build !coverage
-
 package synthfs
 
 import (
