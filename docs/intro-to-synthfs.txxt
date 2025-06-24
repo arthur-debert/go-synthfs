@@ -113,7 +113,13 @@ Intro to Synthfs
 
 		For starters, this is not a rollback, and that's why it's called restore, to distance itself from the expectation that this is a real transactional model that can be safetly rollbacked.
 
-		When it all words well, restore will revert all operations until the failed one. 
+		When it all works well, restore will revert all operations until the failed one. This works in the following manner; every operation knows how to perform it's own opposite, that is it undo's it's acitons. Move operations can move back to the previous path, create opeations can delete the object created and so on. . 
+
+		When restoring the execution engine will work from the last successful execution backwards. runnint it's own reverse operation.
+
+		1. Limits
+
+			The hardest case is deletion. In order to revert it, we must back it up. 
 
 			
 
