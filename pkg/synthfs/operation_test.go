@@ -453,7 +453,11 @@ func TestSimpleOperation_AddToZipArchive_EdgeCases(t *testing.T) {
 		// Create a zip writer
 		var buf bytes.Buffer
 		zipWriter := zip.NewWriter(&buf)
-		defer zipWriter.Close()
+		defer func() {
+			if closeErr := zipWriter.Close(); closeErr != nil {
+				t.Logf("Warning: failed to close zip writer: %v", closeErr)
+			}
+		}()
 
 		err := op.addToZipArchive(zipWriter, "test/file.txt", fs)
 		if err == nil {
@@ -472,7 +476,11 @@ func TestSimpleOperation_AddToZipArchive_EdgeCases(t *testing.T) {
 
 		var buf bytes.Buffer
 		zipWriter := zip.NewWriter(&buf)
-		defer zipWriter.Close()
+		defer func() {
+			if closeErr := zipWriter.Close(); closeErr != nil {
+				t.Logf("Warning: failed to close zip writer: %v", closeErr)
+			}
+		}()
 
 		// Try to add non-existent file
 		err := op.addToZipArchive(zipWriter, "nonexistent/file.txt", fs)
@@ -569,7 +577,11 @@ func TestSimpleOperation_AddToZipArchive_EdgeCases(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to open file in zip: %v", err)
 				}
-				defer rc.Close()
+				defer func() {
+					if closeErr := rc.Close(); closeErr != nil {
+						t.Logf("Warning: failed to close zip file reader: %v", closeErr)
+					}
+				}()
 
 				content, err := io.ReadAll(rc)
 				if err != nil {
@@ -602,7 +614,11 @@ func TestSimpleOperation_AddToZipArchive_EdgeCases(t *testing.T) {
 
 		var buf bytes.Buffer
 		zipWriter := zip.NewWriter(&buf)
-		defer zipWriter.Close()
+		defer func() {
+			if closeErr := zipWriter.Close(); closeErr != nil {
+				t.Logf("Warning: failed to close zip writer: %v", closeErr)
+			}
+		}()
 
 		// Try to add file - should fail on Open
 		err = op.addToZipArchive(zipWriter, "test/myfile.txt", fs)

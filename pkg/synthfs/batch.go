@@ -292,6 +292,79 @@ func (b *Batch) CreateArchive(archivePath string, format ArchiveFormat, sources 
 	return op, nil
 }
 
+// Unarchive adds an unarchive operation to the batch.
+// It validates the operation immediately and resolves dependencies automatically.
+func (b *Batch) Unarchive(archivePath, extractPath string) (Operation, error) {
+	// Create the operation
+	opID := b.generateID("unarchive", archivePath+"_to_"+extractPath)
+	op := NewSimpleOperation(opID, "unarchive", archivePath)
+
+	// Set the UnarchiveItem for this operation
+	unarchiveItem := NewUnarchive(archivePath, extractPath)
+	op.SetItem(unarchiveItem)
+	op.SetDescriptionDetail("extract_path", extractPath)
+
+	// Validate immediately
+	if err := op.Validate(b.ctx, b.fs); err != nil {
+		return nil, fmt.Errorf("validation failed for Unarchive(%s, %s): %w", archivePath, extractPath, err)
+	}
+
+	// Auto-resolve dependencies (ensure extract path parent directories exist)
+	if parentDeps := b.ensureParentDirectories(extractPath); len(parentDeps) > 0 {
+		for _, depID := range parentDeps {
+			op.AddDependency(depID)
+		}
+	}
+
+	// Add to batch
+	b.operations = append(b.operations, op)
+	Logger().Info().
+		Str("op_id", string(op.ID())).
+		Str("archive_path", archivePath).
+		Str("extract_path", extractPath).
+		Msg("Unarchive operation added to batch")
+
+	return op, nil
+}
+
+// UnarchiveWithPatterns adds an unarchive operation with pattern filtering to the batch.
+// It validates the operation immediately and resolves dependencies automatically.
+func (b *Batch) UnarchiveWithPatterns(archivePath, extractPath string, patterns ...string) (Operation, error) {
+	// Create the operation
+	opID := b.generateID("unarchive", archivePath+"_to_"+extractPath)
+	op := NewSimpleOperation(opID, "unarchive", archivePath)
+
+	// Set the UnarchiveItem for this operation with patterns
+	unarchiveItem := NewUnarchive(archivePath, extractPath).WithPatterns(patterns...)
+	op.SetItem(unarchiveItem)
+	op.SetDescriptionDetail("extract_path", extractPath)
+	op.SetDescriptionDetail("patterns", patterns)
+	op.SetDescriptionDetail("pattern_count", len(patterns))
+
+	// Validate immediately
+	if err := op.Validate(b.ctx, b.fs); err != nil {
+		return nil, fmt.Errorf("validation failed for UnarchiveWithPatterns(%s, %s): %w", archivePath, extractPath, err)
+	}
+
+	// Auto-resolve dependencies (ensure extract path parent directories exist)
+	if parentDeps := b.ensureParentDirectories(extractPath); len(parentDeps) > 0 {
+		for _, depID := range parentDeps {
+			op.AddDependency(depID)
+		}
+	}
+
+	// Add to batch
+	b.operations = append(b.operations, op)
+	Logger().Info().
+		Str("op_id", string(op.ID())).
+		Str("archive_path", archivePath).
+		Str("extract_path", extractPath).
+		Strs("patterns", patterns).
+		Msg("UnarchiveWithPatterns operation added to batch")
+
+	return op, nil
+}
+
 // Execute runs all operations in the batch using the existing infrastructure.
 func (b *Batch) Execute() (*Result, error) {
 	Logger().Info().
@@ -468,6 +541,12 @@ func (b *Batch) resolveImplicitDependencies() error {
 				}
 			}
 			fileWriters[desc.Path] = append(fileWriters[desc.Path], i)
+			
+		case "unarchive":
+			// Unarchive reads archive file and writes extracted files
+			fileReaders[desc.Path] = append(fileReaders[desc.Path], i)
+			// Note: We can't easily predict all extracted files without opening the archive,
+			// so we'll rely on explicit dependencies and validation at execution time
 		}
 	}
 

@@ -198,3 +198,68 @@ func (ai *ArchiveItem) WithSources(sources []string) *ArchiveItem {
 	ai.sources = sources
 	return ai
 }
+
+// --- UnarchiveItem ---
+
+// UnarchiveItem represents an unarchive operation to be performed.
+type UnarchiveItem struct {
+	archivePath   string
+	extractPath   string
+	patterns      []string // Optional patterns to filter extracted files
+	overwrite     bool     // Whether to overwrite existing files
+}
+
+// NewUnarchive creates a new UnarchiveItem builder.
+// archivePath is the path to the archive file to extract.
+// extractPath is the destination directory where files will be extracted.
+func NewUnarchive(archivePath, extractPath string) *UnarchiveItem {
+	return &UnarchiveItem{
+		archivePath: archivePath,
+		extractPath: extractPath,
+		patterns:    []string{},
+		overwrite:   false,
+	}
+}
+
+// Path returns the archive's path (primary path for the operation).
+func (ui *UnarchiveItem) Path() string {
+	return ui.archivePath
+}
+
+// Type returns "unarchive".
+func (ui *UnarchiveItem) Type() string {
+	return "unarchive"
+}
+
+// ArchivePath returns the path to the archive file.
+func (ui *UnarchiveItem) ArchivePath() string {
+	return ui.archivePath
+}
+
+// ExtractPath returns the destination path for extraction.
+func (ui *UnarchiveItem) ExtractPath() string {
+	return ui.extractPath
+}
+
+// Patterns returns the list of patterns to filter extracted files.
+func (ui *UnarchiveItem) Patterns() []string {
+	return ui.patterns
+}
+
+// Overwrite returns whether existing files should be overwritten.
+func (ui *UnarchiveItem) Overwrite() bool {
+	return ui.overwrite
+}
+
+// WithPatterns sets the patterns for selective extraction.
+// Patterns can include wildcards like "docs/*.html" or "docs/**"
+func (ui *UnarchiveItem) WithPatterns(patterns ...string) *UnarchiveItem {
+	ui.patterns = patterns
+	return ui
+}
+
+// WithOverwrite sets whether to overwrite existing files.
+func (ui *UnarchiveItem) WithOverwrite(overwrite bool) *UnarchiveItem {
+	ui.overwrite = overwrite
+	return ui
+}
