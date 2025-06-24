@@ -164,13 +164,14 @@ func (tfs *TestFileSystem) Stat(name string) (fs.FileInfo, error) {
 	}
 
 	// Use Open to get the file and then get its info
-	file, err := tfs.MapFS.Open(name) // Use the embedded MapFS to call Open
+	file, err := tfs.Open(name)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			// Ignore close errors in this helper method
+			// Log error but don't fail the operation
+			Logger().Warn().Err(closeErr).Msg("failed to close file in Stat")
 		}
 	}()
 
@@ -227,7 +228,7 @@ func (th *TestHelper) Context() context.Context {
 func (th *TestHelper) AssertFileExists(path string, expectedContent ...[]byte) {
 	th.t.Helper()
 
-	file, err := th.fs.MapFS.Open(path) // Use the embedded MapFS to call Open
+	file, err := th.fs.Open(path)
 	if err != nil {
 		th.t.Fatalf("Expected file %s to exist, but got error: %v", path, err)
 	}

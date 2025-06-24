@@ -478,7 +478,7 @@ func TestMockFS_CleanPaths(t *testing.T) {
 			// The main point is that path.Clean works internally.
 			if strings.Contains(tc.name, "ReadFile with trailing slash") {
 				if err != nil && !strings.Contains(err.Error(), "not a directory") && !strings.Contains(err.Error(), "invalid argument") { // Depends on Open logic
-					// This specific error might be okay if Open tries to treat it as dir first
+					t.Logf("ReadFile with trailing slash produced unexpected error: %v", err)
 				}
 			} else if err != nil {
 				t.Fatalf("Operation failed for path %s: %v", tc.path, err)
@@ -488,7 +488,7 @@ func TestMockFS_CleanPaths(t *testing.T) {
 			_, checkErr := tc.check(tc.expected)
 			if checkErr != nil {
 				// If original path was supposed to be invalid for op, this check might not apply directly
-				if !((strings.Contains(tc.name, "invalid")) && checkErr != nil) {
+				if !strings.Contains(tc.name, "invalid") || checkErr == nil {
 					t.Errorf("Post-operation check failed for expected path %s (original %s): %v", tc.expected, tc.path, checkErr)
 				}
 			}

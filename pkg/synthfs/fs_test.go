@@ -182,9 +182,7 @@ func TestOSFileSystem(t *testing.T) {
 			// Check if error indicates file exists or similar (os.ErrExist is often wrapped)
 			// For now, a non-nil error is the main check. More specific check:
 			if !errors.Is(err, fs.ErrExist) && !strings.Contains(err.Error(), "file exists") && !strings.Contains(err.Error(), "not a directory") {
-				// This can be OS-dependent. "not a directory" is common for trying to mkdir on a file path component.
-				// "file exists" if the final component itself is a file.
-				// t.Logf("MkdirAll on existing file error (for info): %v", err) // temp log
+				t.Logf("MkdirAll on existing file produced unexpected error: %v", err)
 			}
 		}
 
@@ -194,7 +192,7 @@ func TestOSFileSystem(t *testing.T) {
 			t.Errorf("Expected Remove to fail on non-empty directory %s, but it succeeded", existingDirPath)
 		} else {
 			// This error can also be OS-dependent, e.g. "directory not empty"
-			// t.Logf("Remove on non-empty dir error (for info): %v", err) // temp log
+			t.Logf("Remove on non-empty dir error (for info): %v", err)
 		}
 
 		// Test Remove on a non-existent file

@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // ReadFS is an alias for fs.FS, representing a read-only file system.
@@ -152,9 +153,9 @@ func (osfs *OSFileSystem) Readlink(name string) (string, error) {
 		return "", err
 	}
 	// Convert absolute path back to relative if it's within our root
-	if filepath.IsAbs(target) && filepath.HasPrefix(target, osfs.root) {
+	if filepath.IsAbs(target) {
 		rel, err := filepath.Rel(osfs.root, target)
-		if err == nil {
+		if err == nil && !strings.HasPrefix(rel, "..") {
 			return rel, nil
 		}
 	}
@@ -187,13 +188,14 @@ func (w *ReadOnlyWrapper) Stat(name string) (fs.FileInfo, error) {
 		return statFS.Stat(name)
 	}
 	// Fallback: try to open and get file info
-	file, err := w.FS.Open(name)
+	file, err := w.Open(name)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			// Ignore close errors in this fallback case
+			// Log error but don't fail the operation
+			Logger().Warn().Err(closeErr).Msg("failed to close file in Stat fallback")
 		}
 	}()
 	return file.Stat()

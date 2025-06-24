@@ -184,18 +184,25 @@ func (mfs *MockFS) MkdirAll(name string, perm fs.FileMode) error {
 
 	for i, part := range parts {
 		if part == "" {
-			if i == 0 { // Leading "/"
-				currentPath = "/"
+			switch currentPath {
+			case "": // Leading "/"
+				if i == 0 {
+					currentPath = "/"
+					continue
+				}
+				// // in path, skip
 				continue
-			} else { // // in path, skip
+			default:
+				// // in path, skip
 				continue
 			}
 		}
-		if currentPath == "/" {
+		switch currentPath {
+		case "/":
 			currentPath += part
-		} else if currentPath == "" {
+		case "":
 			currentPath = part
-		} else {
+		default:
 			currentPath += "/" + part
 		}
 

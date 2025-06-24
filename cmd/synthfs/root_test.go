@@ -2,14 +2,12 @@ package main
 
 import (
 	"testing"
-
-	"github.com/spf13/cobra"
 )
 
 // TestNewRootCmd tests the initialization of the root command and its subcommands.
 func TestRootCmdSetup(t *testing.T) {
 	// Explicitly use cobra type to ensure import is recognized
-	var _ *cobra.Command = rootCmd
+	var _ = rootCmd
 
 	// The root command in root.go is a package variable `rootCmd`.
 	// To test its initialization (which happens in init()), we can just check it.
