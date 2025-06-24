@@ -28,7 +28,7 @@ func TestBatchExecution(t *testing.T) {
 		}
 
 		// Execute the batch
-		result, err := batch.Execute()
+		result, err := batch.Run()
 		if err != nil {
 			t.Fatalf("Batch execution failed: %v", err)
 		}
@@ -75,7 +75,7 @@ func TestBatchExecution(t *testing.T) {
 		}
 
 		// Execute the batch
-		result, err := newBatch.Execute()
+		result, err := newBatch.Run()
 		if err != nil {
 			t.Fatalf("Nested batch execution failed: %v", err)
 		}
@@ -94,7 +94,7 @@ func TestBatchExecution(t *testing.T) {
 	t.Run("Empty batch execution", func(t *testing.T) {
 		emptyBatch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
 
-		result, err := emptyBatch.Execute()
+		result, err := emptyBatch.Run()
 		if err != nil {
 			t.Fatalf("Empty batch execution failed: %v", err)
 		}
@@ -120,7 +120,7 @@ func TestBatchRollback(t *testing.T) {
 	}
 
 	// Execute
-	result, err := batch.Execute()
+	result, err := batch.Run()
 	if err != nil {
 		t.Fatalf("Execution failed: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestBatchOperationCounts(t *testing.T) {
 	}
 
 	// Verify we can execute this batch
-	result, err := batch.Execute()
+	result, err := batch.Run()
 	if err != nil {
 		t.Fatalf("Final execution failed: %v", err)
 	}

@@ -365,8 +365,8 @@ func (b *Batch) UnarchiveWithPatterns(archivePath, extractPath string, patterns 
 	return op, nil
 }
 
-// Execute runs all operations in the batch using the existing infrastructure.
-func (b *Batch) Execute() (*Result, error) {
+// Run runs all operations in the batch using the existing infrastructure.
+func (b *Batch) Run() (*Result, error) {
 	Logger().Info().
 		Int("operation_count", len(b.operations)).
 		Msg("executing batch")
@@ -376,23 +376,23 @@ func (b *Batch) Execute() (*Result, error) {
 		return nil, fmt.Errorf("failed to resolve implicit dependencies: %w", err)
 	}
 
-	// Create executor and queue
+	// Create executor and pipeline
 	executor := NewExecutor()
-	queue := NewMemQueue()
+	pipeline := NewMemPipeline()
 
-	// Add all operations to queue
-	if err := queue.Add(b.operations...); err != nil {
-		return nil, fmt.Errorf("failed to add operations to queue: %w", err)
+	// Add all operations to pipeline
+	if err := pipeline.Add(b.operations...); err != nil {
+		return nil, fmt.Errorf("failed to add operations to pipeline: %w", err)
 	}
 
-	// Execute using existing infrastructure
-	result := executor.Execute(b.ctx, queue, b.fs)
+	// Run using existing infrastructure
+	result := executor.Run(b.ctx, pipeline, b.fs)
 
 	Logger().Info().
 		Bool("success", result.Success).
 		Int("operations_executed", len(result.Operations)).
 		Dur("duration", result.Duration).
-		Msg("batch execution completed")
+		Msg("batch run completed")
 
 	return result, nil
 }

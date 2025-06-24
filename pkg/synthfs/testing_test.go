@@ -250,13 +250,13 @@ func TestTestHelper(t *testing.T) {
 			t.Fatalf("CreateFile failed: %v", err)
 		}
 
-		result, err := batch.Execute()
+		result, err := batch.Run()
 		if err != nil {
-			t.Fatalf("Execute failed: %v", err)
+			t.Fatalf("Run failed: %v", err)
 		}
 
 		if !result.Success {
-			t.Errorf("Expected successful execution")
+			t.Errorf("Expected successful run")
 		}
 	})
 

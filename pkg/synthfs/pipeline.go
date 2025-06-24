@@ -7,14 +7,14 @@ import (
 	"github.com/gammazero/toposort"
 )
 
-// Queue defines an interface for managing a sequence of operations.
-type Queue interface {
-	// Add appends one or more operations to the queue.
+// Pipeline defines an interface for managing a sequence of operations.
+type Pipeline interface {
+	// Add appends one or more operations to the pipeline.
 	// It may return an error, for example, if an operation with a duplicate ID
 	// is added.
 	Add(ops ...Operation) error
 
-	// Operations returns all operations currently in the queue.
+	// Operations returns all operations currently in the pipeline.
 	// After Resolve() is called, this returns operations in dependency-resolved order.
 	Operations() []Operation
 
@@ -23,34 +23,34 @@ type Queue interface {
 	// Returns error if circular dependencies are detected.
 	Resolve() error
 
-	// Validate checks if all operations in the queue are valid.
+	// Validate checks if all operations in the pipeline are valid.
 	// This includes validating individual operations and checking for dependency conflicts.
 	Validate(ctx context.Context, fs FileSystem) error
 }
 
-// memQueue is an in-memory implementation of the Queue interface.
-type memQueue struct {
+// memPipeline is an in-memory implementation of the Pipeline interface.
+type memPipeline struct {
 	ops      []Operation
 	idIndex  map[OperationID]int // Maps operation ID to index in ops slice
 	resolved bool                // Whether dependency resolution has been performed
 }
 
-// NewMemQueue creates a new in-memory operation queue.
-func NewMemQueue() Queue {
-	return &memQueue{
+// NewMemPipeline creates a new in-memory operation pipeline.
+func NewMemPipeline() Pipeline {
+	return &memPipeline{
 		ops:      make([]Operation, 0),
 		idIndex:  make(map[OperationID]int),
 		resolved: false,
 	}
 }
 
-// Add appends operations to the queue.
-func (mq *memQueue) Add(ops ...Operation) error {
+// Add appends operations to the pipeline.
+func (mp *memPipeline) Add(ops ...Operation) error {
 	Logger().Trace().
-		Interface("queue_add_full_context", map[string]interface{}{
-			"existing_queue_state": func() []map[string]interface{} {
+		Interface("pipeline_add_full_context", map[string]interface{}{
+			"existing_pipeline_state": func() []map[string]interface{} {
 				var existing []map[string]interface{}
-				for i, op := range mq.ops {
+				for i, op := range mp.ops {
 					existing = append(existing, map[string]interface{}{
 						"index":        i,
 						"id":           string(op.ID()),
@@ -88,24 +88,24 @@ func (mq *memQueue) Add(ops ...Operation) error {
 				}
 				return newOps
 			}(),
-			"queue_resolved": mq.resolved,
-			"queue_size":     len(mq.ops),
+			"pipeline_resolved": mp.resolved,
+			"pipeline_size":     len(mp.ops),
 		}).
-		Msg("queue add operation - complete state dump")
+		Msg("pipeline add operation - complete state dump")
 
 	Logger().Info().
-		Int("existing_operations", len(mq.ops)).
+		Int("existing_operations", len(mp.ops)).
 		Int("new_operations", len(ops)).
 		Msg("adding operations to queue")
 
 	for _, op := range ops {
 		if op == nil {
-			return fmt.Errorf("cannot add a nil operation to the queue")
+			return fmt.Errorf("cannot add a nil operation to the pipeline")
 		}
 
 		// Check for duplicate IDs
-		if _, exists := mq.idIndex[op.ID()]; exists {
-			return fmt.Errorf("operation with ID '%s' already exists in the queue", op.ID())
+		if _, exists := mp.idIndex[op.ID()]; exists {
+			return fmt.Errorf("operation with ID '%s' already exists in the pipeline", op.ID())
 		}
 
 		Logger().Info().
@@ -116,50 +116,50 @@ func (mq *memQueue) Add(ops ...Operation) error {
 			Msg("operation added to queue")
 
 		// Add operation to queue
-		index := len(mq.ops)
-		mq.ops = append(mq.ops, op)
-		mq.idIndex[op.ID()] = index
+		index := len(mp.ops)
+		mp.ops = append(mp.ops, op)
+		mp.idIndex[op.ID()] = index
 
 		// Mark as unresolved since we added new operations
-		mq.resolved = false
+		mp.resolved = false
 	}
 
 	Logger().Info().
-		Int("total_operations", len(mq.ops)).
+		Int("total_operations", len(mp.ops)).
 		Msg("operations added to queue successfully")
 
 	return nil
 }
 
-// Operations returns all operations currently in the queue.
-func (mq *memQueue) Operations() []Operation {
+// Operations returns all operations currently in the pipeline.
+func (mp *memPipeline) Operations() []Operation {
 	// Return a copy to prevent external modification
-	opsCopy := make([]Operation, len(mq.ops))
-	copy(opsCopy, mq.ops)
+	opsCopy := make([]Operation, len(mp.ops))
+	copy(opsCopy, mp.ops)
 	return opsCopy
 }
 
 // Resolve performs dependency resolution using topological sorting.
-func (mq *memQueue) Resolve() error {
+func (mp *memPipeline) Resolve() error {
 	Logger().Info().
-		Int("operations", len(mq.ops)).
-		Bool("already_resolved", mq.resolved).
+		Int("operations", len(mp.ops)).
+		Bool("already_resolved", mp.resolved).
 		Msg("starting dependency resolution")
 
-	if len(mq.ops) == 0 {
-		mq.resolved = true
+	if len(mp.ops) == 0 {
+		mp.resolved = true
 		Logger().Info().Msg("no operations to resolve")
 		return nil
 	}
 
-	if mq.resolved {
+	if mp.resolved {
 		Logger().Info().Msg("dependencies already resolved")
 		return nil
 	}
 
 	// Validate that all dependencies exist
 	Logger().Info().Msg("validating dependency references")
-	if err := mq.validateDependencies(); err != nil {
+	if err := mp.validateDependencies(); err != nil {
 		Logger().Info().
 			Err(err).
 			Msg("dependency validation failed")
@@ -170,7 +170,7 @@ func (mq *memQueue) Resolve() error {
 	// Build dependency graph using topological sort library
 	edges := make([]toposort.Edge, 0)
 
-	for _, op := range mq.ops {
+	for _, op := range mp.ops {
 		for _, depID := range op.Dependencies() {
 			// Edge is [2]interface{} where element 0 comes before element 1
 			// So dependency -> operation (dependency must come first)
@@ -199,7 +199,7 @@ func (mq *memQueue) Resolve() error {
 				}(),
 				"operation_dependencies": func() []map[string]interface{} {
 					var opDeps []map[string]interface{}
-					for _, op := range mq.ops {
+					for _, op := range mp.ops {
 						opDeps = append(opDeps, map[string]interface{}{
 							"id":           string(op.ID()),
 							"dependencies": op.Dependencies(),
@@ -233,7 +233,7 @@ func (mq *memQueue) Resolve() error {
 			}(),
 			"original_order": func() []string {
 				var ids []string
-				for _, op := range mq.ops {
+				for _, op := range mp.ops {
 					ids = append(ids, string(op.ID()))
 				}
 				return ids
@@ -242,7 +242,7 @@ func (mq *memQueue) Resolve() error {
 		Msg("topological sort succeeded - complete sorting details")
 
 	// Rebuild operations slice in topologically sorted order
-	resolvedOps := make([]Operation, 0, len(mq.ops))
+	resolvedOps := make([]Operation, 0, len(mp.ops))
 	newIdIndex := make(map[OperationID]int)
 
 	// Add operations in dependency order
@@ -252,15 +252,15 @@ func (mq *memQueue) Resolve() error {
 			return fmt.Errorf("unexpected type in topological sort result: %T", idInterface)
 		}
 		opID := OperationID(idStr)
-		if oldIndex, exists := mq.idIndex[opID]; exists {
+		if oldIndex, exists := mp.idIndex[opID]; exists {
 			newIndex := len(resolvedOps)
-			resolvedOps = append(resolvedOps, mq.ops[oldIndex])
+			resolvedOps = append(resolvedOps, mp.ops[oldIndex])
 			newIdIndex[opID] = newIndex
 		}
 	}
 
 	// Add any operations that weren't in the dependency graph (no dependencies or dependents)
-	for _, op := range mq.ops {
+	for _, op := range mp.ops {
 		if _, alreadyAdded := newIdIndex[op.ID()]; !alreadyAdded {
 			newIndex := len(resolvedOps)
 			resolvedOps = append(resolvedOps, op)
@@ -268,9 +268,9 @@ func (mq *memQueue) Resolve() error {
 		}
 	}
 
-	mq.ops = resolvedOps
-	mq.idIndex = newIdIndex
-	mq.resolved = true
+	mp.ops = resolvedOps
+	mp.idIndex = newIdIndex
+	mp.resolved = true
 
 	Logger().Info().
 		Int("resolved_operations", len(resolvedOps)).
@@ -279,16 +279,16 @@ func (mq *memQueue) Resolve() error {
 	return nil
 }
 
-// Validate checks if all operations in the queue are valid.
-func (mq *memQueue) Validate(ctx context.Context, fs FileSystem) error {
+// Validate checks if all operations in the pipeline are valid.
+func (mp *memPipeline) Validate(ctx context.Context, fs FileSystem) error {
 	Logger().Debug().
-		Int("total_operations", len(mq.ops)).
-		Bool("resolved", mq.resolved).
-		Msg("starting comprehensive queue validation")
+		Int("total_operations", len(mp.ops)).
+		Bool("resolved", mp.resolved).
+		Msg("starting comprehensive pipeline validation")
 
 	// First validate dependencies exist
 	Logger().Debug().Msg("validating operation dependencies")
-	if err := mq.validateDependencies(); err != nil {
+	if err := mp.validateDependencies(); err != nil {
 		Logger().Debug().
 			Err(err).
 			Msg("dependency validation failed")
@@ -298,10 +298,10 @@ func (mq *memQueue) Validate(ctx context.Context, fs FileSystem) error {
 
 	// Validate each operation individually
 	Logger().Debug().Msg("validating individual operations")
-	for i, op := range mq.ops {
+	for i, op := range mp.ops {
 		Logger().Debug().
 			Int("operation_index", i+1).
-			Int("total_operations", len(mq.ops)).
+			Int("total_operations", len(mp.ops)).
 			Str("op_id", string(op.ID())).
 			Str("op_type", op.Describe().Type).
 			Str("path", op.Describe().Path).
@@ -328,12 +328,12 @@ func (mq *memQueue) Validate(ctx context.Context, fs FileSystem) error {
 			Msg("individual operation validation passed")
 	}
 	Logger().Debug().
-		Int("validated_operations", len(mq.ops)).
+		Int("validated_operations", len(mp.ops)).
 		Msg("individual operation validation completed successfully")
 
 	// Check for conflicts
 	Logger().Debug().Msg("validating operation conflicts")
-	if err := mq.validateConflicts(); err != nil {
+	if err := mp.validateConflicts(); err != nil {
 		Logger().Debug().
 			Err(err).
 			Msg("conflict validation failed")
@@ -342,20 +342,20 @@ func (mq *memQueue) Validate(ctx context.Context, fs FileSystem) error {
 	Logger().Debug().Msg("conflict validation completed successfully")
 
 	Logger().Debug().
-		Int("total_operations", len(mq.ops)).
-		Msg("comprehensive queue validation completed successfully")
+		Int("total_operations", len(mp.ops)).
+		Msg("comprehensive pipeline validation completed successfully")
 
 	return nil
 }
 
-// validateDependencies ensures all referenced dependencies exist in the queue.
-func (mq *memQueue) validateDependencies() error {
+// validateDependencies ensures all referenced dependencies exist in the pipeline.
+func (mp *memPipeline) validateDependencies() error {
 	Logger().Debug().
-		Int("operations_to_check", len(mq.ops)).
+		Int("operations_to_check", len(mp.ops)).
 		Msg("checking dependency references")
 
 	dependencyCount := 0
-	for _, op := range mq.ops {
+	for _, op := range mp.ops {
 		deps := op.Dependencies()
 		dependencyCount += len(deps)
 
@@ -367,7 +367,7 @@ func (mq *memQueue) validateDependencies() error {
 			Msg("checking operation dependencies")
 
 		for _, depID := range deps {
-			if _, exists := mq.idIndex[depID]; !exists {
+			if _, exists := mp.idIndex[depID]; !exists {
 				Logger().Debug().
 					Str("op_id", string(op.ID())).
 					Str("missing_dependency", string(depID)).
@@ -389,20 +389,20 @@ func (mq *memQueue) validateDependencies() error {
 
 	Logger().Debug().
 		Int("total_dependencies", dependencyCount).
-		Int("operations_checked", len(mq.ops)).
+		Int("operations_checked", len(mp.ops)).
 		Msg("dependency reference validation completed")
 
 	return nil
 }
 
 // validateConflicts checks for operations that conflict with each other.
-func (mq *memQueue) validateConflicts() error {
+func (mp *memPipeline) validateConflicts() error {
 	Logger().Debug().
-		Int("operations_to_check", len(mq.ops)).
+		Int("operations_to_check", len(mp.ops)).
 		Msg("checking operation conflicts")
 
 	conflictCount := 0
-	for _, op := range mq.ops {
+	for _, op := range mp.ops {
 		conflicts := op.Conflicts()
 		conflictCount += len(conflicts)
 
@@ -416,7 +416,7 @@ func (mq *memQueue) validateConflicts() error {
 		}
 
 		for _, conflictID := range conflicts {
-			if _, exists := mq.idIndex[conflictID]; exists {
+			if _, exists := mp.idIndex[conflictID]; exists {
 				Logger().Debug().
 					Str("op_id", string(op.ID())).
 					Str("conflicting_operation", string(conflictID)).
@@ -437,7 +437,7 @@ func (mq *memQueue) validateConflicts() error {
 
 	Logger().Debug().
 		Int("total_potential_conflicts", conflictCount).
-		Int("operations_checked", len(mq.ops)).
+		Int("operations_checked", len(mp.ops)).
 		Msg("conflict validation completed - no conflicts found")
 
 	return nil

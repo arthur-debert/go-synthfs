@@ -443,7 +443,7 @@ func TestBatchUnarchive(t *testing.T) {
 		}
 		
 		// Execute batch
-		result, err := batch.Execute()
+		result, err := batch.Run()
 		if err != nil {
 			t.Fatalf("Batch execution failed: %v", err)
 		}
@@ -484,7 +484,7 @@ func TestBatchUnarchive(t *testing.T) {
 		}
 		
 		// Execute batch
-		result, err := batch2.Execute()
+		result, err := batch2.Run()
 		if err != nil {
 			t.Fatalf("Batch execution failed: %v", err)
 		}
