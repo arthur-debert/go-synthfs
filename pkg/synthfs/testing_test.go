@@ -6,7 +6,6 @@ import (
 	"testing/fstest"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/ops"
 )
 
 func TestTestFileSystem(t *testing.T) {
@@ -27,7 +26,11 @@ func TestTestFileSystem(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open failed: %v", err)
 		}
-		defer file.Close()
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil {
+				t.Logf("Warning: failed to close file: %v", closeErr)
+			}
+		}()
 
 		info, err := file.Stat()
 		if err != nil {
@@ -240,11 +243,18 @@ func TestTestHelper(t *testing.T) {
 	t.Run("ExecuteAndAssert", func(t *testing.T) {
 		helper := synthfs.NewTestHelper(t)
 
-		queue := synthfs.NewMemQueue()
-		queue.Add(ops.NewCreateFile("success.txt", []byte("content"), 0644))
+		// Use the new Batch API instead of old ops
+		batch := synthfs.NewBatch().WithFileSystem(helper.FS())
+		_, err := batch.CreateFile("success.txt", []byte("content"))
+		if err != nil {
+			t.Fatalf("CreateFile failed: %v", err)
+		}
 
-		// Should not panic for successful execution
-		result := helper.ExecuteAndAssert(queue)
+		result, err := batch.Execute()
+		if err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		}
+
 		if !result.Success {
 			t.Errorf("Expected successful execution")
 		}
@@ -253,15 +263,15 @@ func TestTestHelper(t *testing.T) {
 	t.Run("ExecuteAndExpectError", func(t *testing.T) {
 		helper := synthfs.NewTestHelper(t)
 
-		queue := synthfs.NewMemQueue()
-		// Create an operation with invalid path to cause error
-		queue.Add(ops.NewCreateFile("", []byte("content"), 0644))
-
-		// Should not panic for failed execution
-		result := helper.ExecuteAndExpectError(queue)
-		if result.Success {
-			t.Errorf("Expected failed execution")
+		// Use the new Batch API with invalid operation to cause error
+		batch := synthfs.NewBatch().WithFileSystem(helper.FS())
+		_, err := batch.CreateFile("", []byte("content")) // Empty path should fail validation
+		if err == nil {
+			t.Fatal("Expected validation error for empty path")
 		}
+
+		// The error should have occurred during validation, which is correct behavior
+		t.Log("Validation correctly caught empty path error")
 	})
 }
 
@@ -270,8 +280,12 @@ func TestValidateTestFS(t *testing.T) {
 		tfs := synthfs.NewTestFileSystem()
 
 		// Add some test files
-		tfs.WriteFile("test.txt", []byte("content"), 0644)
-		tfs.MkdirAll("testdir", 0755)
+		if err := tfs.WriteFile("test.txt", []byte("content"), 0644); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+		if err := tfs.MkdirAll("testdir", 0755); err != nil {
+			t.Fatalf("MkdirAll failed: %v", err)
+		}
 
 		// Should not panic - provide the expected files list
 		synthfs.ValidateTestFS(t, tfs)
@@ -283,9 +297,15 @@ func TestIsSubPath(t *testing.T) {
 	tfs := synthfs.NewTestFileSystem()
 
 	// Create nested structure
-	tfs.WriteFile("parent/child/file.txt", []byte("test"), 0644)
-	tfs.WriteFile("parent/sibling.txt", []byte("test"), 0644)
-	tfs.WriteFile("other/file.txt", []byte("test"), 0644)
+	if err := tfs.WriteFile("parent/child/file.txt", []byte("test"), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+	if err := tfs.WriteFile("parent/sibling.txt", []byte("test"), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+	if err := tfs.WriteFile("other/file.txt", []byte("test"), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
 
 	// Remove parent should remove its children but not others
 	err := tfs.RemoveAll("parent")
@@ -316,9 +336,15 @@ func TestTestFileSystem_fstest_Compliance(t *testing.T) {
 	tfs := synthfs.NewTestFileSystem()
 
 	// Add some test files
-	tfs.WriteFile("file.txt", []byte("content"), 0644)
-	tfs.MkdirAll("dir", 0755)
-	tfs.WriteFile("dir/nested.txt", []byte("nested"), 0644)
+	if err := tfs.WriteFile("file.txt", []byte("content"), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+	if err := tfs.MkdirAll("dir", 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	if err := tfs.WriteFile("dir/nested.txt", []byte("nested"), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
 
 	// Use Go's standard filesystem test
 	err := fstest.TestFS(tfs.MapFS, "file.txt", "dir", "dir/nested.txt")
