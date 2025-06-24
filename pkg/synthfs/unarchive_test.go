@@ -285,7 +285,9 @@ func TestUnarchiveIntegration(t *testing.T) {
 			}
 			
 			content, err := io.ReadAll(file)
-			file.Close()
+			if closeErr := file.Close(); closeErr != nil {
+				t.Logf("Warning: failed to close file %s: %v", extractedPath, closeErr)
+			}
 			if err != nil {
 				t.Errorf("Failed to read extracted file %s: %v", extractedPath, err)
 				continue
@@ -340,7 +342,9 @@ func TestUnarchiveIntegration(t *testing.T) {
 			}
 			
 			content, err := io.ReadAll(file)
-			file.Close()
+			if closeErr := file.Close(); closeErr != nil {
+				t.Logf("Warning: failed to close file %s: %v", extractedPath, closeErr)
+			}
 			if err != nil {
 				t.Errorf("Failed to read extracted file %s: %v", extractedPath, err)
 				continue
