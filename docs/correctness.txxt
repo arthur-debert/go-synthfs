@@ -1,0 +1,595 @@
+SynthFS Correctness Model - Practical Implementation Plan
+=========================================================
+
+    This document defines a pragmatic approach to SynthFS correctness, focusing on high-value fixes with reasonable complexity. We prioritize catching obvious errors early while avoiding over-engineering.
+
+    You'll be given a Phase to complete. For it you can work on each milestone. Make sure that we wave good coverage for the new code. Also make sure that we don't introduce regressions (gotestsum must always pass). 
+    When that milestone is ready, (code and tests passing), add a checkmark (✓) to it in the progress tracker.  you can commit the changes. This will run the scripts/pre-commit , which will ensure passing tests and linting (which can be ran from scrpits/lint before being fully done for the commit too.)
+    When the final milestone for that pase is complete, you can add a checkmark to the pase itself , add a pr to github by using the gh cli client. 
+    Commit messages should have 
+    feat: Correctness Phase X, Milestone Y: <description>
+    its fine if multiple comits are done per milestone
+    
+
+
+Progress Tracker
+================
+
+Phase I: Essential Correctness
+    Milestone 1: Source existence validation
+    Milestone 2: Duplicate path detection  
+    Milestone 3: Basic checksumming for copy/move operations
+    Milestone 4: Checksum verification at execution time
+
+Phase II: Smart Dependencies
+    Milestone 1: Path state tracking implementation
+    Milestone 2: Validation against projected filesystem state
+    Milestone 3: Enhanced dependency ordering
+    Milestone 4: Cross-operation conflict resolution
+
+Phase III: Robust Restore with Budget Control
+    Milestone 1: ReverseOps interface and simple operations
+    Milestone 2: Pipeline backup budget system
+    Milestone 3: Delete operations with budget-aware backup
+    Milestone 4: Complex operations with budget support
+    Milestone 5: Directory tree backup and recursive accounting
+
+
+Executive Summary - Phases and Milestones
+==========================================
+
+    Phase 1: Essential Correctness (4 weeks)
+    ----------------------------------------
+    Goal: Fix obviously broken behaviors that make no sense
+    
+    Week 1: Source existence validation (copy from missing files fails fast)
+    Week 2: Duplicate path detection (two deletes of same file fails fast)  
+    Week 3: Basic checksumming (detect file modifications during operation)
+    Week 4: Checksum verification at execution time
+    
+    Success Criteria:
+    • Zero nonsensical operations reach execution
+    • Clear error messages for all validation failures
+    • 90% of concurrent file modifications caught
+    
+    Value: High (eliminates foot-guns) | Risk: Low | Complexity: Low
+
+    Phase 2: Smart Dependencies (3-4 weeks)
+    ---------------------------------------
+    Goal: Handle cross-operation dependencies without full filesystem simulation
+    
+    Week 1-2: Path state tracking (what will exist after pending operations)
+    Week 3: Validation against projected filesystem state
+    Week 4: Enhanced dependency ordering and conflict resolution
+    
+    Success Criteria:
+    • Operations validate against pending filesystem changes
+    • Automatic dependency ordering prevents execution failures
+    • Cross-operation conflicts caught at validation time
+    
+    Value: Medium (handles complex workflows) | Risk: Medium | Complexity: Medium
+    
+    Proceed only if: Phase 1 proves insufficient for real use cases
+
+    Phase 3: Robust Restore with Budget Control (4-5 weeks)
+    -------------------------------------------------------
+    Goal: Replace ad-hoc rollback with composable reverse operations and memory control
+    
+    Week 1: ReverseOps interface and simple operations (create, copy, move)
+    Week 2: Pipeline backup budget system (10MB default, fail-fast on large files)
+    Week 3: Delete operations with budget-aware backup capture
+    Week 4: Complex operations (archive, unarchive) with budget support
+    Week 5: Directory tree backup and recursive budget accounting
+    
+    Success Criteria:
+    • All operations generate reliable reverse operations
+    • Memory usage predictable and bounded (10MB default budget)
+    • Large files fail fast with clear errors, not during restore
+    • Restore operations use same validation/execution pipeline
+    
+    Value: High (reliable undo) | Risk: Medium | Complexity: Medium
+    
+    Proceed only if: Users need reliable restore functionality
+
+    Decision Points
+    ---------------
+    Phase 1 → Phase 2: Only if Phase 1 solves <95% of real-world issues
+    Phase 2 → Phase 3: Only if users need reliable restore beyond current rollback
+    
+    Each phase provides independent value and can be stopping point.
+
+
+1. Core Philosophy: Fail Fast on Obvious Errors
+
+    1.1. Primary Rule
+
+        Operations on non-existent things should fail at creation time.
+        - Unarchiving missing tar.gz files is nonsensical
+        - Copying from non-existent sources is nonsensical  
+        - Moving non-existent files is nonsensical
+        
+        This is mandatory validation with high value and low implementation cost.
+
+    1.2. Secondary Rule
+
+        Duplicate operations on same path should fail validation.
+        - Two delete operations on same file should fail
+        - Two create operations on same path should fail
+        - Multiple moves to same destination should fail
+        
+        Easy to detect, prevents obvious user errors.
+
+    1.3. Tertiary Rule
+
+        Detect when filesystem state changes unexpectedly between operation creation and execution.
+        Use MD5 checksums for files, archives, and symlink targets to catch concurrent modifications.
+
+
+2. Three-Phase Implementation Plan
+
+    2.1. Phase 1: Essential Correctness (High Value, Low Risk)
+
+        Goal: Fix the obviously broken behaviors that make no sense.
+        
+        Immediate Validation at Operation Creation:
+        
+        1. Source Existence Validation
+           - Copy operations: Verify source file/directory exists
+           - Move operations: Verify source file/directory exists  
+           - Archive operations: Verify all source files/directories exist
+           - Unarchive operations: Verify archive file exists
+           - Symlink operations: Optionally verify target exists (configurable)
+        
+        2. Duplicate Path Detection
+           - Track paths affected by each operation in batch
+           - Fail validation when adding conflicting operations:
+             * Two deletes of same path
+             * Two creates of same path  
+             * Multiple moves/copies to same destination
+             * Create file + create directory on same path
+        
+        3. Basic Content Checksumming
+           - For operations that read existing files, compute MD5 at creation time
+           - Store checksums in operation metadata
+           - Verify checksums match at execution time
+           - Operations affected:
+             * Copy (source file checksum)
+             * Move (source file checksum)  
+             * Archive (all source file checksums)
+             * File modification operations (target file checksum)
+        
+        Implementation Strategy:
+        ```go
+        type PathTracker struct {
+            CreatedPaths  map[string]OperationID  // paths that will be created
+            DeletedPaths  map[string]OperationID  // paths that will be deleted
+            ModifiedPaths map[string]OperationID  // paths that will be modified
+        }
+        
+        type ChecksumRecord struct {
+            Path     string
+            MD5      string
+            Size     int64
+            ModTime  time.Time
+        }
+        ```
+
+    2.2. Phase 2: Smart Dependencies (Medium Value, Medium Risk)
+
+        Goal: Handle cross-operation dependencies intelligently without full filesystem simulation.
+        
+        Path State Tracking:
+        
+        1. Simple State Model
+           Track what each path will become after pending operations:
+           ```go
+           type PathState struct {
+               WillExist    bool           // after all pending operations
+               WillBeType   string         // "file", "directory", "symlink"  
+               CreatedBy    OperationID    // which operation creates it
+               DeletedBy    OperationID    // which operation deletes it
+               ModifiedBy   []OperationID  // operations that modify it
+           }
+           ```
+        
+        2. Validation Against Projected State
+           When adding operation, validate against:
+           - Current filesystem state (real files/directories)
+           - Projected state from pending operations
+           
+           Examples:
+           - CreateFile("project/main.go") after CreateDir("project") → Valid
+           - Delete("project") then CreateFile("project/main.go") → Invalid
+           - Copy("source.txt", "dest.txt") after Delete("source.txt") → Invalid
+        
+        3. Enhanced Checksum Strategy
+           - Checksum files that serve as dependencies for other operations
+           - Track checksums for symlink targets
+           - Verify archive integrity for unarchive operations
+        
+        4. Dependency Ordering
+           - Automatically order operations based on path dependencies
+           - Ensure creates happen before operations that need them
+           - Ensure reads happen before deletes
+
+    2.3. Phase 3: Robust Restore Implementation
+
+        Goal: Replace ad-hoc rollback with composable reverse operations.
+        
+        Core Concept - ReverseOps:
+        Every operation generates reverse operations that undo its effects using the same validation/execution pipeline.
+        
+        1. ReverseOps Interface
+           ```go
+           type Operation interface {
+               // ... existing methods ...
+               
+               // Generate operations that would undo this operation's effects
+               ReverseOps(ctx context.Context, fs FileSystem) ([]Operation, error)
+           }
+           ```
+        
+        2. Operation Examples
+           - CreateFile("hello.txt", content) → ReverseOps: [Delete("hello.txt")]
+           - Copy("src.txt", "dst.txt") → ReverseOps: [Delete("dst.txt")]
+           - Move("old.txt", "new.txt") → ReverseOps: [Move("new.txt", "old.txt")]
+           - Delete("file.txt") → ReverseOps: [CreateFile("file.txt", <backed_up_content>)]
+           - CreateDir("project") → ReverseOps: [Delete("project")]
+           - Unarchive("backup.tar.gz", "extracted/") → ReverseOps: [Delete("extracted/...")]
+        
+        3. Pipeline-Level Backup Budget System
+           Control memory usage through pipeline-level resource budgeting:
+           
+           ```go
+           type PipelineOptions struct {
+               Restorable      bool    // default: false (no backup overhead)
+               MaxBackupSizeMB int     // default: 10MB (perfect for config files)
+           }
+           
+           type BackupBudget struct {
+               TotalMB     float64
+               RemainingMB float64
+               UsedMB      float64
+           }
+           
+           type OperationResult struct {
+               OperationID  OperationID
+               Operation    Operation
+               Status       OperationStatus
+               Error        error
+               Duration     time.Duration
+               BackupData   *BackupData    // only if restorable=true
+               BackupSizeMB float64        // actual backup size consumed
+           }
+           ```
+        
+        4. Per-Operation Budget Enforcement
+           Delete operations check budget before capturing backup data:
+           
+           ```go
+           func (op *DeleteOperation) Execute(ctx context.Context, fs FileSystem, 
+                                             restorable bool, budget *BackupBudget) *OperationResult {
+               if !restorable {
+                   return op.performDelete(ctx, fs)  // Fast path - no backup
+               }
+               
+               // Check if file fits in remaining budget
+               info, err := fs.Stat(op.path)
+               if err != nil {
+                   return &OperationResult{Error: err}
+               }
+               
+               sizeInMB := float64(info.Size()) / (1024 * 1024)
+               if sizeInMB > budget.RemainingMB {
+                   return &OperationResult{
+                       Error: fmt.Errorf("cannot backup %s (%.1fMB) - exceeds remaining budget (%.1fMB)", 
+                           op.path, sizeInMB, budget.RemainingMB),
+                   }
+               }
+               
+               // Capture backup and update budget
+               backupData, err := op.captureBackup(ctx, fs)
+               if err != nil {
+                   return &OperationResult{Error: err}
+               }
+               
+               err = op.performDelete(ctx, fs)
+               return &OperationResult{
+                   Status:       StatusSuccess,
+                   BackupData:   backupData,
+                   BackupSizeMB: sizeInMB,  // Pipeline updates budget with this
+               }
+           }
+           ```
+        
+        5. Restore Implementation with Budget Tracking
+           ```go
+           func (p *Pipeline) Run(ctx context.Context, fs FileSystem, opts PipelineOptions) *Result {
+               budget := &BackupBudget{
+                   TotalMB:     float64(opts.MaxBackupSizeMB),
+                   RemainingMB: float64(opts.MaxBackupSizeMB),
+               }
+               
+               result := &Result{BackupBudget: *budget}
+               
+               for _, op := range p.operations {
+                   opResult := p.executeOperation(ctx, op, fs, opts.Restorable, budget)
+                   
+                   // Update budget based on actual backup usage
+                   if opResult.BackupSizeMB > 0 {
+                       budget.RemainingMB -= opResult.BackupSizeMB
+                       budget.UsedMB += opResult.BackupSizeMB
+                   }
+                   
+                   result.Operations = append(result.Operations, opResult)
+               }
+               
+               // Only restorable if all operations succeeded and had budget
+               result.Restorable = result.Success && opts.Restorable
+               
+               if result.Restorable {
+                   result.Restore = func(ctx context.Context) error {
+                       return p.executeRestore(ctx, fs, result.Operations)
+                   }
+               }
+               
+               return result
+           }
+           ```
+        
+        6. User Experience and API Design
+           Clear, fail-fast behavior with helpful error messages:
+           
+           ```go
+           // Convenience methods for common cases
+           func (p *Pipeline) RunRestorable(ctx context.Context, fs FileSystem) *Result {
+               return p.Run(ctx, fs, PipelineOptions{Restorable: true, MaxBackupSizeMB: 10})
+           }
+           
+           func (b *Batch) RunWithBackup(maxBackupMB int) (*Result, error) {
+               pipeline := NewMemPipeline()
+               pipeline.Add(b.operations...)
+               opts := PipelineOptions{Restorable: true, MaxBackupSizeMB: maxBackupMB}
+               return pipeline.Run(b.ctx, b.fs, opts), nil
+           }
+           
+           // Clear error messages
+           DeleteError: Cannot backup "large_video.mp4" (2.1GB) - exceeds remaining backup budget (8.5MB)
+           
+           // Budget usage reporting
+           fmt.Printf("Backup budget: %.1fMB used / %.1fMB total (%.1f%% used)\n",
+               result.BackupBudget.UsedMB, result.BackupBudget.TotalMB,
+               (result.BackupBudget.UsedMB/result.BackupBudget.TotalMB)*100)
+           ```
+        
+        7. Benefits of Budget System
+           - Predictable: Users know exact memory cost upfront
+           - Fail-fast: Large files error immediately at validation, not during restore
+           - Granular: Per-operation budget accounting prevents budget exhaustion
+           - Flexible: Different backup budgets for different use cases
+           - Safe default: 10MB prevents memory explosions for typical use cases
+           - Transparent: Clear reporting of budget usage and remaining capacity
+        
+        8. Implementation Priority
+           Phase 3A: ReverseOps interface and simple operations (create, copy, move)
+           Phase 3B: Pipeline backup budget system and PipelineOptions
+           Phase 3C: Delete operations with budget-aware backup capture
+           Phase 3D: Complex operations (archive, unarchive) with budget support
+           Phase 3E: Directory tree backup and restore with recursive budget accounting
+
+
+3. Detailed Phase 1 Implementation
+
+    3.1. Source Existence Validation
+
+        For Copy Operations:
+        ```go
+        func (b *Batch) Copy(src, dst string) (Operation, error) {
+            // Validate source exists in real filesystem
+            srcInfo, err := b.fs.Stat(src)
+            if err != nil {
+                return nil, fmt.Errorf("copy source validation failed: %w", err)
+            }
+            
+            // Compute source checksum if it's a file
+            var checksum ChecksumRecord
+            if !srcInfo.IsDir() {
+                checksum, err = b.computeChecksum(src)
+                if err != nil {
+                    return nil, fmt.Errorf("failed to compute source checksum: %w", err)
+                }
+            }
+            
+            // Create operation with checksum
+            op := NewCopyOperation(src, dst, checksum)
+            return b.addWithConflictCheck(op)
+        }
+        ```
+
+    3.2. Duplicate Path Detection
+
+        ```go
+        type BatchValidator struct {
+            pathOps map[string][]OperationRecord
+        }
+        
+        type OperationRecord struct {
+            OpID   OperationID
+            Type   string  // "create", "delete", "modify"
+            Path   string
+        }
+        
+        func (v *BatchValidator) ValidateNewOperation(op Operation) error {
+            desc := op.Describe()
+            
+            // Check for conflicts with existing operations
+            existing := v.pathOps[desc.Path]
+            for _, existing := range existing {
+                if conflicts(existing.Type, desc.Type) {
+                    return fmt.Errorf("operation %s conflicts with %s on path %s", 
+                        desc.Type, existing.Type, desc.Path)
+                }
+            }
+            
+            // Record this operation
+            v.pathOps[desc.Path] = append(v.pathOps[desc.Path], 
+                OperationRecord{op.ID(), desc.Type, desc.Path})
+            return nil
+        }
+        ```
+
+    3.3. Checksum Verification
+
+        ```go
+        func (op *CopyOperation) Execute(ctx context.Context, fs FileSystem) error {
+            // Verify source hasn't changed
+            if op.sourceChecksum != nil {
+                current, err := computeFileChecksum(fs, op.sourcePath)
+                if err != nil {
+                    return fmt.Errorf("failed to verify source: %w", err)
+                }
+                if current.MD5 != op.sourceChecksum.MD5 {
+                    return fmt.Errorf("source file %s was modified (expected %s, got %s)", 
+                        op.sourcePath, op.sourceChecksum.MD5, current.MD5)
+                }
+            }
+            
+            // Proceed with actual copy operation
+            return op.performCopy(ctx, fs)
+        }
+        ```
+
+
+4. Checksum Strategy Details
+
+    4.1. What Gets Checksummed
+
+        Files (at operation creation time):
+        - Source files for copy/move operations
+        - Existing files being modified/overwritten
+        - Archive files for unarchive operations
+        - All source files for archive creation
+        
+        Symlinks:
+        - Target path of existing symlinks being modified
+        - Target files when creating symlinks (optional)
+        
+        Directories:
+        - Directory listing checksums for critical operations (Phase 2)
+
+    4.2. Checksum Storage
+
+        ```go
+        type ChecksumRecord struct {
+            Path         string
+            MD5          string
+            Size         int64
+            ModTime      time.Time
+            ChecksumTime time.Time
+        }
+        
+        // Store in operation metadata
+        type OperationMetadata struct {
+            SourceChecksums []ChecksumRecord
+            TargetChecksums []ChecksumRecord  // for verification of existing targets
+        }
+        ```
+
+    4.3. Performance Considerations
+
+        - Only checksum files directly involved in operations
+        - Skip checksumming for very large files (configurable threshold)
+        - Use file size + modtime as fast pre-check before computing MD5
+        - Compute checksums lazily when operation is added to batch
+
+
+5. Error Handling and User Experience
+
+    5.1. Clear Error Messages
+
+        Instead of generic validation failures, provide specific errors:
+        
+        ```
+        ConflictError: Cannot delete "config.txt" - already scheduled for deletion by operation batch_3_delete_config.txt
+        
+        SourceNotFoundError: Cannot copy "missing.txt" - source file does not exist
+        
+        ModificationError: Cannot copy "data.txt" - source file was modified after operation created (expected MD5: abc123, current: def456)
+        ```
+
+    5.2. Recovery Suggestions
+
+        Errors should suggest resolution:
+        ```
+        To fix: Remove conflicting operation or use different target path
+        To fix: Create source file first or verify path is correct  
+        To fix: Re-create operation with current file state or verify no concurrent modifications
+        ```
+
+
+6. Implementation Priorities
+
+    6.1. Phase 1 Milestones
+
+        Week 1: Source existence validation for all operations
+        Week 2: Duplicate path detection in batch operations  
+        Week 3: Basic checksumming for copy/move operations
+        Week 4: Checksum verification at execution time
+        
+        Success Criteria:
+        - Zero operations on non-existent sources pass validation
+        - Zero duplicate operations on same path pass validation
+        - Concurrent file modifications caught 90% of the time
+
+    6.2. Phase 2 Decision Point
+
+        Proceed to Phase 2 only if:
+        - Phase 1 implementation is stable and well-tested
+        - Real users hit limitations that Phase 2 would solve
+        - Performance impact of Phase 1 is acceptable
+        
+        Do NOT proceed to Phase 2 if:
+        - Phase 1 solves 95% of real-world issues
+        - Added complexity outweighs benefits
+        - Performance concerns emerge
+
+    6.3. Phase 3 Decision Point
+
+        Proceed to Phase 3 only if:
+        - Phase 1 and 2 are stable and providing value
+        - Users need reliable restore functionality
+        - Current rollback implementation proves insufficient
+        
+        Phase 3 provides significant value for:
+        - Configuration management workflows
+        - Development environment setup/teardown
+        - Automated testing scenarios
+        - Any use case requiring reliable operation undoing
+
+
+7. Testing Strategy
+
+    7.1. Phase 1 Tests
+
+        Validation Tests:
+        - All source-not-found scenarios fail fast
+        - All duplicate operation scenarios fail fast
+        - Checksum mismatches caught at execution
+        
+        Performance Tests:
+        - Checksum computation overhead < 5% for typical batches
+        - Memory usage reasonable for large file operations
+        
+        Integration Tests:
+        - Real filesystem operations with concurrent modifications
+        - Large file handling (skip checksums appropriately)
+
+    7.2. Success Metrics
+
+        - 90% reduction in nonsensical operations reaching execution
+        - Clear, actionable error messages for all validation failures
+        - No performance regression for typical use cases
+        - Zero false positives in conflict detection
+
+
+This plan focuses on practical correctness improvements that provide real value without over-engineering. The checksum approach gives us good protection against concurrent modifications while maintaining reasonable performance characteristics.
