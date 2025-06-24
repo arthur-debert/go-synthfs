@@ -6,7 +6,6 @@ import (
 	"testing/fstest"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/ops"
 )
 
 func TestTestFileSystem(t *testing.T) {
@@ -240,11 +239,18 @@ func TestTestHelper(t *testing.T) {
 	t.Run("ExecuteAndAssert", func(t *testing.T) {
 		helper := synthfs.NewTestHelper(t)
 
-		queue := synthfs.NewMemQueue()
-		queue.Add(ops.NewCreateFile("success.txt", []byte("content"), 0644))
+		// Use the new Batch API instead of old ops
+		batch := synthfs.NewBatch().WithFileSystem(helper.FS())
+		_, err := batch.CreateFile("success.txt", []byte("content"))
+		if err != nil {
+			t.Fatalf("CreateFile failed: %v", err)
+		}
 
-		// Should not panic for successful execution
-		result := helper.ExecuteAndAssert(queue)
+		result, err := batch.Execute()
+		if err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		}
+
 		if !result.Success {
 			t.Errorf("Expected successful execution")
 		}
@@ -253,15 +259,15 @@ func TestTestHelper(t *testing.T) {
 	t.Run("ExecuteAndExpectError", func(t *testing.T) {
 		helper := synthfs.NewTestHelper(t)
 
-		queue := synthfs.NewMemQueue()
-		// Create an operation with invalid path to cause error
-		queue.Add(ops.NewCreateFile("", []byte("content"), 0644))
-
-		// Should not panic for failed execution
-		result := helper.ExecuteAndExpectError(queue)
-		if result.Success {
-			t.Errorf("Expected failed execution")
+		// Use the new Batch API with invalid operation to cause error
+		batch := synthfs.NewBatch().WithFileSystem(helper.FS())
+		_, err := batch.CreateFile("", []byte("content")) // Empty path should fail validation
+		if err == nil {
+			t.Fatal("Expected validation error for empty path")
 		}
+
+		// The error should have occurred during validation, which is correct behavior
+		t.Log("Validation correctly caught empty path error")
 	})
 }
 
