@@ -1,3 +1,5 @@
+//go:build !coverage
+
 package testutil
 
 import (
