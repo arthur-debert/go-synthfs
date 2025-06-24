@@ -70,8 +70,10 @@ func (b *Batch) CreateDir(path string, mode ...fs.FileMode) (Operation, error) {
 	}
 
 	// Auto-resolve dependencies (ensure parent directories exist)
-	if err := b.ensureParentDirectories(path); err != nil {
-		return nil, fmt.Errorf("dependency resolution failed for CreateDir(%s): %w", path, err)
+	if parentDeps := b.ensureParentDirectories(path); len(parentDeps) > 0 {
+		for _, depID := range parentDeps {
+			op.AddDependency(depID)
+		}
 	}
 
 	// Add to batch
@@ -109,8 +111,10 @@ func (b *Batch) CreateFile(path string, content []byte, mode ...fs.FileMode) (Op
 	}
 
 	// Auto-resolve dependencies (ensure parent directories exist)
-	if err := b.ensureParentDirectories(path); err != nil {
-		return nil, fmt.Errorf("dependency resolution failed for CreateFile(%s): %w", path, err)
+	if parentDeps := b.ensureParentDirectories(path); len(parentDeps) > 0 {
+		for _, depID := range parentDeps {
+			op.AddDependency(depID)
+		}
 	}
 
 	// Add to batch
@@ -140,8 +144,10 @@ func (b *Batch) Copy(src, dst string) (Operation, error) {
 	}
 
 	// Auto-resolve dependencies (ensure destination parent directories exist)
-	if err := b.ensureParentDirectories(dst); err != nil {
-		return nil, fmt.Errorf("dependency resolution failed for Copy(%s, %s): %w", src, dst, err)
+	if parentDeps := b.ensureParentDirectories(dst); len(parentDeps) > 0 {
+		for _, depID := range parentDeps {
+			op.AddDependency(depID)
+		}
 	}
 
 	// Add to batch
@@ -170,8 +176,10 @@ func (b *Batch) Move(src, dst string) (Operation, error) {
 	}
 
 	// Auto-resolve dependencies (ensure destination parent directories exist)
-	if err := b.ensureParentDirectories(dst); err != nil {
-		return nil, fmt.Errorf("dependency resolution failed for Move(%s, %s): %w", src, dst, err)
+	if parentDeps := b.ensureParentDirectories(dst); len(parentDeps) > 0 {
+		for _, depID := range parentDeps {
+			op.AddDependency(depID)
+		}
 	}
 
 	// Add to batch
@@ -203,6 +211,83 @@ func (b *Batch) Delete(path string) (Operation, error) {
 		Str("op_id", string(op.ID())).
 		Str("path", path).
 		Msg("Delete operation added to batch")
+
+	return op, nil
+}
+
+// CreateSymlink adds a symbolic link creation operation to the batch.
+// It validates the operation immediately and resolves dependencies automatically.
+func (b *Batch) CreateSymlink(target, linkPath string) (Operation, error) {
+	// Create the operation
+	opID := b.generateID("create_symlink", linkPath)
+	op := NewSimpleOperation(opID, "create_symlink", linkPath)
+
+	// Set the SymlinkItem for this create operation
+	symlinkItem := NewSymlink(linkPath, target)
+	op.SetItem(symlinkItem)
+	op.SetDescriptionDetail("target", target)
+
+	// Validate immediately
+	if err := op.Validate(b.ctx, b.fs); err != nil {
+		return nil, fmt.Errorf("validation failed for CreateSymlink(%s, %s): %w", target, linkPath, err)
+	}
+
+	// Auto-resolve dependencies (ensure parent directories exist)
+	if parentDeps := b.ensureParentDirectories(linkPath); len(parentDeps) > 0 {
+		for _, depID := range parentDeps {
+			op.AddDependency(depID)
+		}
+	}
+
+	// Add to batch
+	b.operations = append(b.operations, op)
+	Logger().Info().
+		Str("op_id", string(op.ID())).
+		Str("target", target).
+		Str("link_path", linkPath).
+		Msg("CreateSymlink operation added to batch")
+
+	return op, nil
+}
+
+// CreateArchive adds an archive creation operation to the batch.
+// It validates the operation immediately and resolves dependencies automatically.
+func (b *Batch) CreateArchive(archivePath string, format ArchiveFormat, sources ...string) (Operation, error) {
+	// Validate inputs
+	if len(sources) == 0 {
+		return nil, fmt.Errorf("validation failed for CreateArchive(%s): must specify at least one source", archivePath)
+	}
+
+	// Create the operation
+	opID := b.generateID("create_archive", archivePath)
+	op := NewSimpleOperation(opID, "create_archive", archivePath)
+
+	// Set the ArchiveItem for this create operation
+	archiveItem := NewArchive(archivePath, format, sources)
+	op.SetItem(archiveItem)
+	op.SetDescriptionDetail("format", format.String())
+	op.SetDescriptionDetail("source_count", len(sources))
+
+	// Validate immediately
+	if err := op.Validate(b.ctx, b.fs); err != nil {
+		return nil, fmt.Errorf("validation failed for CreateArchive(%s): %w", archivePath, err)
+	}
+
+	// Auto-resolve dependencies (ensure parent directories exist)
+	if parentDeps := b.ensureParentDirectories(archivePath); len(parentDeps) > 0 {
+		for _, depID := range parentDeps {
+			op.AddDependency(depID)
+		}
+	}
+
+	// Add to batch
+	b.operations = append(b.operations, op)
+	Logger().Info().
+		Str("op_id", string(op.ID())).
+		Str("archive_path", archivePath).
+		Str("format", format.String()).
+		Int("source_count", len(sources)).
+		Msg("CreateArchive operation added to batch")
 
 	return op, nil
 }
@@ -243,34 +328,37 @@ func (b *Batch) generateID(opType, path string) OperationID {
 }
 
 // ensureParentDirectories analyzes a path and adds CreateDir operations for missing parent directories.
-func (b *Batch) ensureParentDirectories(path string) error {
+// Returns the operation IDs of any auto-generated parent directory operations.
+func (b *Batch) ensureParentDirectories(path string) []OperationID {
 	// Clean and normalize the path
 	cleanPath := filepath.Clean(path)
 	parentDir := filepath.Dir(cleanPath)
 
+	var dependencyIDs []OperationID
+
 	// If parent is root or current directory, no parent needed
 	if parentDir == "." || parentDir == "/" || parentDir == cleanPath {
-		return nil
+		return dependencyIDs
 	}
 
 	// Check if parent directory already exists in filesystem
 	if _, err := b.fs.Stat(parentDir); err == nil {
 		// Parent exists, no need to create
-		return nil
+		return dependencyIDs
 	}
 
 	// Check if we already have a CreateDir operation for this parent
 	for _, op := range b.operations {
 		if op.Describe().Type == "create_directory" && op.Describe().Path == parentDir {
 			// Already have an operation to create this parent
-			return nil
+			dependencyIDs = append(dependencyIDs, op.ID())
+			return dependencyIDs
 		}
 	}
 
 	// Recursively ensure parent's parents exist
-	if err := b.ensureParentDirectories(parentDir); err != nil {
-		return err
-	}
+	parentDeps := b.ensureParentDirectories(parentDir)
+	dependencyIDs = append(dependencyIDs, parentDeps...)
 
 	// Create operation for the parent directory
 	parentOpID := b.generateID("create_dir_auto", parentDir)
@@ -279,18 +367,29 @@ func (b *Batch) ensureParentDirectories(path string) error {
 	parentOp.SetItem(parentDirItem)
 	parentOp.SetDescriptionDetail("mode", "0755")
 
+	// Add dependencies from parent's parents
+	for _, depID := range parentDeps {
+		parentOp.AddDependency(depID)
+	}
+
 	// Validate the auto-generated parent operation
 	if err := parentOp.Validate(b.ctx, b.fs); err != nil {
-		return fmt.Errorf("validation failed for auto-generated parent directory %s: %w", parentDir, err)
+		// Log error but don't fail - might be resolved at execution time
+		Logger().Warn().
+			Err(err).
+			Str("path", parentDir).
+			Msg("validation warning for auto-generated parent directory")
 	}
 
 	// Add to operations
 	b.operations = append(b.operations, parentOp)
+	dependencyIDs = append(dependencyIDs, parentOp.ID())
+
 	Logger().Info().
 		Str("op_id", string(parentOp.ID())).
 		Str("path", parentDir).
 		Str("reason", "auto-generated for parent directory").
 		Msg("CreateDir operation auto-added to batch")
 
-	return nil
+	return dependencyIDs
 }

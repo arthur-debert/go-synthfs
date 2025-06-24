@@ -15,7 +15,11 @@ func TestOSFileSystemExtended(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Logf("Warning: failed to remove temp dir: %v", err)
+		}
+	}()
 
 	osfs := synthfs.NewOSFileSystem(tempDir)
 
@@ -54,7 +58,11 @@ func TestOSFileSystemExtended(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open symlink failed: %v", err)
 		}
-		defer file.Close()
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil {
+				t.Logf("Warning: failed to close file: %v", closeErr)
+			}
+		}()
 
 		info, err := file.Stat()
 		if err != nil {
@@ -94,7 +102,11 @@ func TestOSFileSystemExtended(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open renamed file failed: %v", err)
 		}
-		defer file.Close()
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil {
+				t.Logf("Warning: failed to close file: %v", closeErr)
+			}
+		}()
 
 		info, err := file.Stat()
 		if err != nil {

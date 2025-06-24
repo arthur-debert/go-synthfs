@@ -31,3 +31,9 @@ local
 
 /test-tabstop
 /.envr
+
+# Test artifacts
+*.tar.gz
+*.zip
+pkg/**/*.tar.gz
+pkg/**/*.zip

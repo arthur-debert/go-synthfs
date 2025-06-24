@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/ops"
 )
 
 func main() {
@@ -20,7 +19,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			fmt.Printf("Warning: failed to remove temp dir: %v\n", err)
+		}
+	}()
 
 	fmt.Printf("📁 Working in: %s\n\n", tempDir)
 
@@ -39,43 +42,37 @@ func main() {
 	fmt.Println("\n✅ All examples completed!")
 }
 
-// Example 1: Demonstrates the core synthfs model - queue, validate, execute
+// Example 1: Demonstrates the new imperative Batch API
 func simpleFileOperations(baseDir string) {
-	// Step 1: Create operations (the "reverse receipts")
-	fmt.Println("  🎯 Creating operations...")
+	fmt.Println("  🎯 Using new Batch API...")
 
-	// Create different types of filesystem items
-	configFile := synthfs.NewFile(filepath.Join(baseDir, "config.json")).
-		WithContent([]byte(`{"version": "1.0", "debug": true}`)).
-		WithMode(0644)
-
-	dataDir := synthfs.NewDirectory(filepath.Join(baseDir, "data")).
-		WithMode(0755)
-
-	// Step 2: Queue operations
-	queue := synthfs.NewMemQueue()
-
-	// Add operations to queue (order matters due to dependencies)
-	queue.Add(ops.Create(dataDir))    // Create directory first
-	queue.Add(ops.Create(configFile)) // Then create file
-
-	fmt.Printf("  📋 Queued %d operations\n", len(queue.Operations()))
-
-	// Step 3: Validate upfront (before any changes)
-	ctx := context.Background()
+	// Create a filesystem and batch
 	fs := synthfs.NewOSFileSystem(".")
+	batch := synthfs.NewBatch().WithFileSystem(fs)
 
-	fmt.Println("  🔍 Validating operations...")
-	if err := queue.Validate(ctx, fs); err != nil {
-		fmt.Printf("  ❌ Validation failed: %v\n", err)
+	// Add operations using the imperative API
+	_, err := batch.CreateDir(filepath.Join(baseDir, "data"))
+	if err != nil {
+		fmt.Printf("  ❌ Failed to add CreateDir: %v\n", err)
 		return
 	}
-	fmt.Println("  ✅ All operations valid")
 
-	// Step 4: Execute later
-	fmt.Println("  🚀 Executing operations...")
-	executor := synthfs.NewExecutor()
-	result := executor.Execute(ctx, queue, fs)
+	_, err = batch.CreateFile(filepath.Join(baseDir, "config.json"),
+		[]byte(`{"version": "1.0", "debug": true}`))
+	if err != nil {
+		fmt.Printf("  ❌ Failed to add CreateFile: %v\n", err)
+		return
+	}
+
+	fmt.Printf("  📋 Created batch with %d operations\n", len(batch.Operations()))
+
+	// Execute the batch
+	fmt.Println("  🚀 Executing batch...")
+	result, err := batch.Execute()
+	if err != nil {
+		fmt.Printf("  ❌ Execution failed: %v\n", err)
+		return
+	}
 
 	if result.Success {
 		fmt.Printf("  ✅ Successfully executed %d operations\n", len(result.Operations))
@@ -93,49 +90,61 @@ func simpleFileOperations(baseDir string) {
 	}
 }
 
-// Example 2: More complex workflow showing unified API for different operations
+// Example 2: More complex workflow using new Batch API
 func complexWorkflow(baseDir string) {
-	fmt.Println("  🎯 Building complex operation workflow...")
+	fmt.Println("  🎯 Building complex workflow with Batch API...")
 
 	workDir := filepath.Join(baseDir, "workflow")
 	sourceFile := filepath.Join(workDir, "source.txt")
 	backupFile := filepath.Join(workDir, "backup", "source.txt")
 	processedFile := filepath.Join(workDir, "processed.txt")
 
-	// Create a complex workflow: setup → backup → process → cleanup
-	queue := synthfs.NewMemQueue()
+	// Create a complex workflow using Batch API
+	fs := synthfs.NewOSFileSystem(".")
+	batch := synthfs.NewBatch().WithFileSystem(fs)
 
 	// 1. Setup: Create directory structure and initial file
-	queue.Add(ops.Create(synthfs.NewDirectory(workDir).WithMode(0755)))
-	queue.Add(ops.Create(synthfs.NewDirectory(filepath.Join(workDir, "backup")).WithMode(0755)))
-	queue.Add(ops.Create(synthfs.NewFile(sourceFile).
-		WithContent([]byte("Original data for processing")).
-		WithMode(0644)))
-
-	// 2. Backup: Copy original file to backup location
-	queue.Add(ops.Copy(sourceFile, backupFile))
-
-	// 3. Process: Move file to new location (simulating processing)
-	queue.Add(ops.Move(sourceFile, processedFile))
-
-	// 4. Cleanup: Remove backup directory (would contain backup file)
-	// Note: In a real scenario, you might keep backups longer
-
-	fmt.Printf("  📋 Queued %d operations for complex workflow\n", len(queue.Operations()))
-
-	// Execute the workflow
-	ctx := context.Background()
-	fs := synthfs.NewOSFileSystem(".")
-	executor := synthfs.NewExecutor()
-
-	fmt.Println("  🔍 Validating complex workflow...")
-	if err := queue.Validate(ctx, fs); err != nil {
-		fmt.Printf("  ❌ Validation failed: %v\n", err)
+	_, err := batch.CreateDir(workDir)
+	if err != nil {
+		fmt.Printf("  ❌ Failed to add CreateDir: %v\n", err)
 		return
 	}
 
+	_, err = batch.CreateDir(filepath.Join(workDir, "backup"))
+	if err != nil {
+		fmt.Printf("  ❌ Failed to add CreateDir: %v\n", err)
+		return
+	}
+
+	_, err = batch.CreateFile(sourceFile, []byte("Original data for processing"))
+	if err != nil {
+		fmt.Printf("  ❌ Failed to add CreateFile: %v\n", err)
+		return
+	}
+
+	// 2. Backup: Copy original file to backup location
+	_, err = batch.Copy(sourceFile, backupFile)
+	if err != nil {
+		fmt.Printf("  ❌ Failed to add Copy: %v\n", err)
+		return
+	}
+
+	// 3. Process: Move file to new location (simulating processing)
+	_, err = batch.Move(sourceFile, processedFile)
+	if err != nil {
+		fmt.Printf("  ❌ Failed to add Move: %v\n", err)
+		return
+	}
+
+	fmt.Printf("  📋 Created batch with %d operations\n", len(batch.Operations()))
+
+	// Execute the workflow
 	fmt.Println("  🚀 Executing complex workflow...")
-	result := executor.Execute(ctx, queue, fs)
+	result, err := batch.Execute()
+	if err != nil {
+		fmt.Printf("  ❌ Execution failed: %v\n", err)
+		return
+	}
 
 	if result.Success {
 		fmt.Printf("  ✅ Complex workflow completed in %v\n", result.Duration)
@@ -154,64 +163,65 @@ func complexWorkflow(baseDir string) {
 		fmt.Printf("  ❌ Workflow failed: %v\n", result.Errors)
 
 		// Demonstrate rollback capability
-		if result.Rollback != nil {
-			fmt.Println("  🔄 Attempting rollback...")
-			if err := result.Rollback(ctx); err != nil {
-				fmt.Printf("  ❌ Rollback failed: %v\n", err)
-			} else {
-				fmt.Println("  ✅ Rollback completed")
-			}
+		fmt.Println("  🔄 Attempting rollback...")
+		ctx := context.Background()
+		if err := result.Rollback(ctx); err != nil {
+			fmt.Printf("  ❌ Rollback failed: %v\n", err)
+		} else {
+			fmt.Println("  ✅ Rollback completed")
 		}
 	}
 }
 
-// Example 3: Demonstrates error handling and rollback
+// Example 3: Demonstrates error handling with Batch API
 func errorHandlingExample(baseDir string) {
-	fmt.Println("  🎯 Demonstrating error handling...")
+	fmt.Println("  🎯 Demonstrating error handling with Batch API...")
 
-	queue := synthfs.NewMemQueue()
+	fs := synthfs.NewOSFileSystem(".")
+	batch := synthfs.NewBatch().WithFileSystem(fs)
 
 	// Create operations that should work
 	validDir := filepath.Join(baseDir, "valid")
-	queue.Add(ops.Create(synthfs.NewDirectory(validDir).WithMode(0755)))
-	queue.Add(ops.Create(synthfs.NewFile(filepath.Join(validDir, "test.txt")).
-		WithContent([]byte("test content")).
-		WithMode(0644)))
+	_, err := batch.CreateDir(validDir)
+	if err != nil {
+		fmt.Printf("  ❌ Failed to add CreateDir: %v\n", err)
+		return
+	}
 
-	// Add an operation that will fail (invalid path)
-	invalidFile := "" // Empty path should fail validation
-	queue.Add(ops.Create(synthfs.NewFile(invalidFile).
-		WithContent([]byte("this will fail")).
-		WithMode(0644)))
+	_, err = batch.CreateFile(filepath.Join(validDir, "test.txt"), []byte("test content"))
+	if err != nil {
+		fmt.Printf("  ❌ Failed to add CreateFile: %v\n", err)
+		return
+	}
 
-	fmt.Printf("  📋 Created queue with %d operations (1 intentionally invalid)\n", len(queue.Operations()))
-
-	ctx := context.Background()
-	fs := synthfs.NewOSFileSystem(".")
-
-	// This should fail during validation
-	fmt.Println("  🔍 Validating operations (expecting failure)...")
-	if err := queue.Validate(ctx, fs); err != nil {
+	// Try to add an operation that will fail validation (empty path)
+	_, err = batch.CreateFile("", []byte("this will fail"))
+	if err != nil {
 		fmt.Printf("  ✅ Validation correctly caught error: %v\n", err)
 		fmt.Println("  💡 This demonstrates upfront validation - no filesystem changes were made")
 		return
 	}
 
-	// If validation somehow passed, execution would fail
-	executor := synthfs.NewExecutor()
-	result := executor.Execute(ctx, queue, fs)
+	// If validation somehow passed, show execution results
+	fmt.Printf("  📋 Created batch with %d operations\n", len(batch.Operations()))
+
+	fmt.Println("  🚀 Executing batch...")
+	result, err := batch.Execute()
+	if err != nil {
+		fmt.Printf("  ✅ Execution correctly failed: %v\n", err)
+		return
+	}
 
 	if !result.Success {
 		fmt.Printf("  ✅ Execution correctly failed: %v\n", result.Errors)
 
 		// Show rollback capabilities
-		if result.Rollback != nil {
-			fmt.Println("  🔄 Rolling back any successful operations...")
-			if err := result.Rollback(ctx); err != nil {
-				fmt.Printf("  ❌ Rollback failed: %v\n", err)
-			} else {
-				fmt.Println("  ✅ Rollback completed - filesystem restored")
-			}
+		fmt.Println("  🔄 Rolling back any successful operations...")
+		ctx := context.Background()
+		if err := result.Rollback(ctx); err != nil {
+			fmt.Printf("  ❌ Rollback failed: %v\n", err)
+		} else {
+			fmt.Println("  ✅ Rollback completed - filesystem restored")
 		}
 	}
 }

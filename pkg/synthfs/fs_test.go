@@ -18,7 +18,11 @@ func TestOSFileSystem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Logf("Warning: failed to remove temp dir: %v", err)
+		}
+	}()
 
 	osfs := synthfs.NewOSFileSystem(tempDir)
 
@@ -37,7 +41,11 @@ func TestOSFileSystem(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open failed: %v", err)
 		}
-		defer file.Close()
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil {
+				t.Logf("Warning: failed to close file: %v", closeErr)
+			}
+		}()
 
 		info, err := file.Stat()
 		if err != nil {
@@ -180,7 +188,6 @@ func TestOSFileSystem(t *testing.T) {
 			}
 		}
 
-
 		// Test Remove on a non-empty directory
 		err = osfs.Remove(existingDirPath)
 		if err == nil {
@@ -189,7 +196,6 @@ func TestOSFileSystem(t *testing.T) {
 			// This error can also be OS-dependent, e.g. "directory not empty"
 			// t.Logf("Remove on non-empty dir error (for info): %v", err) // temp log
 		}
-
 
 		// Test Remove on a non-existent file
 		nonExistentPath := "non_existent_file.txt"
@@ -225,7 +231,11 @@ func TestReadOnlyWrapper(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open failed: %v", err)
 		}
-		defer file.Close()
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil {
+				t.Logf("Warning: failed to close file: %v", closeErr)
+			}
+		}()
 
 		info, err := file.Stat()
 		if err != nil {

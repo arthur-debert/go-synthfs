@@ -1,8 +1,14 @@
 package synthfs
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
+	"strings"
 )
 
 // OperationID is a unique identifier for an operation.
@@ -291,8 +297,183 @@ func (op *SimpleOperation) executeCreateSymlink(ctx context.Context, fsys FileSy
 
 // executeCreateArchive implements archive creation
 func (op *SimpleOperation) executeCreateArchive(ctx context.Context, fsys FileSystem) error {
-	// Archive creation is complex and will be implemented later
-	return fmt.Errorf("archive creation not yet implemented")
+	if op.item == nil {
+		return fmt.Errorf("no archive item provided for create_archive operation")
+	}
+
+	archiveItem, ok := op.item.(*ArchiveItem)
+	if !ok {
+		return fmt.Errorf("expected ArchiveItem for create_archive operation, got %T", op.item)
+	}
+
+	switch archiveItem.Format() {
+	case ArchiveFormatTarGz:
+		return op.createTarGzArchive(archiveItem, fsys)
+	case ArchiveFormatZip:
+		return op.createZipArchive(archiveItem, fsys)
+	default:
+		return fmt.Errorf("unsupported archive format: %s", archiveItem.Format())
+	}
+}
+
+// createTarGzArchive creates a tar.gz archive
+func (op *SimpleOperation) createTarGzArchive(archiveItem *ArchiveItem, fsys FileSystem) error {
+	// Create a buffer to hold the archive data
+	var buf bytes.Buffer
+
+	gzipWriter := gzip.NewWriter(&buf)
+	defer func() {
+		if closeErr := gzipWriter.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close gzip writer: %v\n", closeErr)
+		}
+	}()
+
+	tarWriter := tar.NewWriter(gzipWriter)
+	defer func() {
+		if closeErr := tarWriter.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close tar writer: %v\n", closeErr)
+		}
+	}()
+
+	for _, source := range archiveItem.Sources() {
+		if err := op.addToTarArchive(tarWriter, source, fsys); err != nil {
+			return fmt.Errorf("failed to add %s to archive: %w", source, err)
+		}
+	}
+
+	// Close writers to flush data
+	if err := tarWriter.Close(); err != nil {
+		return fmt.Errorf("failed to close tar writer: %w", err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		return fmt.Errorf("failed to close gzip writer: %w", err)
+	}
+
+	// Write the complete archive to the filesystem
+	return fsys.WriteFile(archiveItem.Path(), buf.Bytes(), 0644)
+}
+
+// createZipArchive creates a zip archive
+func (op *SimpleOperation) createZipArchive(archiveItem *ArchiveItem, fsys FileSystem) error {
+	// Create a buffer to hold the archive data
+	var buf bytes.Buffer
+
+	zipWriter := zip.NewWriter(&buf)
+	defer func() {
+		if closeErr := zipWriter.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close zip writer: %v\n", closeErr)
+		}
+	}()
+
+	for _, source := range archiveItem.Sources() {
+		if err := op.addToZipArchive(zipWriter, source, fsys); err != nil {
+			return fmt.Errorf("failed to add %s to archive: %w", source, err)
+		}
+	}
+
+	// Close writer to flush data
+	if err := zipWriter.Close(); err != nil {
+		return fmt.Errorf("failed to close zip writer: %w", err)
+	}
+
+	// Write the complete archive to the filesystem
+	return fsys.WriteFile(archiveItem.Path(), buf.Bytes(), 0644)
+}
+
+// addToTarArchive adds a file or directory to a tar archive
+func (op *SimpleOperation) addToTarArchive(tarWriter *tar.Writer, sourcePath string, fsys FileSystem) error {
+	fullFS, ok := fsys.(FullFileSystem)
+	if !ok {
+		return fmt.Errorf("filesystem does not support Stat operation needed for archiving")
+	}
+
+	// Get file info
+	info, err := fullFS.Stat(sourcePath)
+	if err != nil {
+		return fmt.Errorf("failed to stat %s: %w", sourcePath, err)
+	}
+
+	// Create tar header
+	header, err := tar.FileInfoHeader(info, "")
+	if err != nil {
+		return fmt.Errorf("failed to create tar header for %s: %w", sourcePath, err)
+	}
+
+	// Use relative path in archive
+	header.Name = strings.TrimPrefix(sourcePath, "./")
+
+	// Write header
+	if err := tarWriter.WriteHeader(header); err != nil {
+		return fmt.Errorf("failed to write tar header for %s: %w", sourcePath, err)
+	}
+
+	// If it's a file, write content
+	if !info.IsDir() {
+		file, err := fsys.Open(sourcePath)
+		if err != nil {
+			return fmt.Errorf("failed to open file %s: %w", sourcePath, err)
+		}
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil {
+				fmt.Printf("Warning: failed to close file %s: %v\n", sourcePath, closeErr)
+			}
+		}()
+
+		if _, err := io.Copy(tarWriter, file); err != nil {
+			return fmt.Errorf("failed to write file content for %s: %w", sourcePath, err)
+		}
+	}
+
+	return nil
+}
+
+// addToZipArchive adds a file or directory to a zip archive
+func (op *SimpleOperation) addToZipArchive(zipWriter *zip.Writer, sourcePath string, fsys FileSystem) error {
+	fullFS, ok := fsys.(FullFileSystem)
+	if !ok {
+		return fmt.Errorf("filesystem does not support Stat operation needed for archiving")
+	}
+
+	// Get file info
+	info, err := fullFS.Stat(sourcePath)
+	if err != nil {
+		return fmt.Errorf("failed to stat %s: %w", sourcePath, err)
+	}
+
+	// Use relative path in archive
+	archivePath := strings.TrimPrefix(sourcePath, "./")
+
+	// If it's a directory, create directory entry
+	if info.IsDir() {
+		if !strings.HasSuffix(archivePath, "/") {
+			archivePath += "/"
+		}
+		_, err := zipWriter.Create(archivePath)
+		return err
+	}
+
+	// Create file entry
+	writer, err := zipWriter.Create(archivePath)
+	if err != nil {
+		return fmt.Errorf("failed to create zip entry for %s: %w", sourcePath, err)
+	}
+
+	// Open and copy file content
+	file, err := fsys.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file %s: %w", sourcePath, err)
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close file %s: %v\n", sourcePath, closeErr)
+		}
+	}()
+
+	if _, err := io.Copy(writer, file); err != nil {
+		return fmt.Errorf("failed to write file content for %s: %w", sourcePath, err)
+	}
+
+	return nil
 }
 
 // executeCopy implements file/directory copying
@@ -322,7 +503,11 @@ func (op *SimpleOperation) executeCopy(ctx context.Context, fsys FileSystem) err
 	if err != nil {
 		return fmt.Errorf("failed to open source file %s: %w", op.srcPath, err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close source file %s: %v\n", op.srcPath, closeErr)
+		}
+	}()
 
 	content := make([]byte, srcInfo.Size())
 	_, err = file.Read(content)

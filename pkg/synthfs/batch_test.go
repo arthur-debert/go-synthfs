@@ -137,7 +137,7 @@ func TestBatchBasicUsage(t *testing.T) {
 
 		// Check that we get a copy (modifications shouldn't affect batch)
 		originalCount := len(batch.Operations())
-		ops = append(ops, nil) // Try to modify the returned slice
+		_ = append(ops, nil) // Try to modify the returned slice
 		newCount := len(batch.Operations())
 		if originalCount != newCount {
 			t.Error("Operations() should return a copy, but batch was modified")
@@ -150,8 +150,12 @@ func TestBatchWithTestFileSystem(t *testing.T) {
 	testFS := synthfs.NewTestFileSystem()
 
 	// Pre-populate with some files
-	testFS.WriteFile("existing.txt", []byte("existing content"), 0644)
-	testFS.MkdirAll("existing-dir", 0755)
+	if err := testFS.WriteFile("existing.txt", []byte("existing content"), 0644); err != nil {
+		t.Fatalf("Failed to setup test file: %v", err)
+	}
+	if err := testFS.MkdirAll("existing-dir", 0755); err != nil {
+		t.Fatalf("Failed to setup test directory: %v", err)
+	}
 
 	batch := synthfs.NewBatch().WithFileSystem(testFS)
 

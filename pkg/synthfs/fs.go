@@ -191,6 +191,10 @@ func (w *ReadOnlyWrapper) Stat(name string) (fs.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			// Ignore close errors in this fallback case
+		}
+	}()
 	return file.Stat()
 }

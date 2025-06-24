@@ -67,7 +67,6 @@ func TestMockFS_WriteFile_Errors(t *testing.T) {
 	}
 }
 
-
 func TestMockFS_MkdirAll(t *testing.T) {
 	mfs := NewMockFS()
 	dirPath := "a/b/c"
@@ -104,7 +103,9 @@ func TestMockFS_MkdirAll(t *testing.T) {
 	}
 
 	// MkdirAll on path where a file exists
-	mfs.WriteFile("a/b/c/file.txt", []byte(""), 0644) // make "a/b/c" effectively a file for next test
+	if err := mfs.WriteFile("a/b/c/file.txt", []byte(""), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
 	err = mfs.MkdirAll("a/b/c/file.txt/newdir", dirMode)
 	if err == nil {
 		t.Error("Expected error for MkdirAll when component is a file, got nil")
@@ -118,11 +119,15 @@ func TestMockFS_Stat(t *testing.T) {
 	filePath := "statfile.txt"
 	fileData := []byte("stat me")
 	fileMode := fs.FileMode(0666)
-	mfs.WriteFile(filePath, fileData, fileMode)
+	if err := mfs.WriteFile(filePath, fileData, fileMode); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
 
 	dirPath := "statdir"
 	dirMode := fs.FileMode(0777) | fs.ModeDir
-	mfs.MkdirAll(dirPath, dirMode)
+	if err := mfs.MkdirAll(dirPath, dirMode); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
 
 	// Stat file
 	fi, err := mfs.Stat(filePath)
@@ -174,13 +179,19 @@ func TestMockFS_Open_File(t *testing.T) {
 	mfs := NewMockFS()
 	filePath := "openme.txt"
 	fileData := []byte("open data")
-	mfs.WriteFile(filePath, fileData, 0644)
+	if err := mfs.WriteFile(filePath, fileData, 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
 
 	f, err := mfs.Open(filePath)
 	if err != nil {
 		t.Fatalf("Open file failed: %v", err)
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			t.Logf("Warning: failed to close file: %v", closeErr)
+		}
+	}()
 
 	// Read content
 	content := make([]byte, len(fileData))
@@ -207,18 +218,32 @@ func TestMockFS_Open_File(t *testing.T) {
 
 func TestMockFS_Open_Directory_ReadDir(t *testing.T) {
 	mfs := NewMockFS()
-	mfs.MkdirAll("dir1/sub1", 0755)
-	mfs.WriteFile("dir1/file1.txt", []byte("f1"), 0644)
-	mfs.WriteFile("dir1/file2.txt", []byte("f2"), 0644)
-	mfs.MkdirAll("dir2", 0755)
-	mfs.WriteFile("rootfile.txt", []byte("rf"), 0644)
+	if err := mfs.MkdirAll("dir1/sub1", 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	if err := mfs.WriteFile("dir1/file1.txt", []byte("f1"), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+	if err := mfs.WriteFile("dir1/file2.txt", []byte("f2"), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+	if err := mfs.MkdirAll("dir2", 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	if err := mfs.WriteFile("rootfile.txt", []byte("rf"), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
 
 	// Test ReadDir on "dir1"
 	f, err := mfs.Open("dir1")
 	if err != nil {
 		t.Fatalf("Open dir1 failed: %v", err)
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			t.Logf("Warning: failed to close directory: %v", closeErr)
+		}
+	}()
 
 	dirHandle, ok := f.(fs.ReadDirFile)
 	if !ok {
@@ -231,9 +256,9 @@ func TestMockFS_Open_Directory_ReadDir(t *testing.T) {
 	}
 
 	expectedEntries := map[string]fs.FileMode{
-		"sub1":       fs.ModeDir,
-		"file1.txt":  0, // Regular file
-		"file2.txt":  0, // Regular file
+		"sub1":      fs.ModeDir,
+		"file1.txt": 0, // Regular file
+		"file2.txt": 0, // Regular file
 	}
 
 	if len(entries) != len(expectedEntries) {
@@ -259,7 +284,11 @@ func TestMockFS_Open_Directory_ReadDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open . failed: %v", err)
 	}
-	defer fRoot.Close()
+	defer func() {
+		if closeErr := fRoot.Close(); closeErr != nil {
+			t.Logf("Warning: failed to close root directory: %v", closeErr)
+		}
+	}()
 	dirRootHandle, _ := fRoot.(fs.ReadDirFile)
 	rootEntries, err := dirRootHandle.ReadDir(-1)
 	if err != nil {
@@ -274,7 +303,7 @@ func TestMockFS_Open_Directory_ReadDir(t *testing.T) {
 	if len(rootEntries) != len(expectedRootEntries) {
 		t.Errorf("Expected %d entries in ., got %d. Entries: %v", len(expectedRootEntries), len(rootEntries), entriesToNames(rootEntries))
 	}
-     for _, entry := range rootEntries {
+	for _, entry := range rootEntries {
 		_, found := expectedRootEntries[entry.Name()]
 		if !found {
 			t.Errorf("Unexpected entry %s in .", entry.Name())
@@ -285,7 +314,9 @@ func TestMockFS_Open_Directory_ReadDir(t *testing.T) {
 func TestMockFS_Remove_File(t *testing.T) {
 	mfs := NewMockFS()
 	filePath := "removeme.txt"
-	mfs.WriteFile(filePath, []byte("content"), 0644)
+	if err := mfs.WriteFile(filePath, []byte("content"), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
 
 	err := mfs.Remove(filePath)
 	if err != nil {
@@ -310,11 +341,17 @@ func TestMockFS_Remove_File(t *testing.T) {
 func TestMockFS_Remove_Directory(t *testing.T) {
 	mfs := NewMockFS()
 	emptyDir := "emptydir"
-	mfs.MkdirAll(emptyDir, 0755)
+	if err := mfs.MkdirAll(emptyDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
 
 	nonEmptyDir := "nonemptydir"
-	mfs.MkdirAll(nonEmptyDir, 0755)
-	mfs.WriteFile(path.Join(nonEmptyDir, "file.txt"), []byte{}, 0644)
+	if err := mfs.MkdirAll(nonEmptyDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	if err := mfs.WriteFile(path.Join(nonEmptyDir, "file.txt"), []byte{}, 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
 
 	// Remove empty directory
 	err := mfs.Remove(emptyDir)
@@ -336,9 +373,15 @@ func TestMockFS_Remove_Directory(t *testing.T) {
 
 func TestMockFS_RemoveAll(t *testing.T) {
 	mfs := NewMockFS()
-	mfs.MkdirAll("dir/sub/subsub", 0755)
-	mfs.WriteFile("dir/sub/file1.txt", []byte{}, 0644)
-	mfs.WriteFile("dir/file2.txt", []byte{}, 0644)
+	if err := mfs.MkdirAll("dir/sub/subsub", 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	if err := mfs.WriteFile("dir/sub/file1.txt", []byte{}, 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+	if err := mfs.WriteFile("dir/file2.txt", []byte{}, 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
 
 	// RemoveAll on "dir/sub"
 	err := mfs.RemoveAll("dir/sub")
@@ -376,88 +419,93 @@ func entriesToNames(entries []fs.DirEntry) []string {
 }
 
 func TestMockFS_CleanPaths(t *testing.T) {
-    mfs := NewMockFS()
-    // Initial setup: ensure base directories for files being written exist.
-    if err := mfs.MkdirAll("a/b", 0755); err != nil {
-        t.Fatalf("Initial MkdirAll failed: %v", err)
-    }
-    if err := mfs.WriteFile("a/b/c.txt", []byte("data"), 0644); err != nil {
-        t.Fatalf("Initial WriteFile failed: %v", err)
-    }
-    if err := mfs.MkdirAll("a/d/e", 0755); err != nil {
-        t.Fatalf("Initial MkdirAll for a/d/e failed: %v", err)
-    }
+	mfs := NewMockFS()
+	// Initial setup: ensure base directories for files being written exist.
+	if err := mfs.MkdirAll("a/b", 0755); err != nil {
+		t.Fatalf("Initial MkdirAll failed: %v", err)
+	}
+	if err := mfs.WriteFile("a/b/c.txt", []byte("data"), 0644); err != nil {
+		t.Fatalf("Initial WriteFile failed: %v", err)
+	}
+	if err := mfs.MkdirAll("a/d/e", 0755); err != nil {
+		t.Fatalf("Initial MkdirAll for a/d/e failed: %v", err)
+	}
 
+	testCases := []struct {
+		name     string
+		path     string
+		expected string // expected cleaned path for map key
+		op       func(fsPath string) error
+		check    func(fsPath string) (interface{}, error)
+	}{
+		{
+			name:     "WriteFile with .",
+			path:     "a/./b/c.txt",
+			expected: "a/b/c.txt",
+			op:       func(p string) error { return mfs.WriteFile(p, []byte("new"), 0644) },
+			check:    func(p string) (interface{}, error) { return mfs.ReadFile(p) },
+		},
+		{
+			name:     "MkdirAll with ..",
+			path:     "a/d/../d/e/f", // results in a/d/e/f
+			expected: "a/d/e/f",
+			op:       func(p string) error { return mfs.MkdirAll(p, 0755) },
+			check: func(p string) (interface{}, error) {
+				fi, err := mfs.Stat(p)
+				if err != nil {
+					return nil, err
+				}
+				if !fi.IsDir() {
+					return nil, errors.New("path is not a directory")
+				}
+				return fi, nil
+			},
+		},
+		{
+			name:     "ReadFile with trailing slash (on existing file)", // Should be cleaned
+			path:     "a/b/c.txt/",
+			expected: "a/b/c.txt",
+			op:       func(p string) error { _, err := mfs.ReadFile(p); return err },        // Read is the operation
+			check:    func(p string) (interface{}, error) { return mfs.files[p].data, nil }, // Check internal
+		},
+	}
 
-    testCases := []struct {
-        name     string
-        path     string
-        expected string // expected cleaned path for map key
-        op       func(fsPath string) error
-        check    func(fsPath string) (interface{}, error)
-    }{
-        {
-            name: "WriteFile with .",
-            path: "a/./b/c.txt",
-            expected: "a/b/c.txt",
-            op: func(p string) error { return mfs.WriteFile(p, []byte("new"), 0644) },
-            check: func(p string) (interface{}, error) { return mfs.ReadFile(p) },
-        },
-        {
-            name: "MkdirAll with ..",
-            path: "a/d/../d/e/f", // results in a/d/e/f
-            expected: "a/d/e/f",
-            op: func(p string) error { return mfs.MkdirAll(p, 0755) },
-            check: func(p string) (interface{}, error) {
-                fi, err := mfs.Stat(p)
-                if err != nil {
-                    return nil, err
-                }
-                if !fi.IsDir() {
-                    return nil, errors.New("path is not a directory")
-                }
-                return fi, nil
-            },
-        },
-         {
-            name: "ReadFile with trailing slash (on existing file)", // Should be cleaned
-            path: "a/b/c.txt/",
-            expected: "a/b/c.txt",
-            op: func(p string) error { _, err := mfs.ReadFile(p); return err }, // Read is the operation
-            check: func(p string) (interface{}, error) { return mfs.files[p].data, nil }, // Check internal
-        },
-    }
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.op(tc.path)
+			// For ReadFile with trailing slash, it might error if Stat is strict,
+			// but if it resolves to the file, the error might be nil or different.
+			// The main point is that path.Clean works internally.
+			if strings.Contains(tc.name, "ReadFile with trailing slash") {
+				if err != nil && !strings.Contains(err.Error(), "not a directory") && !strings.Contains(err.Error(), "invalid argument") { // Depends on Open logic
+					// This specific error might be okay if Open tries to treat it as dir first
+				}
+			} else if err != nil {
+				t.Fatalf("Operation failed for path %s: %v", tc.path, err)
+			}
 
-    for _, tc := range testCases {
-        t.Run(tc.name, func(t *testing.T) {
-            err := tc.op(tc.path)
-            // For ReadFile with trailing slash, it might error if Stat is strict,
-            // but if it resolves to the file, the error might be nil or different.
-            // The main point is that path.Clean works internally.
-            if strings.Contains(tc.name, "ReadFile with trailing slash") {
-                 if err != nil && !strings.Contains(err.Error(), "not a directory") && !strings.Contains(err.Error(), "invalid argument")  { // Depends on Open logic
-                    // This specific error might be okay if Open tries to treat it as dir first
-                 }
-            } else if err != nil {
-                t.Fatalf("Operation failed for path %s: %v", tc.path, err)
-            }
-
-            // Check that the *cleaned* path is what's in the map or accessible
-            _, checkErr := tc.check(tc.expected)
-            if checkErr != nil {
-                 // If original path was supposed to be invalid for op, this check might not apply directly
-                if !( (strings.Contains(tc.name, "invalid")) && checkErr != nil ) {
-                    t.Errorf("Post-operation check failed for expected path %s (original %s): %v", tc.expected, tc.path, checkErr)
-                }
-            }
-        })
-    }
+			// Check that the *cleaned* path is what's in the map or accessible
+			_, checkErr := tc.check(tc.expected)
+			if checkErr != nil {
+				// If original path was supposed to be invalid for op, this check might not apply directly
+				if !((strings.Contains(tc.name, "invalid")) && checkErr != nil) {
+					t.Errorf("Post-operation check failed for expected path %s (original %s): %v", tc.expected, tc.path, checkErr)
+				}
+			}
+		})
+	}
 }
 func TestMockFS_GetMode(t *testing.T) {
 	mfs := NewMockFS()
-	mfs.WriteFile("file.txt", []byte{}, 0644)
-	mfs.MkdirAll("dir", 0755)
-	mfs.MkdirAll("dir/subdir", 0751) // Explicit subdir
+	if err := mfs.WriteFile("file.txt", []byte{}, 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+	if err := mfs.MkdirAll("dir", 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	if err := mfs.MkdirAll("dir/subdir", 0751); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
 
 	// Setup for implicit directory test
 	// Ensure "implicit_parent" exists before writing a file into it, so WriteFile succeeds.
@@ -469,7 +517,6 @@ func TestMockFS_GetMode(t *testing.T) {
 	if err := mfs.WriteFile("implicit_parent/anotherfile.txt", []byte{}, 0600); err != nil {
 		t.Fatalf("Setup WriteFile for implicit_parent/anotherfile.txt failed: %v", err)
 	}
-
 
 	// File
 	mode, err := mfs.GetMode("file.txt")
@@ -498,7 +545,9 @@ func TestMockFS_GetMode(t *testing.T) {
 	}
 
 	// Implicit directory (parent of a file)
-	mfs.WriteFile("implicit_parent/anotherfile.txt", []byte{}, 0600)
+	if err := mfs.WriteFile("implicit_parent/anotherfile.txt", []byte{}, 0600); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
 	mode, err = mfs.GetMode("implicit_parent")
 	if err != nil {
 		t.Fatalf("GetMode for implicit_parent failed: %v", err)

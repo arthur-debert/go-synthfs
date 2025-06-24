@@ -255,7 +255,9 @@ func TestLogOutputRedirection(t *testing.T) {
 
 	logMsgFile := "message logged to file"
 	synthfs.Logger().Info().Msg(logMsgFile)
-	logFile.Close() // Close the file to ensure content is flushed
+	if err := logFile.Close(); err != nil {
+		t.Fatalf("Failed to close log file: %v", err)
+	}
 
 	fileContentBytes, err := os.ReadFile(logFileName)
 	if err != nil {
@@ -296,7 +298,6 @@ func TestLogOutputRedirection(t *testing.T) {
 		t.Errorf("Log line for '%s' found, but it did not contain 'lib=synthfs' (with or without ANSI codes) or '\"lib\":\"synthfs\"'. Line content: '%s'", logMsgFile, targetLine)
 	}
 
-
 	// Test resetting to default (os.Stderr)
 	// We'll capture os.Stderr to verify this. This is a bit tricky.
 	// A common way is to temporarily replace os.Stderr with a pipe.
@@ -313,11 +314,15 @@ func TestLogOutputRedirection(t *testing.T) {
 
 	logMsgStderr := "message logged to stderr"
 	synthfs.Logger().Info().Msg(logMsgStderr)
-	w.Close() // Close the writer to unblock the reader
+	if err := w.Close(); err != nil {
+		t.Logf("Warning: failed to close pipe writer: %v", err)
+	}
 
 	var stderrBuf bytes.Buffer
 	_, _ = stderrBuf.ReadFrom(r)
-	r.Close()
+	if err := r.Close(); err != nil {
+		t.Logf("Warning: failed to close pipe reader: %v", err)
+	}
 
 	stderrOutput := stderrBuf.String()
 	if !strings.Contains(stderrOutput, logMsgStderr) {

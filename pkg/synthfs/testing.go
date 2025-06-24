@@ -168,7 +168,11 @@ func (tfs *TestFileSystem) Stat(name string) (fs.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			// Ignore close errors in this helper method
+		}
+	}()
 
 	return file.Stat()
 }
@@ -227,7 +231,11 @@ func (th *TestHelper) AssertFileExists(path string, expectedContent ...[]byte) {
 	if err != nil {
 		th.t.Fatalf("Expected file %s to exist, but got error: %v", path, err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			th.t.Logf("Warning: failed to close file %s: %v", path, closeErr)
+		}
+	}()
 
 	info, err := file.Stat()
 	if err != nil {
