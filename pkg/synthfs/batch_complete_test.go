@@ -26,7 +26,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 		}
 
 		// Execute the batch
-		result, err := batch.Execute()
+		result, err := batch.Run()
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -92,7 +92,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 		}
 
 		// Execute the batch
-		result, err := newBatch.Execute()
+		result, err := newBatch.Run()
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -162,7 +162,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 		}
 
 		// Execute everything
-		result, err := fullBatch.Execute()
+		result, err := fullBatch.Run()
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -231,7 +231,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 		t.Logf("  Dependencies: %v", archiveOp.Dependencies())
 
 		// Execute and inspect results
-		result, err := inspectBatch.Execute()
+		result, err := inspectBatch.Run()
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}

@@ -24,7 +24,7 @@ type OperationResult struct {
 	Duration    time.Duration
 }
 
-// Result holds the overall outcome of executing a queue of operations.
+// Result holds the overall outcome of running a pipeline of operations.
 type Result struct {
 	Success    bool              // True if all operations were successful
 	Operations []OperationResult // Results for each operation attempted
@@ -33,7 +33,7 @@ type Result struct {
 	Rollback   func(context.Context) error // Rollback function for failed transactions
 }
 
-// Executor processes a queue of operations.
+// Executor processes a pipeline of operations.
 type Executor struct{}
 
 // NewExecutor creates a new Executor.
@@ -41,7 +41,7 @@ func NewExecutor() *Executor {
 	return &Executor{}
 }
 
-// Execute executes all operations in the queue.
+// Run runs all operations in the pipeline.
 //
 // Behavior:
 // - Resolves dependencies using topological sort
@@ -50,9 +50,9 @@ func NewExecutor() *Executor {
 // - Continues execution even if individual operations fail
 // - Returns a Result with success/failure status and rollback function
 // - Caller is responsible for calling Rollback if desired
-func (e *Executor) Execute(ctx context.Context, queue Queue, fs FileSystem) *Result {
+func (e *Executor) Run(ctx context.Context, pipeline Pipeline, fs FileSystem) *Result {
 	Logger().Info().
-		Int("operation_count", len(queue.Operations())).
+		Int("operation_count", len(pipeline.Operations())).
 		Msg("starting execution")
 
 	start := time.Now()
@@ -64,7 +64,7 @@ func (e *Executor) Execute(ctx context.Context, queue Queue, fs FileSystem) *Res
 
 	// Resolve dependencies first
 	Logger().Info().Msg("resolving operation dependencies")
-	if err := queue.Resolve(); err != nil {
+	if err := pipeline.Resolve(); err != nil {
 		Logger().Info().Err(err).Msg("dependency resolution failed")
 		result.Success = false
 		result.Errors = append(result.Errors, fmt.Errorf("dependency resolution failed: %w", err))
@@ -73,18 +73,18 @@ func (e *Executor) Execute(ctx context.Context, queue Queue, fs FileSystem) *Res
 	}
 	Logger().Info().Msg("dependency resolution completed successfully")
 
-	// Validate the queue
-	Logger().Info().Msg("validating operation queue")
-	if err := queue.Validate(ctx, fs); err != nil {
-		Logger().Info().Err(err).Msg("queue validation failed")
+	// Validate the pipeline
+	Logger().Info().Msg("validating operation pipeline")
+	if err := pipeline.Validate(ctx, fs); err != nil {
+		Logger().Info().Err(err).Msg("pipeline validation failed")
 		result.Success = false
-		result.Errors = append(result.Errors, fmt.Errorf("queue validation failed: %w", err))
+		result.Errors = append(result.Errors, fmt.Errorf("pipeline validation failed: %w", err))
 		result.Duration = time.Since(start)
 		return result
 	}
-	Logger().Info().Msg("queue validation completed successfully")
+	Logger().Info().Msg("pipeline validation completed successfully")
 
-	operations := queue.Operations()
+	operations := pipeline.Operations()
 	rollbackOps := make([]Operation, 0, len(operations))
 
 	Logger().Info().

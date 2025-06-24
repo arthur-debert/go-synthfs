@@ -290,29 +290,29 @@ func (th *TestHelper) AssertNotExists(path string) {
 	}
 }
 
-// ExecuteAndAssert executes a queue and asserts it succeeds
-func (th *TestHelper) ExecuteAndAssert(queue Queue) *Result {
+// RunAndAssert runs a pipeline and asserts it succeeds
+func (th *TestHelper) RunAndAssert(pipeline Pipeline) *Result {
 	th.t.Helper()
 
 	executor := NewExecutor()
-	result := executor.Execute(th.ctx, queue, th.fs)
+	result := executor.Run(th.ctx, pipeline, th.fs)
 
 	if !result.Success {
-		th.t.Fatalf("Expected execution to succeed, but it failed with errors: %v", result.Errors)
+		th.t.Fatalf("Expected run to succeed, but it failed with errors: %v", result.Errors)
 	}
 
 	return result
 }
 
-// ExecuteAndExpectError executes a queue and expects it to fail
-func (th *TestHelper) ExecuteAndExpectError(queue Queue) *Result {
+// RunAndExpectError runs a pipeline and expects it to fail
+func (th *TestHelper) RunAndExpectError(pipeline Pipeline) *Result {
 	th.t.Helper()
 
 	executor := NewExecutor()
-	result := executor.Execute(th.ctx, queue, th.fs)
+	result := executor.Run(th.ctx, pipeline, th.fs)
 
 	if result.Success {
-		th.t.Fatalf("Expected execution to fail, but it succeeded")
+		th.t.Fatalf("Expected run to fail, but it succeeded")
 	}
 
 	return result
