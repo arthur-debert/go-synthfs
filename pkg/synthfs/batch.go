@@ -2,10 +2,13 @@ package synthfs
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
+	"io"
 	"io/fs"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // PathTracker tracks operations by path to detect conflicts
@@ -105,6 +108,45 @@ func (pt *PathTracker) RecordOperation(opID OperationID, opType, path string, de
 	case "unarchive":
 		// Complex to predict all extracted paths, skip for now
 	}
+}
+
+// computeFileChecksum computes MD5 checksum for a file
+func (b *Batch) computeFileChecksum(filePath string) (*ChecksumRecord, error) {
+	// Phase I, Milestone 3: Basic checksumming for copy/move operations
+	
+	// Get file info first
+	info, err := b.fs.Stat(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat file %s: %w", filePath, err)
+	}
+	
+	// Skip checksumming for directories
+	if info.IsDir() {
+		return nil, nil
+	}
+	
+	// Open file for reading
+	file, err := b.fs.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file %s for checksumming: %w", filePath, err)
+	}
+	defer file.Close()
+	
+	// Compute MD5 hash
+	hasher := md5.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return nil, fmt.Errorf("failed to compute checksum for %s: %w", filePath, err)
+	}
+	
+	checksum := fmt.Sprintf("%x", hasher.Sum(nil))
+	
+	return &ChecksumRecord{
+		Path:         filePath,
+		MD5:          checksum,
+		Size:         info.Size(),
+		ModTime:      info.ModTime(),
+		ChecksumTime: time.Now(),
+	}, nil
 }
 
 // Batch represents a collection of filesystem operations that can be validated and executed as a unit.
@@ -260,6 +302,14 @@ func (b *Batch) Copy(src, dst string) (Operation, error) {
 		return nil, fmt.Errorf("validation failed for Copy(%s, %s): %w", src, dst, err)
 	}
 
+	// Phase I, Milestone 3: Compute checksum for source file
+	if checksum, err := b.computeFileChecksum(src); err != nil {
+		return nil, fmt.Errorf("validation failed for Copy(%s, %s): failed to compute source checksum: %w", src, dst, err)
+	} else if checksum != nil {
+		op.SetChecksum(src, checksum)
+		op.SetDescriptionDetail("source_checksum", checksum.MD5)
+	}
+
 	// Phase I, Milestone 2: Check for path conflicts
 	if err := b.pathTracker.CheckPathConflict(op.ID(), "copy", src, dst); err != nil {
 		return nil, fmt.Errorf("validation failed for Copy(%s, %s): %w", src, dst, err)
@@ -298,6 +348,14 @@ func (b *Batch) Move(src, dst string) (Operation, error) {
 	// Validate immediately
 	if err := op.Validate(b.ctx, b.fs); err != nil {
 		return nil, fmt.Errorf("validation failed for Move(%s, %s): %w", src, dst, err)
+	}
+
+	// Phase I, Milestone 3: Compute checksum for source file
+	if checksum, err := b.computeFileChecksum(src); err != nil {
+		return nil, fmt.Errorf("validation failed for Move(%s, %s): failed to compute source checksum: %w", src, dst, err)
+	} else if checksum != nil {
+		op.SetChecksum(src, checksum)
+		op.SetDescriptionDetail("source_checksum", checksum.MD5)
 	}
 
 	// Phase I, Milestone 2: Check for path conflicts
@@ -421,6 +479,16 @@ func (b *Batch) CreateArchive(archivePath string, format ArchiveFormat, sources 
 	if err := op.Validate(b.ctx, b.fs); err != nil {
 		return nil, fmt.Errorf("validation failed for CreateArchive(%s): %w", archivePath, err)
 	}
+
+	// Phase I, Milestone 3: Compute checksums for all source files
+	for _, source := range sources {
+		if checksum, err := b.computeFileChecksum(source); err != nil {
+			return nil, fmt.Errorf("validation failed for CreateArchive(%s): failed to compute checksum for source %s: %w", archivePath, source, err)
+		} else if checksum != nil {
+			op.SetChecksum(source, checksum)
+		}
+	}
+	op.SetDescriptionDetail("sources_checksummed", len(sources))
 
 	// Phase I, Milestone 2: Check for path conflicts
 	if err := b.pathTracker.CheckPathConflict(op.ID(), "create_archive", archivePath, ""); err != nil {

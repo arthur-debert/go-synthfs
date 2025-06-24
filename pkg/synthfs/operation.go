@@ -11,10 +11,20 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // OperationID is a unique identifier for an operation.
 type OperationID string
+
+// ChecksumRecord stores file checksum information for validation
+type ChecksumRecord struct {
+	Path         string
+	MD5          string
+	Size         int64
+	ModTime      time.Time
+	ChecksumTime time.Time
+}
 
 // FileSystem interface is defined in fs.go
 
@@ -54,6 +64,12 @@ type Operation interface {
 	// This is primarily relevant for Create operations.
 	// Returns nil if no item is directly associated (e.g., for Delete, Copy, Move by path).
 	GetItem() FsItem
+
+	// GetChecksum retrieves a checksum record for a file path (Phase I, Milestone 3)
+	GetChecksum(path string) *ChecksumRecord
+
+	// GetAllChecksums returns all checksum records (Phase I, Milestone 3)
+	GetAllChecksums() map[string]*ChecksumRecord
 }
 
 // --- SimpleOperation: Basic Operation Implementation ---
@@ -67,6 +83,7 @@ type SimpleOperation struct {
 	item         FsItem // For Create operations
 	srcPath      string // For Copy/Move operations
 	dstPath      string // For Copy/Move operations
+	checksums    map[string]*ChecksumRecord // Phase I, Milestone 3: Store file checksums
 }
 
 // NewSimpleOperation creates a new simple operation.
@@ -79,6 +96,7 @@ func NewSimpleOperation(id OperationID, descType string, path string) *SimpleOpe
 			Details: make(map[string]interface{}),
 		},
 		dependencies: []OperationID{},
+		checksums:    make(map[string]*ChecksumRecord), // Phase I, Milestone 3: Initialize checksum storage
 	}
 }
 
@@ -139,6 +157,27 @@ func (op *SimpleOperation) GetSrcPath() string {
 // GetDstPath returns the destination path for copy/move operations.
 func (op *SimpleOperation) GetDstPath() string {
 	return op.dstPath
+}
+
+// SetChecksum stores a checksum record for a file path (Phase I, Milestone 3)
+func (op *SimpleOperation) SetChecksum(path string, checksum *ChecksumRecord) {
+	if op.checksums == nil {
+		op.checksums = make(map[string]*ChecksumRecord)
+	}
+	op.checksums[path] = checksum
+}
+
+// GetChecksum retrieves a checksum record for a file path (Phase I, Milestone 3)
+func (op *SimpleOperation) GetChecksum(path string) *ChecksumRecord {
+	if op.checksums == nil {
+		return nil
+	}
+	return op.checksums[path]
+}
+
+// GetAllChecksums returns all checksum records (Phase I, Milestone 3)
+func (op *SimpleOperation) GetAllChecksums() map[string]*ChecksumRecord {
+	return op.checksums
 }
 
 // Execute performs the actual filesystem operation.
