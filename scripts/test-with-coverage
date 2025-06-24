@@ -7,10 +7,6 @@ if [[ ! -f "go.mod" ]]; then
 fi
 
 gotestsum --format pkgname -- -coverprofile=coverage.out -tags=coverage ./... &&
-    if [ -f ".covignore" ]; then
-        echo "Filtering coverage output using .covignore..."
-        grep -v -E -f .covignore coverage.out >coverage.filtered.out && mv coverage.filtered.out coverage.out
-    fi &&
     go tool cover -func=coverage.out | awk '
 function color_line(line, coverage_val) {
     if (coverage_val >= 80) {
