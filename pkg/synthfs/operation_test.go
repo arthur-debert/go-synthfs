@@ -336,9 +336,22 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 			t.Errorf("Expected SizeMB 0 when no files could be backed up, got %f", backupData.SizeMB)
 		}
 		items, _ := backupData.Metadata["items"].([]BackedUpItem)
-		// Only the root dir item should be present
-		if len(items) != 1 || items[0].ItemType != "directory" || items[0].RelativePath != "." {
-			t.Errorf("Expected only root dir item in partial backup, got %+v", items)
+		// Directory structure should be preserved even when no files can be backed up
+		// Expecting: "." (root), "subdir"
+		dirCount := 0
+		fileCount := 0
+		for _, item := range items {
+			if item.ItemType == "directory" {
+				dirCount++
+			} else if item.ItemType == "file" {
+				fileCount++
+			}
+		}
+		if dirCount != 2 {
+			t.Errorf("Expected 2 directories in backup (root and subdir), got %d. Items: %+v", dirCount, items)
+		}
+		if fileCount != 0 {
+			t.Errorf("Expected 0 files in backup due to budget constraints, got %d. Items: %+v", fileCount, items)
 		}
 	})
 }
