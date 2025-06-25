@@ -15,13 +15,29 @@ const (
 	StatusValidation OperationStatus = "VALIDATION_FAILURE"
 )
 
+// PipelineOptions controls how operations are executed (Phase III)
+type PipelineOptions struct {
+	Restorable      bool    // Whether to enable reversible operations with backup
+	MaxBackupSizeMB int     // Maximum backup size in MB (default: 10MB)
+}
+
+// DefaultPipelineOptions returns sensible defaults for pipeline execution
+func DefaultPipelineOptions() PipelineOptions {
+	return PipelineOptions{
+		Restorable:      false, // No backup overhead by default
+		MaxBackupSizeMB: 10,    // 10MB default budget - perfect for config files
+	}
+}
+
 // OperationResult holds the outcome of a single operation's execution.
 type OperationResult struct {
-	OperationID OperationID
-	Operation   Operation // The operation that was executed
-	Status      OperationStatus
-	Error       error
-	Duration    time.Duration
+	OperationID  OperationID
+	Operation    Operation // The operation that was executed
+	Status       OperationStatus
+	Error        error
+	Duration     time.Duration
+	BackupData   *BackupData // Phase III: Backup data for restoration (only if restorable=true)
+	BackupSizeMB float64     // Phase III: Actual backup size consumed
 }
 
 // Result holds the overall outcome of running a pipeline of operations.
@@ -31,6 +47,10 @@ type Result struct {
 	Duration   time.Duration
 	Errors     []error                     // Aggregated errors from operations that failed
 	Rollback   func(context.Context) error // Rollback function for failed transactions
+	
+	// Phase III: Enhanced restoration functionality
+	Budget     *BackupBudget               // Backup budget information (only if restorable=true)
+	RestoreOps []Operation                 // Generated reverse operations for restoration
 }
 
 // Executor processes a pipeline of operations.
@@ -41,18 +61,27 @@ func NewExecutor() *Executor {
 	return &Executor{}
 }
 
-// Run runs all operations in the pipeline.
+// Run runs all operations in the pipeline with default options.
+// This is a convenience method that calls RunWithOptions using DefaultPipelineOptions().
+func (e *Executor) Run(ctx context.Context, pipeline Pipeline, fs FileSystem) *Result {
+	return e.RunWithOptions(ctx, pipeline, fs, DefaultPipelineOptions())
+}
+
+// RunWithOptions runs all operations in the pipeline with specified options (Phase III).
 //
 // Behavior:
 // - Resolves dependencies using topological sort
 // - Validates all operations before execution
 // - Executes operations in dependency order
+// - Optionally generates backup data for restoration (if opts.Restorable=true)
 // - Continues execution even if individual operations fail
-// - Returns a Result with success/failure status and rollback function
+// - Returns a Result with success/failure status and backup/restore information
 // - Caller is responsible for calling Rollback if desired
-func (e *Executor) Run(ctx context.Context, pipeline Pipeline, fs FileSystem) *Result {
+func (e *Executor) RunWithOptions(ctx context.Context, pipeline Pipeline, fs FileSystem, opts PipelineOptions) *Result {
 	Logger().Info().
 		Int("operation_count", len(pipeline.Operations())).
+		Bool("restorable", opts.Restorable).
+		Int("max_backup_mb", opts.MaxBackupSizeMB).
 		Msg("starting execution")
 
 	start := time.Now()
@@ -60,6 +89,22 @@ func (e *Executor) Run(ctx context.Context, pipeline Pipeline, fs FileSystem) *R
 		Operations: []OperationResult{},
 		Errors:     []error{},
 		Success:    true,
+		RestoreOps: []Operation{},
+	}
+
+	// Phase III: Initialize budget if restorable mode is enabled
+	var budget *BackupBudget
+	if opts.Restorable {
+		budget = &BackupBudget{
+			TotalMB:     float64(opts.MaxBackupSizeMB),
+			RemainingMB: float64(opts.MaxBackupSizeMB),
+			UsedMB:      0,
+		}
+		result.Budget = budget
+		
+		Logger().Info().
+			Float64("total_budget_mb", budget.TotalMB).
+			Msg("backup budget initialized for restorable execution")
 	}
 
 	// Resolve dependencies first
@@ -101,14 +146,48 @@ func (e *Executor) Run(ctx context.Context, pipeline Pipeline, fs FileSystem) *R
 			Int("total_operations", len(operations)).
 			Msg("executing operation")
 
+		// Phase III: Generate reverse operations if restorable mode is enabled
+		var reverseOps []Operation
+		var backupData *BackupData
+		var reverseErr error
+		
+		if opts.Restorable {
+			Logger().Debug().
+				Str("op_id", string(op.ID())).
+				Float64("remaining_budget_mb", budget.RemainingMB).
+				Msg("generating reverse operations for backup")
+			
+			reverseOps, backupData, reverseErr = op.ReverseOps(ctx, fs, budget)
+			if reverseErr != nil {
+				Logger().Warn().
+					Str("op_id", string(op.ID())).
+					Err(reverseErr).
+					Msg("failed to generate reverse operations - operation will execute without backup")
+				// Continue execution even if reverse ops generation fails
+			} else if backupData != nil {
+				Logger().Debug().
+					Str("op_id", string(op.ID())).
+					Float64("backup_size_mb", backupData.SizeMB).
+					Float64("remaining_budget_mb", budget.RemainingMB).
+					Str("backup_type", backupData.BackupType).
+					Msg("backup data generated successfully")
+			}
+		}
+
 		opStart := time.Now()
 		err := op.Execute(ctx, fs)
 		opDuration := time.Since(opStart)
 
 		opResult := OperationResult{
-			OperationID: op.ID(),
-			Operation:   op,
-			Duration:    opDuration,
+			OperationID:  op.ID(),
+			Operation:    op,
+			Duration:     opDuration,
+			BackupData:   backupData,
+			BackupSizeMB: 0,
+		}
+		
+		if backupData != nil {
+			opResult.BackupSizeMB = backupData.SizeMB
 		}
 
 		if err != nil {
@@ -124,6 +203,16 @@ func (e *Executor) Run(ctx context.Context, pipeline Pipeline, fs FileSystem) *R
 			opResult.Error = err
 			result.Success = false
 			result.Errors = append(result.Errors, fmt.Errorf("operation %s failed: %w", op.ID(), err))
+			
+			// Phase III: Restore budget if operation failed and backup was created
+			if opts.Restorable && backupData != nil && budget != nil {
+				budget.RestoreBackup(backupData.SizeMB)
+				Logger().Debug().
+					Str("op_id", string(op.ID())).
+					Float64("restored_budget_mb", backupData.SizeMB).
+					Float64("remaining_budget_mb", budget.RemainingMB).
+					Msg("restored backup budget due to operation failure")
+			}
 		} else {
 			Logger().Info().
 				Str("op_id", string(op.ID())).
@@ -134,6 +223,15 @@ func (e *Executor) Run(ctx context.Context, pipeline Pipeline, fs FileSystem) *R
 
 			opResult.Status = StatusSuccess
 			rollbackOps = append(rollbackOps, op)
+			
+			// Phase III: Add reverse operations to result if available
+			if opts.Restorable && reverseOps != nil {
+				result.RestoreOps = append(result.RestoreOps, reverseOps...)
+				Logger().Debug().
+					Str("op_id", string(op.ID())).
+					Int("reverse_ops_count", len(reverseOps)).
+					Msg("added reverse operations for restoration")
+			}
 		}
 
 		result.Operations = append(result.Operations, opResult)
@@ -147,8 +245,18 @@ func (e *Executor) Run(ctx context.Context, pipeline Pipeline, fs FileSystem) *R
 		Int("total_operations", len(operations)).
 		Int("successful_operations", len(rollbackOps)).
 		Int("failed_operations", len(result.Errors)).
+		Int("restore_operations", len(result.RestoreOps)).
 		Dur("total_duration", result.Duration).
 		Msg("execution completed")
+		
+	// Phase III: Log budget usage summary
+	if opts.Restorable && budget != nil {
+		Logger().Info().
+			Float64("total_budget_mb", budget.TotalMB).
+			Float64("used_budget_mb", budget.UsedMB).
+			Float64("remaining_budget_mb", budget.RemainingMB).
+			Msg("backup budget usage summary")
+	}
 
 	return result
 }

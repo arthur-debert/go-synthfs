@@ -35,6 +35,47 @@ type OperationDesc struct {
 	Details map[string]interface{} // Additional operation-specific details
 }
 
+// BackupData stores the data needed to restore an operation's effects
+type BackupData struct {
+	OperationID   OperationID              `json:"operation_id"`
+	BackupType    string                   `json:"backup_type"`    // "file", "directory", "none"
+	OriginalPath  string                   `json:"original_path"`  // Path that was affected
+	BackupContent []byte                   `json:"backup_content"` // File content backup
+	BackupMode    fs.FileMode              `json:"backup_mode"`    // Original file mode
+	BackupTime    time.Time                `json:"backup_time"`    // When backup was created
+	SizeMB        float64                  `json:"size_mb"`        // Size in MB for budget tracking
+	Metadata      map[string]interface{}   `json:"metadata"`       // Additional metadata
+}
+
+// BackupBudget tracks memory usage for backup operations
+type BackupBudget struct {
+	TotalMB     float64 `json:"total_mb"`
+	RemainingMB float64 `json:"remaining_mb"`
+	UsedMB      float64 `json:"used_mb"`
+}
+
+// ConsumeBackup reduces the remaining budget by the specified amount
+func (bb *BackupBudget) ConsumeBackup(sizeMB float64) error {
+	if sizeMB > bb.RemainingMB {
+		return fmt.Errorf("backup size %.2fMB exceeds remaining budget %.2fMB", sizeMB, bb.RemainingMB)
+	}
+	bb.RemainingMB -= sizeMB
+	bb.UsedMB += sizeMB
+	return nil
+}
+
+// RestoreBackup increases the remaining budget by the specified amount
+func (bb *BackupBudget) RestoreBackup(sizeMB float64) {
+	bb.RemainingMB += sizeMB
+	bb.UsedMB -= sizeMB
+	if bb.UsedMB < 0 {
+		bb.UsedMB = 0
+	}
+	if bb.RemainingMB > bb.TotalMB {
+		bb.RemainingMB = bb.TotalMB
+	}
+}
+
 // Operation defines a single abstract filesystem operation.
 type Operation interface {
 	// ID returns the unique identifier of the operation.
@@ -70,6 +111,11 @@ type Operation interface {
 
 	// GetAllChecksums returns all checksum records (Phase I, Milestone 3)
 	GetAllChecksums() map[string]*ChecksumRecord
+
+	// ReverseOps generates operations that would undo this operation's effects (Phase III)
+	// Returns a slice of operations that, when executed, will restore the filesystem
+	// to the state it was in before this operation was executed.
+	ReverseOps(ctx context.Context, fsys FileSystem, budget *BackupBudget) ([]Operation, *BackupData, error)
 }
 
 // --- SimpleOperation: Basic Operation Implementation ---
@@ -307,6 +353,30 @@ func (op *SimpleOperation) Rollback(ctx context.Context, fsys FileSystem) error 
 		return fmt.Errorf("rollback of delete operations not yet implemented")
 	default:
 		return fmt.Errorf("unknown operation type for rollback: %s", op.description.Type)
+	}
+}
+
+// ReverseOps generates operations that would undo this operation's effects (Phase III)
+func (op *SimpleOperation) ReverseOps(ctx context.Context, fsys FileSystem, budget *BackupBudget) ([]Operation, *BackupData, error) {
+	switch op.description.Type {
+	case "create_file":
+		return op.reverseCreateFile(ctx, fsys, budget)
+	case "create_directory":
+		return op.reverseCreateDirectory(ctx, fsys, budget)
+	case "create_symlink":
+		return op.reverseCreateSymlink(ctx, fsys, budget)
+	case "create_archive":
+		return op.reverseCreateArchive(ctx, fsys, budget)
+	case "unarchive":
+		return op.reverseUnarchive(ctx, fsys, budget)
+	case "copy":
+		return op.reverseCopy(ctx, fsys, budget)
+	case "move":
+		return op.reverseMove(ctx, fsys, budget)
+	case "delete":
+		return op.reverseDelete(ctx, fsys, budget)
+	default:
+		return nil, nil, fmt.Errorf("unknown operation type for reverse ops: %s", op.description.Type)
 	}
 }
 
@@ -1166,4 +1236,281 @@ func (op *SimpleOperation) rollbackUnarchive(ctx context.Context, fsys FileSyste
 	// For safety, we don't automatically remove extracted files as it could be destructive
 	// A proper implementation would need to track what was extracted during the operation
 	return fmt.Errorf("rollback of unarchive operations is not automatically supported for safety reasons")
+}
+
+// --- Phase III: Reverse Operation Implementations ---
+
+// reverseCreateFile generates delete operation to undo file creation
+func (op *SimpleOperation) reverseCreateFile(ctx context.Context, fsys FileSystem, budget *BackupBudget) ([]Operation, *BackupData, error) {
+	// Simple case: just delete the file that was created
+	reverseOp := NewSimpleOperation(
+		OperationID("reverse_"+string(op.ID())),
+		"delete",
+		op.description.Path,
+	)
+	
+	// No backup needed for create operations - we just delete what was created
+	backupData := &BackupData{
+		OperationID:   op.ID(),
+		BackupType:    "none",
+		OriginalPath:  op.description.Path,
+		BackupContent: nil,
+		BackupTime:    time.Now(),
+		SizeMB:        0,
+		Metadata:      map[string]interface{}{"reverse_type": "delete_created_file"},
+	}
+	
+	return []Operation{reverseOp}, backupData, nil
+}
+
+// reverseCreateDirectory generates delete operation to undo directory creation
+func (op *SimpleOperation) reverseCreateDirectory(ctx context.Context, fsys FileSystem, budget *BackupBudget) ([]Operation, *BackupData, error) {
+	// Simple case: just delete the directory that was created
+	reverseOp := NewSimpleOperation(
+		OperationID("reverse_"+string(op.ID())),
+		"delete",
+		op.description.Path,
+	)
+	
+	// No backup needed for create operations - we just delete what was created
+	backupData := &BackupData{
+		OperationID:   op.ID(),
+		BackupType:    "none",
+		OriginalPath:  op.description.Path,
+		BackupContent: nil,
+		BackupTime:    time.Now(),
+		SizeMB:        0,
+		Metadata:      map[string]interface{}{"reverse_type": "delete_created_directory"},
+	}
+	
+	return []Operation{reverseOp}, backupData, nil
+}
+
+// reverseCreateSymlink generates delete operation to undo symlink creation
+func (op *SimpleOperation) reverseCreateSymlink(ctx context.Context, fsys FileSystem, budget *BackupBudget) ([]Operation, *BackupData, error) {
+	// Simple case: just delete the symlink that was created
+	reverseOp := NewSimpleOperation(
+		OperationID("reverse_"+string(op.ID())),
+		"delete",
+		op.description.Path,
+	)
+	
+	// No backup needed for create operations - we just delete what was created
+	backupData := &BackupData{
+		OperationID:   op.ID(),
+		BackupType:    "none",
+		OriginalPath:  op.description.Path,
+		BackupContent: nil,
+		BackupTime:    time.Now(),
+		SizeMB:        0,
+		Metadata:      map[string]interface{}{"reverse_type": "delete_created_symlink"},
+	}
+	
+	return []Operation{reverseOp}, backupData, nil
+}
+
+// reverseCreateArchive generates delete operation to undo archive creation
+func (op *SimpleOperation) reverseCreateArchive(ctx context.Context, fsys FileSystem, budget *BackupBudget) ([]Operation, *BackupData, error) {
+	// Simple case: just delete the archive that was created
+	reverseOp := NewSimpleOperation(
+		OperationID("reverse_"+string(op.ID())),
+		"delete",
+		op.description.Path,
+	)
+	
+	// No backup needed for create operations - we just delete what was created
+	backupData := &BackupData{
+		OperationID:   op.ID(),
+		BackupType:    "none",
+		OriginalPath:  op.description.Path,
+		BackupContent: nil,
+		BackupTime:    time.Now(),
+		SizeMB:        0,
+		Metadata:      map[string]interface{}{"reverse_type": "delete_created_archive"},
+	}
+	
+	return []Operation{reverseOp}, backupData, nil
+}
+
+// reverseUnarchive generates delete operations to undo file extraction
+func (op *SimpleOperation) reverseUnarchive(ctx context.Context, fsys FileSystem, budget *BackupBudget) ([]Operation, *BackupData, error) {
+	// For unarchive, we need to delete the extraction directory
+	// This is simplified - a full implementation might track individual extracted files
+	var reverseOps []Operation
+	
+	if item := op.GetItem(); item != nil {
+		if unarchiveItem, ok := item.(*UnarchiveItem); ok {
+			// Delete the extraction directory
+			reverseOp := NewSimpleOperation(
+				OperationID("reverse_"+string(op.ID())),
+				"delete",
+				unarchiveItem.ExtractPath(),
+			)
+			reverseOps = append(reverseOps, reverseOp)
+		}
+	}
+	
+	// No backup needed for unarchive operations - we just delete what was extracted
+	backupData := &BackupData{
+		OperationID:   op.ID(),
+		BackupType:    "none",
+		OriginalPath:  op.description.Path,
+		BackupContent: nil,
+		BackupTime:    time.Now(),
+		SizeMB:        0,
+		Metadata:      map[string]interface{}{"reverse_type": "delete_extracted_files"},
+	}
+	
+	return reverseOps, backupData, nil
+}
+
+// reverseCopy generates delete operation to undo copy
+func (op *SimpleOperation) reverseCopy(ctx context.Context, fsys FileSystem, budget *BackupBudget) ([]Operation, *BackupData, error) {
+	// For copy, we just delete the destination file
+	reverseOp := NewSimpleOperation(
+		OperationID("reverse_"+string(op.ID())),
+		"delete",
+		op.dstPath,
+	)
+	
+	// No backup needed for copy operations - we just delete the copy
+	backupData := &BackupData{
+		OperationID:   op.ID(),
+		BackupType:    "none",
+		OriginalPath:  op.dstPath,
+		BackupContent: nil,
+		BackupTime:    time.Now(),
+		SizeMB:        0,
+		Metadata:      map[string]interface{}{"reverse_type": "delete_copied_file"},
+	}
+	
+	return []Operation{reverseOp}, backupData, nil
+}
+
+// reverseMove generates move operation to undo move
+func (op *SimpleOperation) reverseMove(ctx context.Context, fsys FileSystem, budget *BackupBudget) ([]Operation, *BackupData, error) {
+	// For move, we move the file back to its original location
+	reverseOp := NewSimpleOperation(
+		OperationID("reverse_"+string(op.ID())),
+		"move",
+		op.dstPath,
+	)
+	reverseOp.SetPaths(op.dstPath, op.srcPath)
+	reverseOp.SetDescriptionDetail("destination", op.srcPath)
+	
+	// No backup needed for move operations - we just move it back
+	backupData := &BackupData{
+		OperationID:   op.ID(),
+		BackupType:    "none",
+		OriginalPath:  op.srcPath,
+		BackupContent: nil,
+		BackupTime:    time.Now(),
+		SizeMB:        0,
+		Metadata:      map[string]interface{}{"reverse_type": "move_back", "original_src": op.srcPath, "original_dst": op.dstPath},
+	}
+	
+	return []Operation{reverseOp}, backupData, nil
+}
+
+// reverseDelete generates create operation to undo delete (with budget-aware backup)
+func (op *SimpleOperation) reverseDelete(ctx context.Context, fsys FileSystem, budget *BackupBudget) ([]Operation, *BackupData, error) {
+	path := op.description.Path
+	
+	// Check if the filesystem supports Stat to determine file type and size
+	fullFS, ok := fsys.(FullFileSystem)
+	if !ok {
+		return nil, nil, fmt.Errorf("reverse delete requires filesystem with Stat support")
+	}
+	
+	// Get file info to determine type and size
+	info, err := fullFS.Stat(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot backup file for delete operation: %w", err)
+	}
+	
+	var reverseOps []Operation
+	var backupData *BackupData
+	
+	if info.IsDir() {
+		// Directory - no content backup needed, but check if it fits in budget conceptually
+		sizeMB := 0.01 // Small overhead for directory metadata
+		
+		if budget != nil {
+			if err := budget.ConsumeBackup(sizeMB); err != nil {
+				return nil, nil, fmt.Errorf("cannot backup directory '%s': %w", path, err)
+			}
+		}
+		
+		// Create reverse operation to recreate the directory
+		reverseOp := NewSimpleOperation(
+			OperationID("reverse_"+string(op.ID())),
+			"create_directory",
+			path,
+		)
+		dirItem := NewDirectory(path).WithMode(info.Mode())
+		reverseOp.SetItem(dirItem)
+		reverseOps = append(reverseOps, reverseOp)
+		
+		backupData = &BackupData{
+			OperationID:   op.ID(),
+			BackupType:    "directory",
+			OriginalPath:  path,
+			BackupContent: nil,
+			BackupMode:    info.Mode(),
+			BackupTime:    time.Now(),
+			SizeMB:        sizeMB,
+			Metadata:      map[string]interface{}{"reverse_type": "recreate_directory"},
+		}
+		
+	} else {
+		// Regular file - backup content
+		sizeMB := float64(info.Size()) / (1024 * 1024)
+		
+		if budget != nil {
+			if err := budget.ConsumeBackup(sizeMB); err != nil {
+				return nil, nil, fmt.Errorf("cannot backup file '%s' (%.2fMB): %w", path, sizeMB, err)
+			}
+		}
+		
+		// Read file content for backup
+		file, err := fullFS.Open(path)
+		if err != nil {
+			if budget != nil {
+				budget.RestoreBackup(sizeMB) // Restore budget on error
+			}
+			return nil, nil, fmt.Errorf("cannot open file for backup: %w", err)
+		}
+		defer file.Close()
+		
+		content, err := io.ReadAll(file)
+		if err != nil {
+			if budget != nil {
+				budget.RestoreBackup(sizeMB) // Restore budget on error
+			}
+			return nil, nil, fmt.Errorf("cannot read file content for backup: %w", err)
+		}
+		
+		// Create reverse operation to recreate the file
+		reverseOp := NewSimpleOperation(
+			OperationID("reverse_"+string(op.ID())),
+			"create_file",
+			path,
+		)
+		fileItem := NewFile(path).WithContent(content).WithMode(info.Mode())
+		reverseOp.SetItem(fileItem)
+		reverseOps = append(reverseOps, reverseOp)
+		
+		backupData = &BackupData{
+			OperationID:   op.ID(),
+			BackupType:    "file",
+			OriginalPath:  path,
+			BackupContent: content,
+			BackupMode:    info.Mode(),
+			BackupTime:    time.Now(),
+			SizeMB:        sizeMB,
+			Metadata:      map[string]interface{}{"reverse_type": "recreate_file"},
+		}
+	}
+	
+	return reverseOps, backupData, nil
 }
