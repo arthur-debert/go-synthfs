@@ -2,6 +2,7 @@ package synthfs
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 )
 
@@ -258,6 +259,8 @@ func TestPhase3_MixedOperations_PartialBudget(t *testing.T) {
 	}
 }
 
+// Commented out as TestPhase3_DirectoryRestore_FullContent provides more comprehensive checks.
+/*
 func TestPhase3_DirectoryDelete(t *testing.T) {
 	ctx := context.Background()
 	fs := NewTestFileSystem()
@@ -318,6 +321,7 @@ func TestPhase3_DirectoryDelete(t *testing.T) {
 		t.Errorf("Expected restore operation type 'create_directory', got '%s'", restoreOp.Describe().Type)
 	}
 }
+*/
 
 func TestPhase3_OperationFailure_BudgetRestore(t *testing.T) {
 	ctx := context.Background()
@@ -363,3 +367,316 @@ func TestPhase3_OperationFailure_BudgetRestore(t *testing.T) {
 		t.Errorf("Expected full budget remaining on operation failure, got %f MB", result.Budget.RemainingMB)
 	}
 }
+
+// This test is now superseded by TestPhase3_DirectoryRestore_FullContent below,
+// as the metadata details are part of the full content restoration test.
+// Keeping it commented out for reference or if simpler metadata-only check is needed later.
+// func TestPhase3_DirectoryDelete_BackupMetadata(t *testing.T) { ... }
+
+func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("Full directory restore with sufficient budget", func(t *testing.T) {
+		fs := NewTestFileSystem()
+		originalDir := "my_restorable_dir"
+		originalFiles := map[string]string{
+			filepath.Join(originalDir, "file1.txt"):              "content of file1",
+			filepath.Join(originalDir, "sub", "file2.txt"):       "content of file2 in sub",
+			filepath.Join(originalDir, "sub", "deep", "file3.txt"): "content of file3 in sub/deep",
+		}
+
+		// Setup initial directory structure
+		for path, content := range originalFiles {
+			dir := filepath.Dir(path)
+			if err := fs.MkdirAll(dir, 0755); err != nil {
+				t.Fatalf("Setup: Failed to create dir %s: %v", dir, err)
+			}
+			if err := fs.WriteFile(path, []byte(content), 0644); err != nil {
+				t.Fatalf("Setup: Failed to write file %s: %v", path, err)
+			}
+		}
+		// Create an empty subdirectory as well
+		emptySubDir := filepath.Join(originalDir, "empty_sub")
+		if err := fs.MkdirAll(emptySubDir, 0755); err != nil {
+			t.Fatalf("Setup: Failed to create empty_sub dir %s: %v", emptySubDir, err)
+		}
+
+
+		// 1. Delete the directory in a restorable batch
+		batchDelete := NewBatch().WithFileSystem(fs).WithContext(ctx)
+		_, err := batchDelete.Delete(originalDir)
+		if err != nil {
+			t.Fatalf("Failed to add Delete op: %v", err)
+		}
+
+		resultDelete, err := batchDelete.RunRestorableWithBudget(10) // 10MB budget, should be ample
+		if err != nil {
+			t.Fatalf("RunRestorableWithBudget for delete failed: %v", err)
+		}
+		if !resultDelete.Success {
+			t.Fatalf("Delete batch was not successful: %v", resultDelete.Errors)
+		}
+
+		// Verify directory is gone
+		if _, err := fs.Stat(originalDir); err == nil {
+			t.Fatal("Original directory was not deleted")
+		}
+
+		// Verify BackupData for the delete operation
+		var deleteOpResult OperationResult
+		foundDeleteOp := false
+		for _, opRes := range resultDelete.Operations {
+			if opRes.Operation.Describe().Type == "delete" && opRes.Operation.Describe().Path == originalDir {
+				deleteOpResult = opRes
+				foundDeleteOp = true
+				break
+			}
+		}
+		if !foundDeleteOp {
+			t.Fatal("Delete operation result not found")
+		}
+		if deleteOpResult.BackupData == nil {
+			t.Fatal("BackupData is nil for delete operation")
+		}
+		if deleteOpResult.BackupData.BackupType != "directory_tree" {
+			t.Errorf("Expected BackupType 'directory_tree', got '%s'", deleteOpResult.BackupData.BackupType)
+		}
+
+		backedUpItems, ok := deleteOpResult.BackupData.Metadata["items"].([]BackedUpItem)
+		if !ok {
+			t.Fatal("Metadata items not found or not of type []BackedUpItem")
+		}
+		// Expected items: originalDir (.), file1, sub, sub/file2, sub/deep, sub/deep/file3, empty_sub (7 items)
+		if len(backedUpItems) != 7 {
+			t.Errorf("Expected 7 backed up items, got %d", len(backedUpItems))
+		}
+
+
+		// 2. Execute the RestoreOps
+		if len(resultDelete.RestoreOps) == 0 {
+			t.Fatal("No RestoreOps generated")
+		}
+
+		// We need to add operations to the batch directly as they are already created
+		// The pipeline within batchRestore will handle their execution.
+		// For simplicity, we'll use a new pipeline and executor directly.
+
+		restorePipeline := NewMemPipeline()
+		err = restorePipeline.Add(resultDelete.RestoreOps...)
+		if err != nil {
+			t.Fatalf("Failed to add RestoreOps to pipeline: %v", err)
+		}
+
+		executor := NewExecutor()
+		// Run restore ops without further backup/budgeting for the restore itself
+		resultRestore := executor.Run(ctx, restorePipeline, fs)
+		if !resultRestore.Success {
+			t.Fatalf("Restore pipeline execution failed: %v", resultRestore.Errors)
+		}
+
+		// 3. Verify restored structure and content
+		for path, expectedContent := range originalFiles {
+			content, err := fs.ReadFile(path)
+			if err != nil {
+				t.Errorf("Failed to read restored file %s: %v", path, err)
+				continue
+			}
+			if string(content) != expectedContent {
+				t.Errorf("Content mismatch for %s: expected '%s', got '%s'", path, expectedContent, string(content))
+			}
+		}
+		if _, err := fs.Stat(emptySubDir); err != nil {
+			t.Errorf("Empty subdirectory %s not restored: %v", emptySubDir, err)
+		}
+		if _, err := fs.Stat(originalDir); err != nil {
+			t.Errorf("Original directory %s not restored: %v", originalDir, err)
+		}
+	})
+
+	t.Run("Partial directory restore due to budget exhaustion", func(t *testing.T) {
+		fs := NewTestFileSystem()
+		originalDir := "my_partial_dir"
+		// file1: 8 bytes, file2: 18 bytes
+		originalFiles := map[string]string{
+			filepath.Join(originalDir, "file1.txt"):        "content1",
+			filepath.Join(originalDir, "sub", "file2.txt"): "content2 is longer",
+		}
+		// Total content size: 8 + 18 = 26 bytes
+
+		// Setup initial directory structure
+		for path, content := range originalFiles {
+			dir := filepath.Dir(path)
+			if err := fs.MkdirAll(dir, 0755); err != nil {t.Fatalf("Setup: Failed to create dir %s: %v", dir, err)}
+			if err := fs.WriteFile(path, []byte(content), 0644); err != nil {t.Fatalf("Setup: Failed to write file %s: %v", path, err)}
+		}
+
+		batchDelete := NewBatch().WithFileSystem(fs).WithContext(ctx)
+		_, err := batchDelete.Delete(originalDir)
+		if err != nil {t.Fatalf("Failed to add Delete op: %v", err)}
+
+		// Budget of 0 MB. Any file content backup will exceed this.
+		deleteResult, err := batchDelete.RunWithOptions(PipelineOptions{Restorable: true, MaxBackupSizeMB: 0})
+		if err != nil {t.Fatalf("Run for delete batch failed: %v", err)}
+
+		// The delete operation itself should succeed.
+		// The ReverseOps generation within it would have returned an error, which Executor logs.
+		if !deleteResult.Success {
+			t.Fatalf("Delete operation batch was not successful: %v", deleteResult.Errors)
+		}
+
+		// Find the delete op result to check its BackupData
+		var deleteOpRes *OperationResult
+		for i := range deleteResult.Operations {
+			if deleteResult.Operations[i].Operation.Describe().Path == originalDir {
+				deleteOpRes = &deleteResult.Operations[i]
+				break
+			}
+		}
+		if deleteOpRes == nil {t.Fatal("Delete operation result not found")}
+
+		// We expect a partial backup.
+		// The error from ReverseOps (due to budget) is logged by Executor but doesn't fail the main op.
+		// The number of RestoreOps might be less than total items.
+		if deleteOpRes.BackupData == nil {t.Fatal("BackupData is nil")}
+		if deleteOpRes.BackupData.SizeMB != 0 { // With 0 budget, no file content should be backed up.
+			items, _ := deleteOpRes.BackupData.Metadata["items"].([]BackedUpItem)
+			t.Errorf("Expected SizeMB 0 when budget is 0, got %f. Items: %+v", deleteOpRes.BackupData.SizeMB, items)
+		}
+
+		// Check RestoreOps: should only contain directory creations
+		expectedRestoreOpsCount := 2 // my_partial_dir, my_partial_dir/sub
+		if len(deleteResult.RestoreOps) != expectedRestoreOpsCount {
+			t.Errorf("Expected %d RestoreOps (only directories), got %d", expectedRestoreOpsCount, len(deleteResult.RestoreOps))
+			for idx, rop := range deleteResult.RestoreOps {
+				t.Logf("RestoreOp[%d]: %s %s", idx, rop.Describe().Type, rop.Describe().Path)
+			}
+		}
+		for _, ro := range deleteResult.RestoreOps {
+			if ro.Describe().Type != "create_directory" {
+				t.Errorf("Expected only 'create_directory' RestoreOps, got %s for %s", ro.Describe().Type, ro.Describe().Path)
+			}
+		}
+
+		// Execute the RestoreOps
+		restorePipeline := NewMemPipeline()
+		if len(deleteResult.RestoreOps) > 0 {
+			err = restorePipeline.Add(deleteResult.RestoreOps...)
+			if err != nil {t.Fatalf("Failed to add RestoreOps to pipeline: %v", err)}
+		}
+
+		executor := NewExecutor()
+		restoreRunResult := executor.Run(ctx, restorePipeline, fs)
+		if !restoreRunResult.Success {
+			t.Fatalf("Restore pipeline execution failed: %v", restoreRunResult.Errors)
+		}
+
+		// Verify what was restored: only directory structure
+		if _, err := fs.Stat(originalDir); err != nil { // Check root dir
+			t.Errorf("Original directory %s not restored: %v", originalDir, err)
+		}
+		if _, err := fs.Stat(filepath.Join(originalDir, "sub")); err != nil { // Check sub dir
+			t.Errorf("Subdirectory %s/sub not restored: %v", originalDir, err)
+		}
+
+		// Verify files were NOT restored
+		_, errFile1 := fs.Stat(filepath.Join(originalDir, "file1.txt"))
+		if errFile1 == nil {
+			t.Error("Expected file1.txt NOT to be restored due to 0 budget, but it was found.")
+		}
+		_, errFile2 := fs.Stat(filepath.Join(originalDir, "sub", "file2.txt"))
+		if errFile2 == nil {
+			t.Error("Expected file2.txt NOT to be restored due to 0 budget, but it was found.")
+		}
+	})
+}
+
+// Commented out as TestPhase3_DirectoryRestore_FullContent provides more comprehensive checks
+// including metadata.
+// func TestPhase3_DirectoryDelete_BackupMetadata(t *testing.T) {
+// 	ctx := context.Background()
+// 	fs := NewTestFileSystem()
+
+// 	// Create a directory with a file inside to ensure it's not empty
+// 	if err := fs.MkdirAll("my-dir", 0755); err != nil {
+// 		t.Fatalf("Failed to create directory: %v", err)
+// 	}
+// 	if err := fs.WriteFile("my-dir/dummy.txt", []byte("content"), 0644); err != nil {
+// 		t.Fatalf("Failed to create file in directory: %v", err)
+// 	}
+
+// 	batch := NewBatch().WithFileSystem(fs).WithContext(ctx)
+
+// 	// Add delete operation for the directory
+// 	_, err := batch.Delete("my-dir")
+// 	if err != nil {
+// 		t.Fatalf("Failed to add Delete for directory: %v", err)
+// 	}
+
+// 	// Execute with restorable mode
+// 	result, err := batch.RunRestorable()
+// 	if err != nil {
+// 		t.Fatalf("RunRestorable failed: %v", err)
+// 	}
+
+// 	if !result.Success {
+// 		t.Fatalf("Batch execution failed: %v", result.Errors)
+// 	}
+
+// 	// Find the delete operation result
+// 	var deleteOpResult *OperationResult
+// 	for i := range result.Operations {
+// 		if result.Operations[i].Operation.Describe().Type == "delete" && result.Operations[i].Operation.Describe().Path == "my-dir" {
+// 			deleteOpResult = &result.Operations[i]
+// 			break
+// 		}
+// 	}
+
+// 	if deleteOpResult == nil {
+// 		t.Fatal("Could not find the delete operation result for 'my-dir'")
+// 	}
+
+// 	if deleteOpResult.BackupData == nil {
+// 		t.Fatal("Expected BackupData for directory delete operation")
+// 	}
+
+// 	// This check would change with full directory backup; previously "directory"
+// 	// if deleteOpResult.BackupData.BackupType != "directory_tree" {
+// 	// 	t.Errorf("Expected BackupData type 'directory_tree', got '%s'", deleteOpResult.BackupData.BackupType)
+// 	// }
+
+// 	meta := deleteOpResult.BackupData.Metadata
+// 	if meta == nil {
+// 		t.Fatal("Expected metadata in BackupData")
+// 	}
+// 	// These metadata keys were specific to the simplified directory backup
+// 	// contentsRestored, ok := meta["contents_restored"].(bool)
+// 	// if !ok || contentsRestored {
+// 	// 	t.Errorf("Expected metadata 'contents_restored' to be false, got %v (ok: %v)", meta["contents_restored"], ok)
+// 	// }
+// 	// note, ok := meta["note"].(string)
+// 	// expectedNote := "Directory structure restored empty; contents are not backed up."
+// 	// if !ok || note != expectedNote {
+// 	// 	t.Errorf("Expected metadata 'note' to be '%s', got '%s' (ok: %v)", expectedNote, note, ok)
+// 	// }
+
+// 	// Verify the directory is actually gone
+// 	if _, err := fs.Stat("my-dir"); err == nil {
+// 		t.Error("Expected 'my-dir' to be deleted from filesystem")
+// 	}
+
+// 	// Optional: Verify the reverse operation would create an empty directory
+// 	// This also changes with full directory content backup
+// 	// if len(result.RestoreOps) == 0 {
+// 	// 	t.Fatal("Expected restore operations to be generated")
+// 	// }
+// 	// foundRestoreDirOp := false
+// 	// for _, ro := range result.RestoreOps {
+// 	// 	if ro.Describe().Type == "create_directory" && ro.Describe().Path == "my-dir" {
+// 	// 		foundRestoreDirOp = true
+// 	// 		break
+// 	// 	}
+// 	// }
+// 	// if !foundRestoreDirOp {
+// 	// 	t.Error("Expected a 'create_directory' restore operation for 'my-dir'")
+// 	// }
+// }

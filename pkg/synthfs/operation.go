@@ -45,6 +45,18 @@ type BackupData struct {
 	BackupTime    time.Time                `json:"backup_time"`    // When backup was created
 	SizeMB        float64                  `json:"size_mb"`        // Size in MB for budget tracking
 	Metadata      map[string]interface{}   `json:"metadata"`       // Additional metadata
+	                                                           // For "directory_tree", Metadata["items"] will be []BackedUpItem
+}
+
+// BackedUpItem represents a single file or directory within a backed-up directory tree.
+// This struct will be stored in the Metadata field of the main BackupData object for the directory.
+type BackedUpItem struct {
+	RelativePath string      `json:"relative_path"` // Path relative to the root of the backup
+	ItemType     string      `json:"item_type"`     // "file" or "directory"
+	Mode         fs.FileMode `json:"mode"`          // Original file/directory mode
+	Content      []byte      `json:"-"`             // File content (nil for directories); json ignored for cleaner metadata logs
+	Size         int64       `json:"size"`          // File size (0 for directories if not storing their own metadata size)
+	ModTime      time.Time   `json:"mod_time"`      // Original modification time
 }
 
 // BackupBudget tracks memory usage for backup operations
@@ -1238,6 +1250,20 @@ func (op *SimpleOperation) rollbackUnarchive(ctx context.Context, fsys FileSyste
 	return fmt.Errorf("rollback of unarchive operations is not automatically supported for safety reasons")
 }
 
+// Helper function to read file content
+func readFileContent(fsys FullFileSystem, path string) ([]byte, error) {
+	file, err := fsys.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("opening file %s: %w", path, err)
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			Logger().Warn().Err(closeErr).Str("path", path).Msg("failed to close file after reading content for backup")
+		}
+	}()
+	return io.ReadAll(file)
+}
+
 // --- Phase III: Reverse Operation Implementations ---
 
 // reverseCreateFile generates delete operation to undo file creation
@@ -1430,71 +1456,129 @@ func (op *SimpleOperation) reverseDelete(ctx context.Context, fsys FileSystem, b
 	
 	var reverseOps []Operation
 	var backupData *BackupData
+	// err is already declared from fullFS.Stat(path) and is nil if we reached here.
+	// It will be updated by walkAndBackup or file processing errors.
 	
 	if info.IsDir() {
-		// Directory - no content backup needed, but check if it fits in budget conceptually
-		sizeMB := 0.01 // Small overhead for directory metadata
-		
-		if budget != nil {
-			if err := budget.ConsumeBackup(sizeMB); err != nil {
-				return nil, nil, fmt.Errorf("cannot backup directory '%s': %w", path, err)
+		backedUpItems := make([]BackedUpItem, 0)
+		var totalBackedUpSize int64 // Accumulates byte size of backed-up files
+
+		// Add the root directory itself to backedUpItems first
+		// This ensures the directory itself is always listed, even if empty or if content backup fails.
+		backedUpItems = append(backedUpItems, BackedUpItem{
+			RelativePath: ".",
+			ItemType:     "directory",
+			Mode:         info.Mode(),
+			ModTime:      info.ModTime(),
+			Size:         0,
+		})
+
+		// Helper function for recursive backup
+		// Returns the first budget error encountered, or a more critical FS error.
+		var walkAndBackup func(currentPath string, relativePath string) (firstBudgetOrFSError error)
+		walkAndBackup = func(currentPath string, relativePath string) (firstBudgetOrFSError error) {
+			entries, readDirErr := fs.ReadDir(fullFS, currentPath)
+			if readDirErr != nil {
+				return fmt.Errorf("failed to read directory %s for backup: %w", currentPath, readDirErr)
 			}
+
+			for _, entry := range entries {
+				entryInfo, entryInfoErr := entry.Info()
+				if entryInfoErr != nil {
+					return fmt.Errorf("failed to get info for entry %s in %s: %w", entry.Name(), currentPath, entryInfoErr)
+				}
+
+				entryRelativePath := filepath.Join(relativePath, entryInfo.Name())
+
+				if entryInfo.IsDir() {
+					backedUpItems = append(backedUpItems, BackedUpItem{
+						RelativePath: entryRelativePath,
+						ItemType:     "directory",
+						Mode:         entryInfo.Mode(),
+						ModTime:      entryInfo.ModTime(),
+					})
+					deeperErr := walkAndBackup(filepath.Join(currentPath, entryInfo.Name()), entryRelativePath)
+					if deeperErr != nil {
+						// Prioritize hard FS errors. If it's a budget error, only store the first one encountered.
+						if !strings.Contains(deeperErr.Error(), "budget exceeded") {
+							return deeperErr // Propagate hard FS errors immediately
+						}
+						if firstBudgetOrFSError == nil {
+							firstBudgetOrFSError = deeperErr
+						}
+					}
+				} else { // File
+					fileContent, readErr := readFileContent(fullFS, filepath.Join(currentPath, entryInfo.Name()))
+					if readErr != nil {
+						return fmt.Errorf("failed to read file %s for backup: %w", entryRelativePath, readErr)
+					}
+
+					fileSizeBytes := entryInfo.Size()
+					fileSizeMB := float64(fileSizeBytes) / (1024 * 1024)
+
+					canAddFile := true
+					if budget != nil {
+						if budgetErr := budget.ConsumeBackup(fileSizeMB); budgetErr != nil {
+							if firstBudgetOrFSError == nil {
+								firstBudgetOrFSError = fmt.Errorf("budget exceeded for file %s (%.2fMB): %w", entryRelativePath, fileSizeMB, budgetErr)
+							}
+							canAddFile = false // Do not add this file if budget exceeded
+						}
+					}
+
+					if canAddFile {
+						backedUpItems = append(backedUpItems, BackedUpItem{
+							RelativePath: entryRelativePath,
+							ItemType:     "file",
+							Mode:         entryInfo.Mode(),
+							Content:      fileContent,
+							Size:         fileSizeBytes,
+							ModTime:      entryInfo.ModTime(),
+						})
+						totalBackedUpSize += fileSizeBytes
+					}
+				}
+			}
+			return firstBudgetOrFSError
+		}
+
+		walkErr := walkAndBackup(path, ".")
+		if walkErr != nil {
+			err = walkErr // Update the main error for reverseDelete
 		}
 		
-		// Create reverse operation to recreate the directory
-		reverseOp := NewSimpleOperation(
-			OperationID("reverse_"+string(op.ID())),
-			"create_directory",
-			path,
-		)
-		dirItem := NewDirectory(path).WithMode(info.Mode())
-		reverseOp.SetItem(dirItem)
-		reverseOps = append(reverseOps, reverseOp)
-		
+		totalBackedUpSizeMB := float64(totalBackedUpSize) / (1024 * 1024)
 		backupData = &BackupData{
 			OperationID:   op.ID(),
-			BackupType:    "directory",
+			BackupType:    "directory_tree",
 			OriginalPath:  path,
 			BackupContent: nil,
 			BackupMode:    info.Mode(),
 			BackupTime:    time.Now(),
-			SizeMB:        sizeMB,
-			Metadata:      map[string]interface{}{"reverse_type": "recreate_directory"},
+			SizeMB:        totalBackedUpSizeMB,
+			Metadata: map[string]interface{}{
+				"items":        backedUpItems,
+				"reverse_type": "recreate_directory_tree",
+			},
 		}
-		
 	} else {
 		// Regular file - backup content
 		sizeMB := float64(info.Size()) / (1024 * 1024)
 		
 		if budget != nil {
-			if err := budget.ConsumeBackup(sizeMB); err != nil {
-				return nil, nil, fmt.Errorf("cannot backup file '%s' (%.2fMB): %w", path, sizeMB, err)
+			if budgetErr := budget.ConsumeBackup(sizeMB); budgetErr != nil {
+				return nil, nil, fmt.Errorf("cannot backup file '%s' (%.2fMB): %w", path, sizeMB, budgetErr)
 			}
 		}
 		
-		// Read file content for backup
-		file, err := fullFS.Open(path)
-		if err != nil {
+		content, fileReadErr := readFileContent(fullFS, path)
+		if fileReadErr != nil {
 			if budget != nil {
-				budget.RestoreBackup(sizeMB) // Restore budget on error
+				budget.RestoreBackup(sizeMB)
 			}
-			return nil, nil, fmt.Errorf("cannot open file for backup: %w", err)
-		}
-		defer func() {
-			if closeErr := file.Close(); closeErr != nil {
-				Logger().Warn().Err(closeErr).Str("path", path).Msg("failed to close file during backup")
-			}
-		}()
-		
-		content, err := io.ReadAll(file)
-		if err != nil {
-			if budget != nil {
-				budget.RestoreBackup(sizeMB) // Restore budget on error
-			}
-			return nil, nil, fmt.Errorf("cannot read file content for backup: %w", err)
+			return nil, nil, fmt.Errorf("cannot read file content for backup for %s: %w", path, fileReadErr)
 		}
 		
-		// Create reverse operation to recreate the file
 		reverseOp := NewSimpleOperation(
 			OperationID("reverse_"+string(op.ID())),
 			"create_file",
@@ -1515,6 +1599,35 @@ func (op *SimpleOperation) reverseDelete(ctx context.Context, fsys FileSystem, b
 			Metadata:      map[string]interface{}{"reverse_type": "recreate_file"},
 		}
 	}
+
+	// Generate reverse operations from backedUpItems if it's a directory_tree backup
+	if backupData != nil && backupData.BackupType == "directory_tree" {
+		if items, ok := backupData.Metadata["items"].([]BackedUpItem); ok {
+			generatedOps := make([]Operation, 0, len(items))
+			for i, item := range items {
+				var singleRevOp Operation
+				revOpItemID := OperationID(fmt.Sprintf("%s_item_%d", op.ID(), i))
+				itemAbsPath := filepath.Join(path, item.RelativePath)
+				if item.RelativePath == "." {
+					itemAbsPath = path
+				}
+
+				if item.ItemType == "directory" {
+					sOp := NewSimpleOperation(revOpItemID, "create_directory", itemAbsPath)
+					dirItem := NewDirectory(itemAbsPath).WithMode(item.Mode)
+					sOp.SetItem(dirItem)
+					singleRevOp = sOp
+				} else {
+					sOp := NewSimpleOperation(revOpItemID, "create_file", itemAbsPath)
+					fileItem := NewFile(itemAbsPath).WithContent(item.Content).WithMode(item.Mode)
+					sOp.SetItem(fileItem)
+					singleRevOp = sOp
+				}
+				generatedOps = append(generatedOps, singleRevOp)
+			}
+			reverseOps = generatedOps
+		}
+	}
 	
-	return reverseOps, backupData, nil
+	return reverseOps, backupData, err
 }
