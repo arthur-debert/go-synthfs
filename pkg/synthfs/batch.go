@@ -398,8 +398,15 @@ func (b *Batch) UnarchiveWithPatterns(archivePath, extractPath string, patterns 
 
 // Run runs all operations in the batch using the existing infrastructure.
 func (b *Batch) Run() (*Result, error) {
+	return b.RunWithOptions(DefaultPipelineOptions())
+}
+
+// RunWithOptions runs all operations in the batch with specified options (Phase III).
+func (b *Batch) RunWithOptions(opts PipelineOptions) (*Result, error) {
 	Logger().Info().
 		Int("operation_count", len(b.operations)).
+		Bool("restorable", opts.Restorable).
+		Int("max_backup_mb", opts.MaxBackupSizeMB).
 		Msg("executing batch")
 
 	// Resolve implicit dependencies before execution
@@ -416,16 +423,34 @@ func (b *Batch) Run() (*Result, error) {
 		return nil, fmt.Errorf("failed to add operations to pipeline: %w", err)
 	}
 
-	// Run using existing infrastructure
-	result := executor.Run(b.ctx, pipeline, b.fs)
+	// Run using Phase III infrastructure
+	result := executor.RunWithOptions(b.ctx, pipeline, b.fs, opts)
 
 	Logger().Info().
 		Bool("success", result.Success).
 		Int("operations_executed", len(result.Operations)).
+		Int("restore_operations", len(result.RestoreOps)).
 		Dur("duration", result.Duration).
 		Msg("batch run completed")
 
 	return result, nil
+}
+
+// RunRestorable runs all operations with backup enabled using the default 10MB budget (Phase III).
+// This is a convenience method for the common case of wanting restorable execution.
+func (b *Batch) RunRestorable() (*Result, error) {
+	return b.RunWithOptions(PipelineOptions{
+		Restorable:      true,
+		MaxBackupSizeMB: 10,
+	})
+}
+
+// RunRestorableWithBudget runs all operations with backup enabled using a custom budget (Phase III).
+func (b *Batch) RunRestorableWithBudget(maxBackupMB int) (*Result, error) {
+	return b.RunWithOptions(PipelineOptions{
+		Restorable:      true,
+		MaxBackupSizeMB: maxBackupMB,
+	})
 }
 
 // generateID creates a unique operation ID based on type and path.
