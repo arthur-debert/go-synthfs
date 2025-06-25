@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -123,6 +124,225 @@ func TestConflictError_Error(t *testing.T) {
 		t.Errorf("Expected %q, got %q", expected, err.Error())
 	}
 }
+
+func TestReverseOperations_DeleteDirectory(t *testing.T) {
+	ctx := context.Background()
+	defaultBudgetMB := 10.0
+
+	setupTestFSForDirDelete := func(fs *TestFileSystem) {
+		fs.MkdirAll("dir1", 0755)
+		fs.WriteFile("dir1/file1.txt", []byte("content1"), 0644) // 8 bytes
+		fs.MkdirAll("dir1/subdir", 0755)
+		fs.WriteFile("dir1/subdir/file2.txt", []byte("content2 is longer"), 0644) // 18 bytes
+		fs.WriteFile("dir1/file3.txt", []byte("content3"), 0644) // 8 bytes
+	}
+
+	t.Run("delete empty directory", func(t *testing.T) {
+		fs := NewTestFileSystem()
+		fs.MkdirAll("empty_dir", 0755)
+
+		op := NewSimpleOperation("test-del-empty-dir", "delete", "empty_dir")
+		budget := &BackupBudget{TotalMB: defaultBudgetMB, RemainingMB: defaultBudgetMB}
+
+		reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
+		if err != nil {
+			t.Fatalf("ReverseOps for empty dir failed: %v", err)
+		}
+
+		if backupData.BackupType != "directory_tree" {
+			t.Errorf("Expected BackupType 'directory_tree', got '%s'", backupData.BackupType)
+		}
+		if backupData.SizeMB != 0 {
+			t.Errorf("Expected SizeMB 0 for empty dir, got %f", backupData.SizeMB)
+		}
+		items, _ := backupData.Metadata["items"].([]BackedUpItem)
+		if len(items) != 1 || items[0].RelativePath != "." || items[0].ItemType != "directory" {
+			t.Errorf("Expected 1 BackedUpItem for the directory itself, got %v", items)
+		}
+		if len(reverseOps) != 1 || reverseOps[0].Describe().Type != "create_directory" || reverseOps[0].Describe().Path != "empty_dir" {
+			t.Errorf("Expected 1 create_directory reverse op, got %v", reverseOps)
+		}
+	})
+
+	t.Run("delete directory with content, sufficient budget", func(t *testing.T) {
+		fs := NewTestFileSystem()
+		setupTestFSForDirDelete(fs)
+
+		op := NewSimpleOperation("test-del-dir-full", "delete", "dir1")
+		budget := &BackupBudget{TotalMB: defaultBudgetMB, RemainingMB: defaultBudgetMB}
+
+		reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
+		if err != nil {
+			t.Fatalf("ReverseOps for dir with content failed: %v", err)
+		}
+
+		if backupData.BackupType != "directory_tree" {
+			t.Errorf("Expected BackupType 'directory_tree', got '%s'", backupData.BackupType)
+		}
+		expectedTotalSize := int64(8 + 18 + 8) // file1 + file2 + file3
+		expectedTotalSizeMB := float64(expectedTotalSize) / (1024 * 1024)
+		if backupData.SizeMB != expectedTotalSizeMB {
+			t.Errorf("Expected SizeMB %f, got %f", expectedTotalSizeMB, backupData.SizeMB)
+		}
+
+		items, _ := backupData.Metadata["items"].([]BackedUpItem)
+		if len(items) != 5 { // dir1, file1.txt, subdir, file2.txt, file3.txt
+			t.Fatalf("Expected 5 BackedUpItems, got %d: %+v", len(items), items)
+		}
+
+		// Check item order and types (basic check)
+		// Order of siblings is not guaranteed by ReadDir, so we check for presence and correctness.
+		expectedItems := map[string]struct{ ItemType string; Content_or_Nil interface{} }{
+			".":                               {ItemType: "directory"},
+			"file1.txt":                       {ItemType: "file", Content_or_Nil: "content1"},
+			"subdir":                          {ItemType: "directory"},
+			filepath.Join("subdir", "file2.txt"): {ItemType: "file", Content_or_Nil: "content2 is longer"},
+			"file3.txt":                       {ItemType: "file", Content_or_Nil: "content3"},
+		}
+		if len(items) != len(expectedItems) {
+			t.Errorf("Number of backed up items mismatch. Expected %d, Got %d: %+v", len(expectedItems), len(items), items)
+		}
+		for _, item := range items {
+			expected, found := expectedItems[item.RelativePath]
+			if !found {
+				t.Errorf("Unexpected item in backup: %+v", item)
+				continue
+			}
+			if item.ItemType != expected.ItemType {
+				t.Errorf("ItemType mismatch for %s. Expected %s, Got %s", item.RelativePath, expected.ItemType, item.ItemType)
+			}
+			if expected.ItemType == "file" && string(item.Content) != expected.Content_or_Nil.(string) {
+				t.Errorf("Content mismatch for file %s. Expected '%s', Got '%s'", item.RelativePath, expected.Content_or_Nil.(string), string(item.Content))
+			}
+			delete(expectedItems, item.RelativePath) // Mark as found
+		}
+		if len(expectedItems) > 0 {
+			t.Errorf("Not all expected items were found in backup. Missing: %v", expectedItems)
+		}
+
+
+		if len(reverseOps) != 5 {
+			t.Fatalf("Expected 5 reverse operations, got %d", len(reverseOps))
+		}
+		// Check reverse op types and paths more flexibly
+		expectedRevOps := map[string]string{ // path -> type
+			"dir1":                                "create_directory",
+			filepath.Join("dir1", "file1.txt"):       "create_file",
+			filepath.Join("dir1", "subdir"):          "create_directory",
+			filepath.Join("dir1", "subdir", "file2.txt"): "create_file",
+			filepath.Join("dir1", "file3.txt"):       "create_file",
+		}
+		for _, ro := range reverseOps {
+			path := ro.Describe().Path
+			expectedType, found := expectedRevOps[path]
+			if !found {
+				t.Errorf("Unexpected reverse operation path: %s", path)
+				continue
+			}
+			if ro.Describe().Type != expectedType {
+				t.Errorf("Reverse op type mismatch for %s. Expected %s, Got %s", path, expectedType, ro.Describe().Type)
+			}
+			delete(expectedRevOps, path)
+		}
+		if len(expectedRevOps) > 0 {
+			t.Errorf("Not all expected reverse operations were generated. Missing for paths: %v", expectedRevOps)
+		}
+
+		// Verify content of a backed up file by finding it in items
+		var foundFile2 bool
+		for _, item := range items {
+			if item.RelativePath == filepath.Join("subdir", "file2.txt") {
+				foundFile2 = true
+				if string(item.Content) != "content2 is longer" {
+					t.Errorf("Expected content for file2.txt to be 'content2 is longer', got '%s'", string(item.Content))
+				}
+				break
+			}
+		}
+		if !foundFile2 {
+			t.Error("file2.txt not found in backed up items")
+		}
+	})
+
+	t.Run("delete directory, budget insufficient for all files", func(t *testing.T) {
+		fs := NewTestFileSystem()
+		setupTestFSForDirDelete(fs) // total 34 bytes needed
+
+		op := NewSimpleOperation("test-del-dir-partial", "delete", "dir1")
+		// Budget enough for file1.txt (8b) and a bit more, but not file2.txt (18b)
+		smallBudgetMB := float64(10) / (1024 * 1024) // Approx 10 bytes
+		budget := &BackupBudget{TotalMB: smallBudgetMB, RemainingMB: smallBudgetMB}
+
+		_, backupData, err := op.ReverseOps(ctx, fs, budget)
+		if err == nil {
+			t.Fatal("Expected ReverseOps to return an error due to insufficient budget")
+		}
+		if !strings.Contains(err.Error(), "budget exceeded") {
+			t.Fatalf("Expected budget exceeded error, got: %v", err)
+		}
+
+		// BackupData should still exist and contain partially backed up items
+		if backupData == nil {
+			t.Fatal("Expected partial BackupData even on budget error")
+		}
+		if backupData.BackupType != "directory_tree" {
+			t.Errorf("Expected BackupType 'directory_tree', got '%s'", backupData.BackupType)
+		}
+
+		items, _ := backupData.Metadata["items"].([]BackedUpItem)
+		// Should have dir1, file1.txt. file2.txt should have caused the error.
+		// So, 2 items successfully processed before error on the 3rd considered file (file2.txt).
+		// The order of processing files within a dir level isn't strictly guaranteed by ReadDir,
+		// but file1.txt (8b) is smaller than file2.txt (18b).
+		// Let's check that at least file1.txt was backed up.
+		var file1BackedUp bool
+		for _, item := range items {
+			if item.RelativePath == "file1.txt" && item.ItemType == "file" {
+				file1BackedUp = true
+				break
+			}
+		}
+		if !file1BackedUp {
+			t.Errorf("Expected file1.txt to be backed up before budget exhaustion. Items: %+v", items)
+		}
+
+		// Check that total backed up size is less than the full amount
+		expectedFullSize := int64(8 + 18 + 8)
+		if backupData.SizeMB >= float64(expectedFullSize)/(1024*1024) {
+			t.Errorf("Expected partial backup size, got %f MB", backupData.SizeMB)
+		}
+		// Specifically, it should be the size of file1.txt
+		if backupData.SizeMB != float64(8)/(1024*1024) {
+			t.Errorf("Expected backup size to be for file1.txt (8 bytes), got %f MB. Items: %+v", backupData.SizeMB, items)
+		}
+	})
+
+	t.Run("delete directory, budget insufficient for any file", func(t *testing.T) {
+		fs := NewTestFileSystem()
+		setupTestFSForDirDelete(fs) // Smallest file is 8 bytes
+
+		op := NewSimpleOperation("test-del-dir-none", "delete", "dir1")
+		tinyBudgetMB := float64(1) / (1024 * 1024) // 1 byte budget
+		budget := &BackupBudget{TotalMB: tinyBudgetMB, RemainingMB: tinyBudgetMB}
+
+		_, backupData, err := op.ReverseOps(ctx, fs, budget)
+		if err == nil {
+			t.Fatal("Expected ReverseOps to return an error due to insufficient budget for any file")
+		}
+		if !strings.Contains(err.Error(), "budget exceeded") {
+			t.Fatalf("Expected budget exceeded error, got: %v", err)
+		}
+		if backupData.SizeMB != 0 {
+			t.Errorf("Expected SizeMB 0 when no files could be backed up, got %f", backupData.SizeMB)
+		}
+		items, _ := backupData.Metadata["items"].([]BackedUpItem)
+		// Only the root dir item should be present
+		if len(items) != 1 || items[0].ItemType != "directory" || items[0].RelativePath != "." {
+			t.Errorf("Expected only root dir item in partial backup, got %+v", items)
+		}
+	})
+}
+
 
 func TestSimpleOperation_Rollback(t *testing.T) {
 	ctx := context.Background()
@@ -1070,4 +1290,267 @@ func (fs *basicFileSystem) Readlink(name string) (string, error) {
 
 func (fs *basicFileSystem) Rename(oldpath, newpath string) error {
 	return nil
+}
+
+// Add new comprehensive tests for directory delete ReverseOps
+func TestReverseOperations_DeleteDirectory_Comprehensive(t *testing.T) {
+	ctx := context.Background()
+	defaultBudgetMB := 10.0 // Default 10MB budget for most tests
+
+	// Helper to create a filesystem structure for testing
+	setupTestFS := func(t *testing.T, fs *TestFileSystem, structure map[string]interface{}) {
+		for path, content := range structure {
+			if strings.HasSuffix(path, "/") { // Directory
+				err := fs.MkdirAll(strings.TrimSuffix(path, "/"), 0755)
+				if err != nil {
+					t.Fatalf("Failed to create dir %s: %v", path, err)
+				}
+			} else { // File
+				err := fs.WriteFile(path, []byte(content.(string)), 0644)
+				if err != nil {
+					t.Fatalf("Failed to create file %s: %v", path, err)
+				}
+			}
+		}
+	}
+
+	t.Run("delete empty directory", func(t *testing.T) {
+		fs := NewTestFileSystem()
+		setupTestFS(t, fs, map[string]interface{}{"empty_dir/": nil})
+
+		op := NewSimpleOperation("test-del-empty", "delete", "empty_dir")
+		budget := &BackupBudget{TotalMB: defaultBudgetMB, RemainingMB: defaultBudgetMB}
+
+		reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
+		if err != nil {
+			t.Fatalf("ReverseOps failed: %v", err)
+		}
+
+		if backupData.BackupType != "directory_tree" {
+			t.Errorf("Expected BackupType 'directory_tree', got '%s'", backupData.BackupType)
+		}
+		if backupData.SizeMB != 0 {
+			t.Errorf("Expected SizeMB 0 for empty dir backup, got %f", backupData.SizeMB)
+		}
+		metadataItems, ok := backupData.Metadata["items"].([]BackedUpItem)
+		if !ok || len(metadataItems) != 1 {
+			t.Fatalf("Expected 1 metadata item for the dir itself, got %d", len(metadataItems))
+		}
+		if metadataItems[0].RelativePath != "." || metadataItems[0].ItemType != "directory" {
+			t.Errorf("Unexpected metadata item for empty dir: %+v", metadataItems[0])
+		}
+		if len(reverseOps) != 1 || reverseOps[0].Describe().Type != "create_directory" || reverseOps[0].Describe().Path != "empty_dir" {
+			t.Errorf("Expected 1 create_directory reverse op for empty_dir, got ops: %+v", reverseOps)
+		}
+	})
+
+	t.Run("directory with files only", func(t *testing.T) {
+		fs := NewTestFileSystem()
+		setupTestFS(t, fs, map[string]interface{}{
+			"dir_files/":        nil,
+			"dir_files/f1.txt":  "file1", // 5 bytes
+			"dir_files/f2.txt":  "file22", // 6 bytes
+		})
+		op := NewSimpleOperation("test-del-files", "delete", "dir_files")
+		budget := &BackupBudget{TotalMB: defaultBudgetMB, RemainingMB: defaultBudgetMB}
+
+		reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
+		if err != nil {
+			t.Fatalf("ReverseOps failed: %v", err)
+		}
+
+		expectedSize := int64(5 + 6)
+		expectedSizeMB := float64(expectedSize) / (1024 * 1024)
+		if backupData.SizeMB != expectedSizeMB {
+			t.Errorf("Expected SizeMB %f, got %f", expectedSizeMB, backupData.SizeMB)
+		}
+		metadataItems, _ := backupData.Metadata["items"].([]BackedUpItem)
+		if len(metadataItems) != 3 { // root dir + 2 files
+			t.Fatalf("Expected 3 metadata items, got %d: %+v", len(metadataItems), metadataItems)
+		}
+		if len(reverseOps) != 3 {
+			t.Fatalf("Expected 3 reverse ops, got %d", len(reverseOps))
+		}
+		// Basic check for reverse op types and paths
+		if !(reverseOps[0].Describe().Type == "create_directory" && reverseOps[0].Describe().Path == "dir_files" &&
+			reverseOps[1].Describe().Type == "create_file" && reverseOps[1].Describe().Path == filepath.Join("dir_files", "f1.txt") &&
+			reverseOps[2].Describe().Type == "create_file" && reverseOps[2].Describe().Path == filepath.Join("dir_files", "f2.txt")) {
+			t.Error("Unexpected reverse operations structure")
+		}
+		// Check content of one file
+		file1Item, _ := reverseOps[1].GetItem().(*FileItem)
+		if string(file1Item.Content()) != "file1" {
+			t.Errorf("Expected f1.txt content 'file1', got '%s'", string(file1Item.Content()))
+		}
+
+	})
+
+	t.Run("directory with nested structure", func(t *testing.T) {
+		fs := NewTestFileSystem()
+		setupTestFS(t, fs, map[string]interface{}{
+			"root/":               nil,
+			"root/file_root.txt":  "root_content", // 12 bytes
+			"root/sub1/":          nil,
+			"root/sub1/file_s1.txt": "sub1_content", // 12 bytes
+			"root/sub2/":          nil,
+			"root/sub2/deep/":     nil,
+			"root/sub2/deep/file_d.txt": "deep_content", // 12 bytes
+		})
+		op := NewSimpleOperation("test-del-nested", "delete", "root")
+		budget := &BackupBudget{TotalMB: defaultBudgetMB, RemainingMB: defaultBudgetMB}
+
+		reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
+		if err != nil {
+			t.Fatalf("ReverseOps failed: %v", err)
+		}
+
+		expectedSize := int64(12 + 12 + 12)
+		expectedSizeMB := float64(expectedSize) / (1024 * 1024)
+		if backupData.SizeMB != expectedSizeMB {
+			t.Errorf("Expected SizeMB %f, got %f", expectedSizeMB, backupData.SizeMB)
+		}
+
+		// Expected items: root, file_root.txt, sub1, file_s1.txt, sub2, deep, file_d.txt (7 items)
+		// Order by walk: ., file_root.txt, sub1, sub1/file_s1.txt, sub2, sub2/deep, sub2/deep/file_d.txt
+		metadataItems, _ := backupData.Metadata["items"].([]BackedUpItem)
+		if len(metadataItems) != 7 {
+			t.Fatalf("Expected 7 metadata items, got %d: %+v", len(metadataItems), metadataItems)
+		}
+		if len(reverseOps) != 7 {
+			t.Fatalf("Expected 7 reverse ops, got %d", len(reverseOps))
+		}
+
+		paths := []string{
+			"root", // .
+			filepath.Join("root", "file_root.txt"),
+			filepath.Join("root", "sub1"),
+			filepath.Join("root", "sub1", "file_s1.txt"),
+			filepath.Join("root", "sub2"),
+			filepath.Join("root", "sub2", "deep"),
+			filepath.Join("root", "sub2", "deep", "file_d.txt"),
+		}
+		types := []string{"create_directory", "create_file", "create_directory", "create_file", "create_directory", "create_directory", "create_file"}
+
+		for i, ro := range reverseOps {
+			if ro.Describe().Path != paths[i] || ro.Describe().Type != types[i] {
+				t.Errorf("Unexpected reverse op at index %d: got Path %s Type %s, expected Path %s Type %s",
+					i, ro.Describe().Path, ro.Describe().Type, paths[i], types[i])
+			}
+		}
+	})
+
+	t.Run("budget exactly sufficient", func(t *testing.T) {
+		fs := NewTestFileSystem()
+		setupTestFS(t, fs, map[string]interface{}{
+			"budget_dir/":       nil,
+			"budget_dir/f1.txt": "12345", // 5 bytes
+			"budget_dir/f2.txt": "67890", // 5 bytes
+		})
+		op := NewSimpleOperation("test-del-budget-exact", "delete", "budget_dir")
+
+		exactBudgetBytes := int64(10)
+		exactBudgetMB := float64(exactBudgetBytes) / (1024 * 1024)
+		budget := &BackupBudget{TotalMB: exactBudgetMB, RemainingMB: exactBudgetMB}
+
+		_, backupData, err := op.ReverseOps(ctx, fs, budget)
+		if err != nil {
+			t.Fatalf("ReverseOps failed with exact budget: %v", err)
+		}
+		if backupData.SizeMB != exactBudgetMB {
+			t.Errorf("Expected SizeMB %f with exact budget, got %f", exactBudgetMB, backupData.SizeMB)
+		}
+		if budget.RemainingMB != 0 {
+			t.Errorf("Expected 0 remaining budget, got %f", budget.RemainingMB)
+		}
+	})
+
+	t.Run("budget insufficient for all (partial backup)", func(t *testing.T) {
+		fs := NewTestFileSystem()
+		// Order of files read by ReadDir is not guaranteed, so use distinct sizes
+		// f1: 5 bytes, f2: 10 bytes. Total 15 bytes.
+		setupTestFS(t, fs, map[string]interface{}{
+			"partial_dir/":      nil,
+			"partial_dir/f1.txt": "12345",      // 5 bytes
+			"partial_dir/f2.txt": "1234567890", // 10 bytes
+		})
+		op := NewSimpleOperation("test-del-partial", "delete", "partial_dir")
+
+		partialBudgetBytes := int64(7) // Enough for f1 (5b) but not f2 (10b)
+		partialBudgetMB := float64(partialBudgetBytes) / (1024 * 1024)
+		budget := &BackupBudget{TotalMB: partialBudgetMB, RemainingMB: partialBudgetMB}
+
+		reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
+		if err == nil {
+			t.Fatal("Expected error due to insufficient budget for all files")
+		}
+		if !strings.Contains(err.Error(), "budget exceeded") {
+			t.Errorf("Expected 'budget exceeded' error, got: %v", err)
+		}
+
+		metadataItems, _ := backupData.Metadata["items"].([]BackedUpItem)
+		// Depending on ReadDir order, either f1 or nothing might be backed up if f2 is encountered first.
+		// The current walkAndBackup processes files as they come from ReadDir.
+		// Let's assume for testing f1 (smaller) is processed first.
+		// We expect the root dir item + f1.txt to be in metadataItems
+		if len(metadataItems) < 2 || metadataItems[0].ItemType != "directory" { // root dir + at least one file attempt
+			t.Fatalf("Expected at least root dir and one file attempt in metadata items, got %d: %+v", len(metadataItems), metadataItems)
+		}
+
+		var backedUpFileCount int
+		var actualBackedUpSize int64
+		for _, item := range metadataItems {
+			if item.ItemType == "file" {
+				backedUpFileCount++
+				actualBackedUpSize += item.Size
+			}
+		}
+
+		if backedUpFileCount != 1 {
+			t.Errorf("Expected 1 file to be backed up, got %d. Items: %+v", backedUpFileCount, metadataItems)
+		}
+		if actualBackedUpSize != 5 { // Assuming f1.txt (5 bytes) was backed up
+			t.Errorf("Expected actual backed up size to be 5 bytes, got %d. Items: %+v", actualBackedUpSize, metadataItems)
+		}
+
+		if backupData.SizeMB != float64(5)/(1024*1024) {
+			 t.Errorf("BackupData.SizeMB should reflect only successfully backed up files. Expected %f, got %f", float64(5)/(1024*1024), backupData.SizeMB)
+		}
+
+		// Check that reverseOps were generated for the partially backed up items
+		if len(reverseOps) != len(metadataItems) {
+			t.Errorf("Expected %d reverseOps for partially backed up items, got %d", len(metadataItems), len(reverseOps))
+		}
+
+	})
+
+	t.Run("budget insufficient for any file (only dir entry)", func(t *testing.T) {
+		fs := NewTestFileSystem()
+		setupTestFS(t, fs, map[string]interface{}{
+			"no_budget_dir/":      nil,
+			"no_budget_dir/f1.txt": "12345", // 5 bytes
+		})
+		op := NewSimpleOperation("test-del-no-budget", "delete", "no_budget_dir")
+
+		tinyBudgetBytes := int64(1) // 1 byte, not enough for the 5-byte file
+		tinyBudgetMB := float64(tinyBudgetBytes) / (1024 * 1024)
+		budget := &BackupBudget{TotalMB: tinyBudgetMB, RemainingMB: tinyBudgetMB}
+
+		reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
+		if err == nil {
+			t.Fatal("Expected error due to insufficient budget for any file")
+		}
+		if !strings.Contains(err.Error(), "budget exceeded") {
+			t.Errorf("Expected 'budget exceeded' error, got: %v", err)
+		}
+		if backupData.SizeMB != 0 {
+			t.Errorf("Expected SizeMB 0, got %f", backupData.SizeMB)
+		}
+		metadataItems, _ := backupData.Metadata["items"].([]BackedUpItem)
+		if len(metadataItems) != 1 || metadataItems[0].ItemType != "directory" { // Only the root dir item
+			t.Fatalf("Expected 1 metadata item (root dir), got %d: %+v", len(metadataItems), metadataItems)
+		}
+		if len(reverseOps) != 1 || reverseOps[0].Describe().Type != "create_directory" {
+			t.Errorf("Expected 1 reverse op (create root dir), got %d", len(reverseOps))
+		}
+	})
 }
