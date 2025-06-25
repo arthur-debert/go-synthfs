@@ -679,23 +679,34 @@ func TestSimpleOperation_ValidateCopy_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("ValidateCopy with valid paths", func(t *testing.T) {
+		// Phase I, Milestone 1: Create source file first since we now validate existence
+		testFS := NewTestFileSystem()
+		err := testFS.WriteFile("test/source.txt", []byte("test content"), 0644)
+		if err != nil {
+			t.Fatalf("Failed to create test source file: %v", err)
+		}
+		
 		op := NewSimpleOperation("test-op", "copy", "test/source.txt")
 		op.SetPaths("test/source.txt", "test/destination.txt")
 
-		err := op.Validate(ctx, fs)
+		err = op.Validate(ctx, testFS)
 		if err != nil {
 			t.Errorf("Expected no validation error for valid paths, got: %v", err)
 		}
 	})
 
-	t.Run("ValidateCopy doesn't check source existence at validation time", func(t *testing.T) {
-		// This tests the comment in validateCopy about not checking source existence
+	t.Run("ValidateCopy now checks source existence at validation time", func(t *testing.T) {
+		// Phase I, Milestone 1: Updated test to reflect new validation behavior
 		op := NewSimpleOperation("test-op", "copy", "nonexistent/source.txt")
 		op.SetPaths("nonexistent/source.txt", "test/destination.txt")
 
 		err := op.Validate(ctx, fs)
-		if err != nil {
-			t.Errorf("Expected no validation error even for non-existent source, got: %v", err)
+		if err == nil {
+			t.Error("Expected validation error for non-existent source, but got none")
+		}
+		
+		if !strings.Contains(err.Error(), "copy source does not exist") {
+			t.Errorf("Expected source existence error, got: %v", err)
 		}
 	})
 
@@ -768,4 +779,295 @@ func (fs *errorFS) Stat(name string) (fs.FileInfo, error) {
 		return nil, errors.New("simulated stat error")
 	}
 	return fs.testFS.Stat(name)
+}
+
+// Phase I, Milestone 1: Source Existence Validation Tests
+
+func TestSourceExistenceValidation(t *testing.T) {
+	ctx := context.Background()
+	testFS := NewTestFileSystem()
+	
+	// Create some test files and directories for validation tests
+	err := testFS.WriteFile("existing_file.txt", []byte("test content"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+	
+	err = testFS.MkdirAll("existing_dir", 0755)
+	if err != nil {
+		t.Fatalf("Failed to create test directory: %v", err)
+	}
+	
+	err = testFS.WriteFile("source1.txt", []byte("source 1"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create source1.txt: %v", err)
+	}
+	
+	err = testFS.WriteFile("source2.txt", []byte("source 2"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create source2.txt: %v", err)
+	}
+	
+	// Create a test archive for unarchive tests
+	archiveContent := createSimpleZip(t, map[string]string{
+		"file1.txt": "content1",
+		"file2.txt": "content2",
+	})
+	err = testFS.WriteFile("test_archive.zip", archiveContent, 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test archive: %v", err)
+	}
+
+	t.Run("Copy validation - source exists", func(t *testing.T) {
+		op := NewSimpleOperation("copy-op", "copy", "existing_file.txt")
+		op.SetPaths("existing_file.txt", "destination.txt")
+		
+		err := op.Validate(ctx, testFS)
+		if err != nil {
+			t.Errorf("Expected no validation error for existing source, got: %v", err)
+		}
+	})
+
+	t.Run("Copy validation - source does not exist", func(t *testing.T) {
+		op := NewSimpleOperation("copy-op", "copy", "nonexistent_file.txt")
+		op.SetPaths("nonexistent_file.txt", "destination.txt")
+		
+		err := op.Validate(ctx, testFS)
+		if err == nil {
+			t.Error("Expected validation error for non-existent source, but got none")
+		}
+		
+		if !strings.Contains(err.Error(), "copy source does not exist") {
+			t.Errorf("Expected 'copy source does not exist' error, got: %v", err)
+		}
+	})
+
+	t.Run("Move validation - source exists", func(t *testing.T) {
+		op := NewSimpleOperation("move-op", "move", "existing_file.txt")
+		op.SetPaths("existing_file.txt", "new_location.txt")
+		
+		err := op.Validate(ctx, testFS)
+		if err != nil {
+			t.Errorf("Expected no validation error for existing source, got: %v", err)
+		}
+	})
+
+	t.Run("Move validation - source does not exist", func(t *testing.T) {
+		op := NewSimpleOperation("move-op", "move", "nonexistent_file.txt")
+		op.SetPaths("nonexistent_file.txt", "new_location.txt")
+		
+		err := op.Validate(ctx, testFS)
+		if err == nil {
+			t.Error("Expected validation error for non-existent source, but got none")
+		}
+		
+		if !strings.Contains(err.Error(), "move source does not exist") {
+			t.Errorf("Expected 'move source does not exist' error, got: %v", err)
+		}
+	})
+
+	t.Run("Archive validation - all sources exist", func(t *testing.T) {
+		op := NewSimpleOperation("archive-op", "create_archive", "archive.zip")
+		archiveItem := NewArchive("archive.zip", ArchiveFormatZip, []string{"source1.txt", "source2.txt"})
+		op.SetItem(archiveItem)
+		
+		err := op.Validate(ctx, testFS)
+		if err != nil {
+			t.Errorf("Expected no validation error for existing sources, got: %v", err)
+		}
+	})
+
+	t.Run("Archive validation - some sources do not exist", func(t *testing.T) {
+		op := NewSimpleOperation("archive-op", "create_archive", "archive.zip")
+		archiveItem := NewArchive("archive.zip", ArchiveFormatZip, []string{"source1.txt", "nonexistent.txt"})
+		op.SetItem(archiveItem)
+		
+		err := op.Validate(ctx, testFS)
+		if err == nil {
+			t.Error("Expected validation error for non-existent source, but got none")
+		}
+		
+		if !strings.Contains(err.Error(), "archive source does not exist") {
+			t.Errorf("Expected 'archive source does not exist' error, got: %v", err)
+		}
+	})
+
+	t.Run("Archive validation - directory source exists", func(t *testing.T) {
+		op := NewSimpleOperation("archive-op", "create_archive", "archive.zip")
+		archiveItem := NewArchive("archive.zip", ArchiveFormatZip, []string{"existing_dir"})
+		op.SetItem(archiveItem)
+		
+		err := op.Validate(ctx, testFS)
+		if err != nil {
+			t.Errorf("Expected no validation error for existing directory source, got: %v", err)
+		}
+	})
+
+	t.Run("Unarchive validation - archive exists", func(t *testing.T) {
+		op := NewSimpleOperation("unarchive-op", "unarchive", "test_archive.zip")
+		unarchiveItem := NewUnarchive("test_archive.zip", "extracted/")
+		op.SetItem(unarchiveItem)
+		
+		err := op.Validate(ctx, testFS)
+		if err != nil {
+			t.Errorf("Expected no validation error for existing archive, got: %v", err)
+		}
+	})
+
+	t.Run("Unarchive validation - archive does not exist", func(t *testing.T) {
+		op := NewSimpleOperation("unarchive-op", "unarchive", "nonexistent_archive.zip")
+		unarchiveItem := NewUnarchive("nonexistent_archive.zip", "extracted/")
+		op.SetItem(unarchiveItem)
+		
+		err := op.Validate(ctx, testFS)
+		if err == nil {
+			t.Error("Expected validation error for non-existent archive, but got none")
+		}
+		
+		if !strings.Contains(err.Error(), "archive file does not exist") {
+			t.Errorf("Expected 'archive file does not exist' error, got: %v", err)
+		}
+	})
+}
+
+// Test that source existence validation is skipped when filesystem doesn't support Stat
+func TestSourceExistenceValidation_WithoutStatSupport(t *testing.T) {
+	ctx := context.Background()
+	
+	// Create a filesystem that doesn't implement FullFileSystem interface
+	basicFS := &basicFileSystem{}
+	
+	t.Run("Copy validation without Stat support", func(t *testing.T) {
+		op := NewSimpleOperation("copy-op", "copy", "some_file.txt")
+		op.SetPaths("some_file.txt", "destination.txt")
+		
+		// Should not error since filesystem doesn't support Stat
+		err := op.Validate(ctx, basicFS)
+		if err != nil {
+			t.Errorf("Expected no validation error when filesystem doesn't support Stat, got: %v", err)
+		}
+	})
+}
+
+// Batch-level tests for source existence validation
+func TestBatchSourceExistenceValidation(t *testing.T) {
+	testFS := NewTestFileSystem()
+	
+	// Create test files
+	err := testFS.WriteFile("existing.txt", []byte("content"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	t.Run("Batch Copy - source does not exist", func(t *testing.T) {
+		batch := NewBatch().WithFileSystem(testFS)
+		
+		_, err := batch.Copy("nonexistent.txt", "destination.txt")
+		if err == nil {
+			t.Error("Expected batch.Copy to fail for non-existent source")
+		}
+		
+		if !strings.Contains(err.Error(), "copy source does not exist") {
+			t.Errorf("Expected source existence error, got: %v", err)
+		}
+	})
+
+	t.Run("Batch Move - source does not exist", func(t *testing.T) {
+		batch := NewBatch().WithFileSystem(testFS)
+		
+		_, err := batch.Move("nonexistent.txt", "destination.txt")
+		if err == nil {
+			t.Error("Expected batch.Move to fail for non-existent source")
+		}
+		
+		if !strings.Contains(err.Error(), "move source does not exist") {
+			t.Errorf("Expected source existence error, got: %v", err)
+		}
+	})
+
+	t.Run("Batch CreateArchive - source does not exist", func(t *testing.T) {
+		batch := NewBatch().WithFileSystem(testFS)
+		
+		_, err := batch.CreateArchive("archive.zip", ArchiveFormatZip, "existing.txt", "nonexistent.txt")
+		if err == nil {
+			t.Error("Expected batch.CreateArchive to fail for non-existent source")
+		}
+		
+		if !strings.Contains(err.Error(), "archive source does not exist") {
+			t.Errorf("Expected source existence error, got: %v", err)
+		}
+	})
+
+	t.Run("Batch Unarchive - archive does not exist", func(t *testing.T) {
+		batch := NewBatch().WithFileSystem(testFS)
+		
+		_, err := batch.Unarchive("nonexistent.zip", "extracted/")
+		if err == nil {
+			t.Error("Expected batch.Unarchive to fail for non-existent archive")
+		}
+		
+		if !strings.Contains(err.Error(), "archive file does not exist") {
+			t.Errorf("Expected archive existence error, got: %v", err)
+		}
+	})
+}
+
+// Helper function to create a simple zip file for testing
+func createSimpleZip(t *testing.T, files map[string]string) []byte {
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	
+	for filename, content := range files {
+		f, err := w.Create(filename)
+		if err != nil {
+			t.Fatalf("Failed to create zip entry %s: %v", filename, err)
+		}
+		
+		_, err = f.Write([]byte(content))
+		if err != nil {
+			t.Fatalf("Failed to write zip entry %s: %v", filename, err)
+		}
+	}
+	
+	err := w.Close()
+	if err != nil {
+		t.Fatalf("Failed to close zip writer: %v", err)
+	}
+	
+	return buf.Bytes()
+}
+
+// Basic filesystem implementation that doesn't support Stat
+type basicFileSystem struct{}
+
+func (bfs *basicFileSystem) Open(name string) (fs.File, error) {
+	return nil, fs.ErrNotExist
+}
+
+func (fs *basicFileSystem) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	return nil
+}
+
+func (fs *basicFileSystem) MkdirAll(path string, perm fs.FileMode) error {
+	return nil
+}
+
+func (fs *basicFileSystem) Remove(name string) error {
+	return nil
+}
+
+func (fs *basicFileSystem) RemoveAll(name string) error {
+	return nil
+}
+
+func (fs *basicFileSystem) Symlink(oldname, newname string) error {
+	return nil
+}
+
+func (fs *basicFileSystem) Readlink(name string) (string, error) {
+	return "", nil
+}
+
+func (fs *basicFileSystem) Rename(oldpath, newpath string) error {
+	return nil
 }

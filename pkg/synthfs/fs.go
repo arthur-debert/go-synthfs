@@ -1,10 +1,14 @@
 package synthfs
 
 import (
+	"crypto/md5"
+	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // ReadFS is an alias for fs.FS, representing a read-only file system.
@@ -170,6 +174,48 @@ func (osfs *OSFileSystem) Rename(oldpath, newpath string) error {
 	oldFullPath := filepath.Join(osfs.root, oldpath)
 	newFullPath := filepath.Join(osfs.root, newpath)
 	return os.Rename(oldFullPath, newFullPath)
+}
+
+// ComputeFileChecksum calculates the MD5 checksum and gathers file metadata.
+// It requires a FullFileSystem to access both file content and metadata.
+func ComputeFileChecksum(fsys FullFileSystem, filePath string) (*ChecksumRecord, error) {
+	// Get file info first
+	info, err := fsys.Stat(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat file %s: %w", filePath, err)
+	}
+
+	// Skip checksumming for directories
+	if info.IsDir() {
+		return nil, nil
+	}
+
+	// Open file for reading
+	file, err := fsys.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file %s for checksumming: %w", filePath, err)
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			Logger().Warn().Err(closeErr).Str("path", filePath).Msg("failed to close file during checksumming")
+		}
+	}()
+
+	// Compute MD5 hash
+	hasher := md5.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return nil, fmt.Errorf("failed to compute checksum for %s: %w", filePath, err)
+	}
+
+	checksum := fmt.Sprintf("%x", hasher.Sum(nil))
+
+	return &ChecksumRecord{
+		Path:         filePath,
+		MD5:          checksum,
+		Size:         info.Size(),
+		ModTime:      info.ModTime(),
+		ChecksumTime: time.Now(),
+	}, nil
 }
 
 // ReadOnlyWrapper wraps any fs.FS to provide StatFS functionality if possible

@@ -11,10 +11,20 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // OperationID is a unique identifier for an operation.
 type OperationID string
+
+// ChecksumRecord stores file checksum information for validation
+type ChecksumRecord struct {
+	Path         string
+	MD5          string
+	Size         int64
+	ModTime      time.Time
+	ChecksumTime time.Time
+}
 
 // FileSystem interface is defined in fs.go
 
@@ -54,6 +64,12 @@ type Operation interface {
 	// This is primarily relevant for Create operations.
 	// Returns nil if no item is directly associated (e.g., for Delete, Copy, Move by path).
 	GetItem() FsItem
+
+	// GetChecksum retrieves a checksum record for a file path (Phase I, Milestone 3)
+	GetChecksum(path string) *ChecksumRecord
+
+	// GetAllChecksums returns all checksum records (Phase I, Milestone 3)
+	GetAllChecksums() map[string]*ChecksumRecord
 }
 
 // --- SimpleOperation: Basic Operation Implementation ---
@@ -64,9 +80,10 @@ type SimpleOperation struct {
 	id           OperationID
 	dependencies []OperationID
 	description  OperationDesc
-	item         FsItem // For Create operations
-	srcPath      string // For Copy/Move operations
-	dstPath      string // For Copy/Move operations
+	item         FsItem                     // For Create operations
+	srcPath      string                     // For Copy/Move operations
+	dstPath      string                     // For Copy/Move operations
+	checksums    map[string]*ChecksumRecord // Phase I, Milestone 3: Store file checksums
 }
 
 // NewSimpleOperation creates a new simple operation.
@@ -79,6 +96,7 @@ func NewSimpleOperation(id OperationID, descType string, path string) *SimpleOpe
 			Details: make(map[string]interface{}),
 		},
 		dependencies: []OperationID{},
+		checksums:    make(map[string]*ChecksumRecord), // Phase I, Milestone 3: Initialize checksum storage
 	}
 }
 
@@ -139,6 +157,73 @@ func (op *SimpleOperation) GetSrcPath() string {
 // GetDstPath returns the destination path for copy/move operations.
 func (op *SimpleOperation) GetDstPath() string {
 	return op.dstPath
+}
+
+// SetChecksum stores a checksum record for a file path (Phase I, Milestone 3)
+func (op *SimpleOperation) SetChecksum(path string, checksum *ChecksumRecord) {
+	if op.checksums == nil {
+		op.checksums = make(map[string]*ChecksumRecord)
+	}
+	op.checksums[path] = checksum
+}
+
+// GetChecksum retrieves a checksum record for a file path (Phase I, Milestone 3)
+func (op *SimpleOperation) GetChecksum(path string) *ChecksumRecord {
+	if op.checksums == nil {
+		return nil
+	}
+	return op.checksums[path]
+}
+
+// GetAllChecksums returns all checksum records (Phase I, Milestone 3)
+func (op *SimpleOperation) GetAllChecksums() map[string]*ChecksumRecord {
+	return op.checksums
+}
+
+// verifyChecksums verifies all stored checksums against current file state (Phase I, Milestone 4)
+func (op *SimpleOperation) verifyChecksums(ctx context.Context, fsys FileSystem) error {
+	if len(op.checksums) == 0 {
+		return nil // No checksums to verify
+	}
+
+	// Check if filesystem supports Stat operation
+	fullFS, ok := fsys.(FullFileSystem)
+	if !ok {
+		// If filesystem doesn't support Stat, we cannot compute a checksum.
+		// Log a warning and skip verification.
+		Logger().Warn().
+			Str("op_id", string(op.ID())).
+			Msg("skipping checksum verification: filesystem does not support Stat")
+		return nil
+	}
+
+	for path, expectedChecksum := range op.checksums {
+		// Re-compute the checksum for the current file state
+		currentChecksum, err := ComputeFileChecksum(fullFS, path)
+		if err != nil {
+			return fmt.Errorf("checksum verification failed for %s: could not compute current checksum: %w", path, err)
+		}
+
+		// It's possible for a file to be replaced by a directory
+		if currentChecksum == nil && expectedChecksum != nil {
+			return fmt.Errorf("checksum verification failed for %s: expected a file but found a directory", path)
+		}
+
+		// Compare the MD5 hashes
+		if currentChecksum.MD5 != expectedChecksum.MD5 {
+			return fmt.Errorf("checksum verification failed for %s: file content has changed. Expected MD5: %s, got: %s",
+				path, expectedChecksum.MD5, currentChecksum.MD5)
+		}
+
+		// Optional: We could still log if modtime/size differ but hash is same, but for now hash equality is sufficient.
+		Logger().Debug().
+			Str("op_id", string(op.ID())).
+			Str("path", path).
+			Str("md5", currentChecksum.MD5).
+			Msg("checksum verification passed")
+	}
+
+	return nil
 }
 
 // Execute performs the actual filesystem operation.
@@ -318,6 +403,11 @@ func (op *SimpleOperation) executeCreateSymlink(ctx context.Context, fsys FileSy
 func (op *SimpleOperation) executeCreateArchive(ctx context.Context, fsys FileSystem) error {
 	if op.item == nil {
 		return fmt.Errorf("no archive item provided for create_archive operation")
+	}
+
+	// Phase I, Milestone 4: Verify checksums before execution
+	if err := op.verifyChecksums(ctx, fsys); err != nil {
+		return fmt.Errorf("archive creation failed checksum verification: %w", err)
 	}
 
 	archiveItem, ok := op.item.(*ArchiveItem)
@@ -774,6 +864,11 @@ func (op *SimpleOperation) executeCopy(ctx context.Context, fsys FileSystem) err
 		return fmt.Errorf("source or destination path not set for copy operation")
 	}
 
+	// Phase I, Milestone 4: Verify checksums before execution
+	if err := op.verifyChecksums(ctx, fsys); err != nil {
+		return fmt.Errorf("copy operation failed checksum verification: %w", err)
+	}
+
 	// For now, implement simple file copy - directory copy is more complex
 	// First check if source is a file
 	fullFS, ok := fsys.(FullFileSystem)
@@ -815,6 +910,11 @@ func (op *SimpleOperation) executeCopy(ctx context.Context, fsys FileSystem) err
 func (op *SimpleOperation) executeMove(ctx context.Context, fsys FileSystem) error {
 	if op.srcPath == "" || op.dstPath == "" {
 		return fmt.Errorf("source or destination path not set for move operation")
+	}
+
+	// Phase I, Milestone 4: Verify checksums before execution
+	if err := op.verifyChecksums(ctx, fsys); err != nil {
+		return fmt.Errorf("move operation failed checksum verification: %w", err)
 	}
 
 	return fsys.Rename(op.srcPath, op.dstPath)
@@ -923,6 +1023,20 @@ func (op *SimpleOperation) validateCreateArchive(ctx context.Context, fsys FileS
 		return &ValidationError{Operation: op, Reason: "archive must have at least one source"}
 	}
 
+	// Phase I, Milestone 1: Source existence validation
+	// Check if all source files/directories exist at validation time
+	if fullFS, ok := fsys.(FullFileSystem); ok {
+		for _, source := range archiveItem.Sources() {
+			if _, err := fullFS.Stat(source); err != nil {
+				return &ValidationError{
+					Operation: op,
+					Reason:    fmt.Sprintf("archive source does not exist: %s", source),
+					Cause:     err,
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -953,6 +1067,18 @@ func (op *SimpleOperation) validateUnarchive(ctx context.Context, fsys FileSyste
 		return &ValidationError{Operation: op, Reason: "unsupported archive format (supported: .tar.gz, .tgz, .zip)"}
 	}
 
+	// Phase I, Milestone 1: Source existence validation
+	// Check if archive file exists at validation time
+	if fullFS, ok := fsys.(FullFileSystem); ok {
+		if _, err := fullFS.Stat(archivePath); err != nil {
+			return &ValidationError{
+				Operation: op,
+				Reason:    fmt.Sprintf("archive file does not exist: %s", archivePath),
+				Cause:     err,
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -966,9 +1092,17 @@ func (op *SimpleOperation) validateCopy(ctx context.Context, fsys FileSystem) er
 		return &ValidationError{Operation: op, Reason: "copy destination path cannot be empty"}
 	}
 
-	// For copy operations, we don't check if source exists at validation time
-	// because it might be created by an earlier operation in the same batch.
-	// We'll check existence at execution time instead.
+	// Phase I, Milestone 1: Source existence validation
+	// Check if source file/directory exists at validation time
+	if fullFS, ok := fsys.(FullFileSystem); ok {
+		if _, err := fullFS.Stat(op.srcPath); err != nil {
+			return &ValidationError{
+				Operation: op,
+				Reason:    fmt.Sprintf("copy source does not exist: %s", op.srcPath),
+				Cause:     err,
+			}
+		}
+	}
 
 	return nil
 }
@@ -983,9 +1117,17 @@ func (op *SimpleOperation) validateMove(ctx context.Context, fsys FileSystem) er
 		return &ValidationError{Operation: op, Reason: "move destination path cannot be empty"}
 	}
 
-	// For move operations, we don't check if source exists at validation time
-	// because it might be created by an earlier operation in the same batch.
-	// We'll check existence at execution time instead.
+	// Phase I, Milestone 1: Source existence validation
+	// Check if source file/directory exists at validation time
+	if fullFS, ok := fsys.(FullFileSystem); ok {
+		if _, err := fullFS.Stat(op.srcPath); err != nil {
+			return &ValidationError{
+				Operation: op,
+				Reason:    fmt.Sprintf("move source does not exist: %s", op.srcPath),
+				Cause:     err,
+			}
+		}
+	}
 
 	return nil
 }

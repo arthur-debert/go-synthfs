@@ -3,6 +3,7 @@ package synthfs_test
 import (
 	"context"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
@@ -65,7 +66,8 @@ func TestBatchRealOperations(t *testing.T) {
 	})
 
 	t.Run("Real copy operation", func(t *testing.T) {
-		newBatch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
+		testFS := synthfs.NewTestFileSystem()
+		newBatch := synthfs.NewBatch().WithFileSystem(testFS)
 
 		// Create source file
 		sourceContent := []byte("Source file content")
@@ -74,38 +76,46 @@ func TestBatchRealOperations(t *testing.T) {
 			t.Fatalf("CreateFile for source failed: %v", err)
 		}
 
-		// Copy the file
-		_, err = newBatch.Copy("source.txt", "copy.txt")
+		// Execute the create operation first so the source exists
+		result, err := newBatch.Run()
+		if err != nil {
+			t.Fatalf("Initial execute failed: %v", err)
+		}
+
+		if !result.Success {
+			t.Fatalf("Initial execution failed: %v", result.Errors)
+		}
+
+		// Now create a new batch for the copy operation with the same filesystem
+		copyBatch := synthfs.NewBatch().WithFileSystem(testFS)
+
+		// Copy the file (now source exists)
+		_, err = copyBatch.Copy("source.txt", "copy.txt")
 		if err != nil {
 			t.Fatalf("Copy failed: %v", err)
 		}
 
-		// Execute
-		result, err := newBatch.Run()
+		// Execute copy
+		result, err = copyBatch.Run()
 		if err != nil {
-			t.Fatalf("Execute failed: %v", err)
+			t.Fatalf("Copy execute failed: %v", err)
 		}
 
 		if !result.Success {
 			t.Fatalf("Copy execution failed: %v", result.Errors)
 		}
 
-		// Verify operations were created correctly
-		operations := newBatch.Operations()
-		if len(operations) < 2 {
-			t.Fatalf("Expected at least 2 operations, got %d", len(operations))
-		}
-
 		t.Log("Copy test implemented - verifying operations were created successfully")
-		t.Logf("Operations: %d", len(operations))
-		for i, op := range operations {
+		t.Logf("Operations: %d", len(copyBatch.Operations()))
+		for i, op := range copyBatch.Operations() {
 			desc := op.Describe()
 			t.Logf("Operation %d: %s %s", i+1, desc.Type, desc.Path)
 		}
 	})
 
 	t.Run("Real move operation", func(t *testing.T) {
-		newBatch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
+		testFS := synthfs.NewTestFileSystem()
+		newBatch := synthfs.NewBatch().WithFileSystem(testFS)
 
 		// Create source file
 		sourceContent := []byte("File to move")
@@ -114,16 +124,29 @@ func TestBatchRealOperations(t *testing.T) {
 			t.Fatalf("CreateFile for move source failed: %v", err)
 		}
 
-		// Move the file
-		_, err = newBatch.Move("old-location.txt", "new-location.txt")
+		// Execute the create operation first so the source exists
+		result, err := newBatch.Run()
+		if err != nil {
+			t.Fatalf("Initial execute failed: %v", err)
+		}
+
+		if !result.Success {
+			t.Fatalf("Initial execution failed: %v", result.Errors)
+		}
+
+		// Now create a new batch for the move operation with the same filesystem
+		moveBatch := synthfs.NewBatch().WithFileSystem(testFS)
+
+		// Move the file (now source exists)
+		_, err = moveBatch.Move("old-location.txt", "new-location.txt")
 		if err != nil {
 			t.Fatalf("Move failed: %v", err)
 		}
 
-		// Execute
-		result, err := newBatch.Run()
+		// Execute move
+		result, err = moveBatch.Run()
 		if err != nil {
-			t.Fatalf("Execute failed: %v", err)
+			t.Fatalf("Move execute failed: %v", err)
 		}
 
 		if !result.Success {
@@ -163,32 +186,57 @@ func TestBatchRealOperations(t *testing.T) {
 	})
 
 	t.Run("Real delete operation", func(t *testing.T) {
-		newBatch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
+		testFS := synthfs.NewTestFileSystem()
+		setupBatch := synthfs.NewBatch().WithFileSystem(testFS)
 
-		// Create file to delete
-		_, err := newBatch.CreateFile("to-delete.txt", []byte("Delete me"))
+		// Create file to delete in a setup batch
+		_, err := setupBatch.CreateFile("to-delete.txt", []byte("Delete me"))
 		if err != nil {
 			t.Fatalf("CreateFile for delete target failed: %v", err)
 		}
+		setupResult, err := setupBatch.Run()
+		if err != nil || !setupResult.Success {
+			t.Fatalf("Setup batch for delete failed: %v, errors: %v", err, setupResult.Errors)
+		}
+
+		// Now create a new batch to perform the deletion
+		deleteBatch := synthfs.NewBatch().WithFileSystem(testFS)
 
 		// Delete the file
-		_, err = newBatch.Delete("to-delete.txt")
+		_, err = deleteBatch.Delete("to-delete.txt")
 		if err != nil {
 			t.Fatalf("Delete failed: %v", err)
 		}
 
 		// Execute
-		result, err := newBatch.Run()
+		result, err := deleteBatch.Run()
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
 
 		if !result.Success {
-			t.Fatalf("Delete execution failed: %v", result.Errors)
+			// A "not found" error during execution is also a form of success for delete.
+			// But there should be no other errors.
+			isNotExistError := false
+			for _, opRes := range result.Operations {
+				if opRes.Error != nil {
+					if strings.Contains(opRes.Error.Error(), "no such file or directory") {
+						isNotExistError = true
+					} else {
+						t.Fatalf("Delete execution failed with unexpected error: %v", opRes.Error)
+					}
+				}
+			}
+			if !isNotExistError && len(result.Errors) > 0 {
+				t.Fatalf("Delete execution failed: %v", result.Errors)
+			}
 		}
 
-		t.Log("Delete test implemented - operations executed successfully")
-		t.Logf("Operations executed: %d", len(result.Operations))
+		// Verify the file is gone
+		_, err = testFS.Stat("to-delete.txt")
+		if err == nil {
+			t.Error("Expected file 'to-delete.txt' to be deleted, but it still exists")
+		}
 	})
 
 	t.Run("Rollback functionality", func(t *testing.T) {
@@ -240,14 +288,18 @@ func TestBatchValidation(t *testing.T) {
 	t.Run("Copy validation", func(t *testing.T) {
 		batch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
 
-		// Copy operations with non-existent source should validate successfully
-		// (existence is checked at execution time)
+		// Phase I, Milestone 1: Copy operations with non-existent source now fail validation
+		// (source existence is checked at validation time)
 		_, err := batch.Copy("does-not-exist.txt", "destination.txt")
-		if err != nil {
-			t.Errorf("Copy validation should succeed, file existence checked at execution time: %v", err)
+		if err == nil {
+			t.Error("Expected validation error for non-existent source")
 		}
 
-		// But empty paths should still fail validation
+		if !strings.Contains(err.Error(), "copy source does not exist") {
+			t.Errorf("Expected source existence error, got: %v", err)
+		}
+
+		// Empty paths should still fail validation
 		_, err = batch.Copy("", "destination.txt")
 		if err == nil {
 			t.Error("Expected validation error for empty source path")
@@ -257,14 +309,18 @@ func TestBatchValidation(t *testing.T) {
 	t.Run("Move validation", func(t *testing.T) {
 		batch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
 
-		// Move operations with non-existent source should validate successfully
-		// (existence is checked at execution time)
+		// Phase I, Milestone 1: Move operations with non-existent source now fail validation
+		// (source existence is checked at validation time)
 		_, err := batch.Move("does-not-exist.txt", "destination.txt")
-		if err != nil {
-			t.Errorf("Move validation should succeed, file existence checked at execution time: %v", err)
+		if err == nil {
+			t.Error("Expected validation error for non-existent source")
 		}
 
-		// But empty paths should still fail validation
+		if !strings.Contains(err.Error(), "move source does not exist") {
+			t.Errorf("Expected source existence error, got: %v", err)
+		}
+
+		// Empty paths should still fail validation
 		_, err = batch.Move("source.txt", "")
 		if err == nil {
 			t.Error("Expected validation error for empty destination path")

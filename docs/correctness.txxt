@@ -3,6 +3,8 @@ SynthFS Correctness Model - Practical Implementation Plan
 
     This document defines a pragmatic approach to SynthFS correctness, focusing on high-value fixes with reasonable complexity. We prioritize catching obvious errors early while avoiding over-engineering.
 
+Instructions: 
+
     You'll be given a Phase to complete. For it you can work on each milestone. Make sure that we wave good coverage for the new code. Also make sure that we don't introduce regressions (gotestsum must always pass). 
     When that milestone is ready, (code and tests passing), add a checkmark (✓) to it in the progress tracker.  you can commit the changes. This will run the scripts/pre-commit , which will ensure passing tests and linting (which can be ran from scrpits/lint before being fully done for the commit too.)
     When the final milestone for that pase is complete, you can add a checkmark to the pase itself , add a pr to github by using the gh cli client. 
@@ -15,11 +17,11 @@ SynthFS Correctness Model - Practical Implementation Plan
 Progress Tracker
 ================
 
-Phase I: Essential Correctness
-    Milestone 1: Source existence validation
-    Milestone 2: Duplicate path detection  
-    Milestone 3: Basic checksumming for copy/move operations
-    Milestone 4: Checksum verification at execution time
+Phase I: Essential Correctness ✓
+    Milestone 1: Source existence validation ✓
+    Milestone 2: Duplicate path detection ✓
+    Milestone 3: Basic checksumming for copy/move operations ✓
+    Milestone 4: Checksum verification at execution time ✓
 
 Phase II: Smart Dependencies
     Milestone 1: Path state tracking implementation

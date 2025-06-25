@@ -75,22 +75,52 @@ Intro to Synthfs
 
         If a restore fails, we stop whatever we are. 
     
+	2.3 Correctness / Guarantess descriptions
 
-4. Understanding Use Cases
+		Since a full tranasacional and correct system is way beyond this project's scope (or needs, frankly) it's worth formalizing what the correctness best effors actually entail. 
 
-	Say that your application allows uses to bundle a few photos and send them to a friend on discord.  You can use synthfs to copy these photos to a working directory, then zip them and finally uploading them to discord.
+			2.3.1. We don't change files, archives nor links whose content has changed between operation creation and execution.
 
-	There is a myriad ways in which this could go wrong: 
+				Say that hello.txt has the text "hi mom" . Then our very first operation overwrites the content with "time to go".  
 
-		- The disk has no space to create the zip files.
-		- Between the user selecting the images and the application reading them, another process deleted them.
-		- Permissions are altered for one or more files. 
-		- The user account is removed between steps.
+				When we create the file operation we take note of the file's current content as "hi mom". At the execution time, the engine will check it's content before changing it. If someone / some thing has changed it, the operation will fail.
 
-	And we could go on and on.  Note that many of these, are direct fs changes too. When using the os. you can copy the files successfully only to have the archive operation fail for insufficient disk space. 
+				The rational for this being the user has given us to make the "hi mom " -> "time to go" transformation, but no others. He expects the content to be "hi mom". As the expectation is broken, it's safer to just exit.  This holds true for deletion , move , etc . 
 
-	But if your files are in control of this applications, under normal conditions things will work. It's just paramount to have the correct exceptions here.
+				For files and archives, we checksum. For links we use the links target as the content.
 
-	First , no-concurrency:  anything that is multi user or multi-processor writing to the same locations won't work.  Secondly, no strong guarantees: even if the data has not changed, a host of other reasons can break the execution phase: no disk space , user permissions change and so on.
+			2.3.2. On dependend operations validation
+
+				Let's imagine thie current scenario. 
+
+					1. dirctory tmp/foo is empty.
+					2. opearation creates file /tmp/foo/hello.txt
+					3. other opearation copyies the /tmp/foo/hello.txt somewheere else
+					4. other operation deletes the /tmp/foo/hello.txt
+					5.  operation copyies the /tmp/foo/hello.txt
+
+				When it comes to execution time, operations 3+ can't be validated agains the intiial fs state, as the hello.txt file doesn not exist in it.
+
+				For this reason, pipelines track changes to the synthetic operations, keeping tab of files insertions, moves, deletions and it's contents. 
+
+				This allows us to validate the pipeline. Not only we can be ok that operations 3 anf 4 should work, but we alsoi know that operation 5 will fail.
+
+				The engine keeps tabs of new paths, and their contents, and can do this safely.
+	
+	3. Restore
+
+		synthfs offers users the abiliry to restore changes in case a pipeline fails. Again, this is useful for the simple case, but it's critical that there is a clear understanding of what this actually entails. 
+
+		For starters, this is not a rollback, and that's why it's called restore, to distance itself from the expectation that this is a real transactional model that can be safetly rollbacked.
+
+		When it all works well, restore will revert all operations until the failed one. This works in the following manner; every operation knows how to perform it's own opposite, that is it undo's it's acitons. Move operations can move back to the previous path, create opeations can delete the object created and so on. . 
+
+		When restoring the execution engine will work from the last successful execution backwards. runnint it's own reverse operation.
+
+		1. Limits
+
+			The hardest case is deletion. In order to revert it, we must back it up. 
+
+			
 
    
