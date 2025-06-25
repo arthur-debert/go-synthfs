@@ -12,7 +12,7 @@ func TestBatchChecksumVerification(t *testing.T) {
 
 	t.Run("Copy operation succeeds when source unchanged", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		
+
 		// Create source file
 		sourceContent := []byte("Unchanged content for copy")
 		err := testFS.WriteFile("source.txt", sourceContent, 0644)
@@ -50,9 +50,9 @@ func TestBatchChecksumVerification(t *testing.T) {
 		}
 	})
 
-	t.Run("Copy operation fails when source file size changed", func(t *testing.T) {
+	t.Run("Copy operation fails when source file is modified", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		
+
 		// Create source file
 		originalContent := []byte("Original content")
 		err := testFS.WriteFile("source.txt", originalContent, 0644)
@@ -90,8 +90,9 @@ func TestBatchChecksumVerification(t *testing.T) {
 		for _, opResult := range result.Operations {
 			if opResult.Error != nil && strings.Contains(opResult.Error.Error(), "checksum verification") {
 				found = true
-				if !strings.Contains(opResult.Error.Error(), "file size changed") {
-					t.Errorf("Expected size change error, got: %v", opResult.Error)
+				// Check for the new, more accurate error message
+				if !strings.Contains(opResult.Error.Error(), "file content has changed") {
+					t.Errorf("Expected 'file content has changed' error, got: %v", opResult.Error)
 				}
 				break
 			}
@@ -103,7 +104,7 @@ func TestBatchChecksumVerification(t *testing.T) {
 
 	t.Run("Move operation fails when source file modified", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		
+
 		// Create source file
 		originalContent := []byte("Original file for move")
 		err := testFS.WriteFile("old.txt", originalContent, 0644)
@@ -151,7 +152,7 @@ func TestBatchChecksumVerification(t *testing.T) {
 
 	t.Run("Archive operation fails when source files modified", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		
+
 		// Create multiple source files
 		files := map[string][]byte{
 			"file1.txt": []byte("Content 1"),
@@ -242,7 +243,7 @@ func TestBatchChecksumVerification(t *testing.T) {
 
 	t.Run("Multiple operations with mixed checksum verification results", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		
+
 		// Create source files
 		err := testFS.WriteFile("good.txt", []byte("Good file"), 0644)
 		if err != nil {
@@ -310,7 +311,7 @@ func TestBatchChecksumVerification(t *testing.T) {
 
 	t.Run("Checksum verification with directories is skipped", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		
+
 		// Create directory
 		err := testFS.MkdirAll("sourcedir", 0755)
 		if err != nil {

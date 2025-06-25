@@ -80,9 +80,9 @@ type SimpleOperation struct {
 	id           OperationID
 	dependencies []OperationID
 	description  OperationDesc
-	item         FsItem // For Create operations
-	srcPath      string // For Copy/Move operations
-	dstPath      string // For Copy/Move operations
+	item         FsItem                     // For Create operations
+	srcPath      string                     // For Copy/Move operations
+	dstPath      string                     // For Copy/Move operations
 	checksums    map[string]*ChecksumRecord // Phase I, Milestone 3: Store file checksums
 }
 
@@ -189,36 +189,38 @@ func (op *SimpleOperation) verifyChecksums(ctx context.Context, fsys FileSystem)
 	// Check if filesystem supports Stat operation
 	fullFS, ok := fsys.(FullFileSystem)
 	if !ok {
-		// If filesystem doesn't support Stat, skip checksum verification
+		// If filesystem doesn't support Stat, we cannot compute a checksum.
+		// Log a warning and skip verification.
+		Logger().Warn().
+			Str("op_id", string(op.ID())).
+			Msg("skipping checksum verification: filesystem does not support Stat")
 		return nil
 	}
 
 	for path, expectedChecksum := range op.checksums {
-		// Get current file info
-		info, err := fullFS.Stat(path)
+		// Re-compute the checksum for the current file state
+		currentChecksum, err := ComputeFileChecksum(fullFS, path)
 		if err != nil {
-			return fmt.Errorf("checksum verification failed for %s: %w", path, err)
+			return fmt.Errorf("checksum verification failed for %s: could not compute current checksum: %w", path, err)
 		}
 
-		// Skip directories
-		if info.IsDir() {
-			continue
+		// It's possible for a file to be replaced by a directory
+		if currentChecksum == nil && expectedChecksum != nil {
+			return fmt.Errorf("checksum verification failed for %s: expected a file but found a directory", path)
 		}
 
-		// Check size and modification time first (fast pre-check)
-		if info.Size() != expectedChecksum.Size {
-			return fmt.Errorf("checksum verification failed for %s: file size changed from %d to %d bytes", 
-				path, expectedChecksum.Size, info.Size())
+		// Compare the MD5 hashes
+		if currentChecksum.MD5 != expectedChecksum.MD5 {
+			return fmt.Errorf("checksum verification failed for %s: file content has changed. Expected MD5: %s, got: %s",
+				path, expectedChecksum.MD5, currentChecksum.MD5)
 		}
 
-		if !info.ModTime().Equal(expectedChecksum.ModTime) {
-			return fmt.Errorf("checksum verification failed for %s: file modification time changed from %v to %v", 
-				path, expectedChecksum.ModTime, info.ModTime())
-		}
-
-		// If size and modtime match, assume file is unchanged (performance optimization)
-		// For more thorough verification, we could always compute the checksum, but this
-		// provides a good balance between performance and correctness
+		// Optional: We could still log if modtime/size differ but hash is same, but for now hash equality is sufficient.
+		Logger().Debug().
+			Str("op_id", string(op.ID())).
+			Str("path", path).
+			Str("md5", currentChecksum.MD5).
+			Msg("checksum verification passed")
 	}
 
 	return nil
@@ -1027,7 +1029,7 @@ func (op *SimpleOperation) validateCreateArchive(ctx context.Context, fsys FileS
 		for _, source := range archiveItem.Sources() {
 			if _, err := fullFS.Stat(source); err != nil {
 				return &ValidationError{
-					Operation: op, 
+					Operation: op,
 					Reason:    fmt.Sprintf("archive source does not exist: %s", source),
 					Cause:     err,
 				}
@@ -1070,7 +1072,7 @@ func (op *SimpleOperation) validateUnarchive(ctx context.Context, fsys FileSyste
 	if fullFS, ok := fsys.(FullFileSystem); ok {
 		if _, err := fullFS.Stat(archivePath); err != nil {
 			return &ValidationError{
-				Operation: op, 
+				Operation: op,
 				Reason:    fmt.Sprintf("archive file does not exist: %s", archivePath),
 				Cause:     err,
 			}
@@ -1095,7 +1097,7 @@ func (op *SimpleOperation) validateCopy(ctx context.Context, fsys FileSystem) er
 	if fullFS, ok := fsys.(FullFileSystem); ok {
 		if _, err := fullFS.Stat(op.srcPath); err != nil {
 			return &ValidationError{
-				Operation: op, 
+				Operation: op,
 				Reason:    fmt.Sprintf("copy source does not exist: %s", op.srcPath),
 				Cause:     err,
 			}
@@ -1120,7 +1122,7 @@ func (op *SimpleOperation) validateMove(ctx context.Context, fsys FileSystem) er
 	if fullFS, ok := fsys.(FullFileSystem); ok {
 		if _, err := fullFS.Stat(op.srcPath); err != nil {
 			return &ValidationError{
-				Operation: op, 
+				Operation: op,
 				Reason:    fmt.Sprintf("move source does not exist: %s", op.srcPath),
 				Cause:     err,
 			}

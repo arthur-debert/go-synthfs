@@ -2,28 +2,27 @@ package synthfs
 
 import (
 	"context"
-	"crypto/md5"
 	"fmt"
-	"io"
 	"io/fs"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 // PathTracker tracks operations by path to detect conflicts
 type PathTracker struct {
-	CreatedPaths  map[string]OperationID  // paths that will be created
-	DeletedPaths  map[string]OperationID  // paths that will be deleted
-	ModifiedPaths map[string]OperationID  // paths that will be modified
+	CreatedPaths  map[string]OperationID // paths that will be created
+	DeletedPaths  map[string]OperationID // paths that will be deleted
+	ModifiedPaths map[string]OperationID // paths that will be modified
+	fs            FullFileSystem         // Filesystem to check for existing paths
 }
 
 // NewPathTracker creates a new path tracker
-func NewPathTracker() *PathTracker {
+func NewPathTracker(fs FullFileSystem) *PathTracker {
 	return &PathTracker{
 		CreatedPaths:  make(map[string]OperationID),
 		DeletedPaths:  make(map[string]OperationID),
 		ModifiedPaths: make(map[string]OperationID),
+		fs:            fs,
 	}
 }
 
@@ -33,54 +32,66 @@ func (pt *PathTracker) CheckPathConflict(opID OperationID, opType, path string, 
 	switch opType {
 	case "create_file", "create_directory":
 		if existingOpID, exists := pt.CreatedPaths[path]; exists {
-			return fmt.Errorf("operation %s conflicts with %s: cannot create %s - already scheduled for creation", 
+			return fmt.Errorf("operation %s conflicts with %s: cannot create %s - already scheduled for creation",
 				opID, existingOpID, path)
 		}
 		if existingOpID, exists := pt.DeletedPaths[path]; exists {
-			return fmt.Errorf("operation %s conflicts with %s: cannot create %s - already scheduled for deletion", 
+			return fmt.Errorf("operation %s conflicts with %s: cannot create %s - already scheduled for deletion",
 				opID, existingOpID, path)
 		}
-		
+		if existingOpID, exists := pt.ModifiedPaths[path]; exists {
+			return fmt.Errorf("operation %s conflicts with %s: cannot create %s - path already scheduled for modification",
+				opID, existingOpID, path)
+		}
+
 	case "delete":
 		if existingOpID, exists := pt.DeletedPaths[path]; exists {
-			return fmt.Errorf("operation %s conflicts with %s: cannot delete %s - already scheduled for deletion", 
+			return fmt.Errorf("operation %s conflicts with %s: cannot delete %s - already scheduled for deletion",
 				opID, existingOpID, path)
 		}
 		if existingOpID, exists := pt.CreatedPaths[path]; exists {
-			return fmt.Errorf("operation %s conflicts with %s: cannot delete %s - already scheduled for creation", 
+			return fmt.Errorf("operation %s conflicts with %s: cannot delete %s - already scheduled for creation",
 				opID, existingOpID, path)
 		}
-		
+
 	case "copy", "move":
 		// Check destination conflicts
 		if destPath != "" {
 			if existingOpID, exists := pt.CreatedPaths[destPath]; exists {
-				return fmt.Errorf("operation %s conflicts with %s: cannot %s to %s - already scheduled for creation", 
+				return fmt.Errorf("operation %s conflicts with %s: cannot %s to %s - already scheduled for creation",
 					opID, existingOpID, opType, destPath)
 			}
 			if existingOpID, exists := pt.ModifiedPaths[destPath]; exists {
-				return fmt.Errorf("operation %s conflicts with %s: cannot %s to %s - already scheduled for modification", 
+				return fmt.Errorf("operation %s conflicts with %s: cannot %s to %s - already scheduled for modification",
 					opID, existingOpID, opType, destPath)
 			}
 		}
-		
+
 	case "create_symlink":
 		if existingOpID, exists := pt.CreatedPaths[path]; exists {
-			return fmt.Errorf("operation %s conflicts with %s: cannot create symlink %s - already scheduled for creation", 
+			return fmt.Errorf("operation %s conflicts with %s: cannot create symlink %s - already scheduled for creation",
 				opID, existingOpID, path)
 		}
-		
+		if existingOpID, exists := pt.ModifiedPaths[path]; exists {
+			return fmt.Errorf("operation %s conflicts with %s: cannot create symlink %s - path already scheduled for modification",
+				opID, existingOpID, path)
+		}
+
 	case "create_archive":
 		if existingOpID, exists := pt.CreatedPaths[path]; exists {
-			return fmt.Errorf("operation %s conflicts with %s: cannot create archive %s - already scheduled for creation", 
+			return fmt.Errorf("operation %s conflicts with %s: cannot create archive %s - already scheduled for creation",
 				opID, existingOpID, path)
 		}
-		
+		if existingOpID, exists := pt.ModifiedPaths[path]; exists {
+			return fmt.Errorf("operation %s conflicts with %s: cannot create archive %s - path already scheduled for modification",
+				opID, existingOpID, path)
+		}
+
 	case "unarchive":
 		// Unarchive operations can conflict on extraction directory, but this is complex to predict
 		// For now, we'll rely on execution-time validation
 	}
-	
+
 	return nil
 }
 
@@ -90,21 +101,30 @@ func (pt *PathTracker) RecordOperation(opID OperationID, opType, path string, de
 	switch opType {
 	case "create_file", "create_directory", "create_symlink", "create_archive":
 		pt.CreatedPaths[path] = opID
-		
+
 	case "delete":
 		pt.DeletedPaths[path] = opID
-		
+
 	case "copy":
 		if destPath != "" {
-			pt.CreatedPaths[destPath] = opID
+			// Check if destination exists to decide if it's a create or modify
+			if _, err := pt.fs.Stat(destPath); err == nil {
+				pt.ModifiedPaths[destPath] = opID
+			} else {
+				pt.CreatedPaths[destPath] = opID
+			}
 		}
-		
+
 	case "move":
 		if destPath != "" {
-			pt.CreatedPaths[destPath] = opID
+			if _, err := pt.fs.Stat(destPath); err == nil {
+				pt.ModifiedPaths[destPath] = opID
+			} else {
+				pt.CreatedPaths[destPath] = opID
+			}
 		}
 		pt.DeletedPaths[path] = opID
-		
+
 	case "unarchive":
 		// Complex to predict all extracted paths, skip for now
 	}
@@ -113,40 +133,7 @@ func (pt *PathTracker) RecordOperation(opID OperationID, opType, path string, de
 // computeFileChecksum computes MD5 checksum for a file
 func (b *Batch) computeFileChecksum(filePath string) (*ChecksumRecord, error) {
 	// Phase I, Milestone 3: Basic checksumming for copy/move operations
-	
-	// Get file info first
-	info, err := b.fs.Stat(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to stat file %s: %w", filePath, err)
-	}
-	
-	// Skip checksumming for directories
-	if info.IsDir() {
-		return nil, nil
-	}
-	
-	// Open file for reading
-	file, err := b.fs.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file %s for checksumming: %w", filePath, err)
-	}
-	defer file.Close()
-	
-	// Compute MD5 hash
-	hasher := md5.New()
-	if _, err := io.Copy(hasher, file); err != nil {
-		return nil, fmt.Errorf("failed to compute checksum for %s: %w", filePath, err)
-	}
-	
-	checksum := fmt.Sprintf("%x", hasher.Sum(nil))
-	
-	return &ChecksumRecord{
-		Path:         filePath,
-		MD5:          checksum,
-		Size:         info.Size(),
-		ModTime:      info.ModTime(),
-		ChecksumTime: time.Now(),
-	}, nil
+	return ComputeFileChecksum(b.fs, filePath)
 }
 
 // Batch represents a collection of filesystem operations that can be validated and executed as a unit.
@@ -161,18 +148,20 @@ type Batch struct {
 
 // NewBatch creates a new operation batch with default filesystem and context.
 func NewBatch() *Batch {
+	fs := NewOSFileSystem(".") // Use current directory as default root
 	return &Batch{
 		operations:  []Operation{},
-		fs:          NewOSFileSystem("."), // Use current directory as default root
+		fs:          fs,
 		ctx:         context.Background(),
 		idCounter:   0,
-		pathTracker: NewPathTracker(), // Phase I, Milestone 2: Initialize path tracker
+		pathTracker: NewPathTracker(fs), // Phase I, Milestone 2: Initialize path tracker
 	}
 }
 
 // WithFileSystem sets the filesystem for the batch operations.
 func (b *Batch) WithFileSystem(fs FullFileSystem) *Batch {
 	b.fs = fs
+	b.pathTracker.fs = fs // Keep pathTracker's filesystem in sync
 	return b
 }
 
@@ -728,11 +717,11 @@ func (b *Batch) resolveImplicitDependencies() error {
 
 	for i, op := range b.operations {
 		desc := op.Describe()
-		
+
 		switch desc.Type {
 		case "create_file", "create_directory":
 			fileWriters[desc.Path] = append(fileWriters[desc.Path], i)
-			
+
 		case "copy":
 			// Copy reads source and writes destination
 			if simpleOp, ok := op.(*SimpleOperation); ok {
@@ -745,7 +734,7 @@ func (b *Batch) resolveImplicitDependencies() error {
 					fileWriters[dstPath] = append(fileWriters[dstPath], i)
 				}
 			}
-			
+
 		case "move":
 			// Move reads source and writes destination, then deletes source
 			if simpleOp, ok := op.(*SimpleOperation); ok {
@@ -759,19 +748,22 @@ func (b *Batch) resolveImplicitDependencies() error {
 					fileWriters[dstPath] = append(fileWriters[dstPath], i)
 				}
 			}
-			
+
 		case "delete":
 			fileMovers[desc.Path] = append(fileMovers[desc.Path], i)
-			
+
 		case "create_symlink":
 			// Symlink creation depends on the target existing
 			if target, ok := desc.Details["target"]; ok {
 				if targetPath, ok := target.(string); ok {
 					symlinkTargets[targetPath] = append(symlinkTargets[targetPath], i)
+					// A symlink operation "reads" its target path, so it must happen
+					// before the target is moved or deleted.
+					fileReaders[targetPath] = append(fileReaders[targetPath], i)
 				}
 			}
 			fileWriters[desc.Path] = append(fileWriters[desc.Path], i)
-			
+
 		case "create_archive":
 			// Archive reads all source files
 			if archiveItem := op.GetItem(); archiveItem != nil {
@@ -782,7 +774,7 @@ func (b *Batch) resolveImplicitDependencies() error {
 				}
 			}
 			fileWriters[desc.Path] = append(fileWriters[desc.Path], i)
-			
+
 		case "unarchive":
 			// Unarchive reads archive file and writes extracted files
 			fileReaders[desc.Path] = append(fileReaders[desc.Path], i)
@@ -793,7 +785,7 @@ func (b *Batch) resolveImplicitDependencies() error {
 
 	// Now add dependencies to ensure correct ordering
 	dependenciesAdded := 0
-	
+
 	// Rule 1: Operations that move/delete files must come after operations that read those files
 	for filePath, movers := range fileMovers {
 		if readers, hasReaders := fileReaders[filePath]; hasReaders {
@@ -826,7 +818,7 @@ func (b *Batch) resolveImplicitDependencies() error {
 			}
 		}
 	}
-	
+
 	// Rule 2: Operations that create symlinks must come after operations that create their targets
 	for targetPath, symlinkCreators := range symlinkTargets {
 		if writers, hasWriters := fileWriters[targetPath]; hasWriters {
