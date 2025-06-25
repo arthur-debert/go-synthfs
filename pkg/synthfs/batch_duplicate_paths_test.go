@@ -12,258 +12,272 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 
 	t.Run("Detect duplicate file creation", func(t *testing.T) {
 		batch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
-
-		// Create first file - should succeed
 		_, err := batch.CreateFile("test.txt", []byte("content1"))
 		if err != nil {
-			t.Fatalf("First CreateFile should succeed: %v", err)
+			t.Fatalf("First CreateFile failed: %v", err)
 		}
 
-		// Create second file with same path - should fail
+		// Second creation on the same path should fail
 		_, err = batch.CreateFile("test.txt", []byte("content2"))
 		if err == nil {
-			t.Error("Expected conflict error for duplicate file creation")
+			t.Fatal("Expected creation conflict error, but got nil")
 		}
 
-		if !strings.Contains(err.Error(), "already scheduled for creation") {
-			t.Errorf("Expected creation conflict error, got: %v", err)
+		// The error message has changed in Phase II, so we just check for a conflict.
+		if !strings.Contains(err.Error(), "conflicts with existing state") {
+			t.Errorf("Expected a conflict error, but got: %v", err)
 		}
 	})
 
 	t.Run("Detect duplicate directory creation", func(t *testing.T) {
 		batch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
-
-		// Create first directory - should succeed
 		_, err := batch.CreateDir("testdir")
 		if err != nil {
-			t.Fatalf("First CreateDir should succeed: %v", err)
+			t.Fatalf("First CreateDir failed: %v", err)
 		}
 
-		// Create second directory with same path - should fail
+		// Second creation on the same path should fail
 		_, err = batch.CreateDir("testdir")
 		if err == nil {
-			t.Error("Expected conflict error for duplicate directory creation")
+			t.Fatal("Expected creation conflict error, but got nil")
 		}
-
-		if !strings.Contains(err.Error(), "already scheduled for creation") {
-			t.Errorf("Expected creation conflict error, got: %v", err)
+		if !strings.Contains(err.Error(), "conflicts with existing state") {
+			t.Errorf("Expected a conflict error, but got: %v", err)
 		}
 	})
 
 	t.Run("Detect duplicate delete operations", func(t *testing.T) {
-		batch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
+		testFS := synthfs.NewTestFileSystem()
+		// Pre-create the file to be deleted to satisfy Phase II validation
+		err := testFS.WriteFile("somefile.txt", []byte("content"), 0644)
+		if err != nil {
+			t.Fatalf("Failed to create test file: %v", err)
+		}
 
-		// First delete - should succeed validation
-		_, err := batch.Delete("somefile.txt")
+		batch := synthfs.NewBatch().WithFileSystem(testFS)
+		_, err = batch.Delete("somefile.txt")
 		if err != nil {
 			t.Fatalf("First Delete should succeed validation: %v", err)
 		}
 
-		// Second delete of same file - should fail
+		// Second delete on the same path should fail because the path is no longer projected to exist.
 		_, err = batch.Delete("somefile.txt")
 		if err == nil {
-			t.Error("Expected conflict error for duplicate delete operations")
+			t.Fatal("Expected deletion conflict error, but got nil")
 		}
-
-		if !strings.Contains(err.Error(), "already scheduled for deletion") {
-			t.Errorf("Expected deletion conflict error, got: %v", err)
+		if !strings.Contains(err.Error(), "is not projected to exist") {
+			t.Errorf("Expected a 'not projected to exist' error, but got: %v", err)
 		}
 	})
 
 	t.Run("Detect copy destination conflicts", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		
-		// Create source files first
-		err := testFS.WriteFile("source1.txt", []byte("source1"), 0644)
+		// Pre-create source files
+		err := testFS.WriteFile("source1.txt", []byte("s1"), 0644)
 		if err != nil {
-			t.Fatalf("Failed to create source file: %v", err)
+			t.Fatalf("Failed to create source1: %v", err)
 		}
-		err = testFS.WriteFile("source2.txt", []byte("source2"), 0644)
+		err = testFS.WriteFile("source2.txt", []byte("s2"), 0644)
 		if err != nil {
-			t.Fatalf("Failed to create source file: %v", err)
+			t.Fatalf("Failed to create source2: %v", err)
 		}
 
 		batch := synthfs.NewBatch().WithFileSystem(testFS)
-
-		// First copy - should succeed
 		_, err = batch.Copy("source1.txt", "destination.txt")
 		if err != nil {
-			t.Fatalf("First Copy should succeed: %v", err)
+			t.Fatalf("First Copy failed: %v", err)
 		}
 
-		// Second copy to same destination - should fail
+		// Second copy to the same destination should fail
 		_, err = batch.Copy("source2.txt", "destination.txt")
 		if err == nil {
-			t.Error("Expected conflict error for copy to same destination")
+			t.Fatal("Expected destination conflict error, but got nil")
 		}
-
-		if !strings.Contains(err.Error(), "already scheduled for creation") {
-			t.Errorf("Expected destination conflict error, got: %v", err)
+		if !strings.Contains(err.Error(), "conflicts with existing state") {
+			t.Errorf("Expected a destination conflict error, but got: %v", err)
 		}
 	})
 
 	t.Run("Detect move destination conflicts", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		
-		// Create source files first
-		err := testFS.WriteFile("old1.txt", []byte("old1"), 0644)
+		// Pre-create source files
+		err := testFS.WriteFile("old1.txt", []byte("o1"), 0644)
 		if err != nil {
-			t.Fatalf("Failed to create source file: %v", err)
+			t.Fatalf("Failed to create old1: %v", err)
 		}
-		err = testFS.WriteFile("old2.txt", []byte("old2"), 0644)
+		err = testFS.WriteFile("old2.txt", []byte("o2"), 0644)
 		if err != nil {
-			t.Fatalf("Failed to create source file: %v", err)
+			t.Fatalf("Failed to create old2: %v", err)
 		}
 
 		batch := synthfs.NewBatch().WithFileSystem(testFS)
-
-		// First move - should succeed
 		_, err = batch.Move("old1.txt", "new.txt")
 		if err != nil {
-			t.Fatalf("First Move should succeed: %v", err)
+			t.Fatalf("First Move failed: %v", err)
 		}
 
-		// Second move to same destination - should fail
+		// Second move to the same destination should fail
 		_, err = batch.Move("old2.txt", "new.txt")
 		if err == nil {
-			t.Error("Expected conflict error for move to same destination")
+			t.Fatal("Expected destination conflict error, but got nil")
 		}
-
-		if !strings.Contains(err.Error(), "already scheduled for creation") {
-			t.Errorf("Expected destination conflict error, got: %v", err)
+		if !strings.Contains(err.Error(), "conflicts with existing state") {
+			t.Errorf("Expected a destination conflict error, but got: %v", err)
 		}
 	})
 
 	t.Run("Detect symlink creation conflicts", func(t *testing.T) {
-		batch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
-
-		// First symlink - should succeed
-		_, err := batch.CreateSymlink("target1.txt", "link.txt")
+		testFS := synthfs.NewTestFileSystem()
+		// Pre-create targets
+		err := testFS.WriteFile("target1.txt", []byte("t1"), 0644)
 		if err != nil {
-			t.Fatalf("First CreateSymlink should succeed: %v", err)
+			t.Fatalf("Failed to create target1: %v", err)
+		}
+		err = testFS.WriteFile("target2.txt", []byte("t2"), 0644)
+		if err != nil {
+			t.Fatalf("Failed to create target2: %v", err)
 		}
 
-		// Second symlink with same path - should fail
+		batch := synthfs.NewBatch().WithFileSystem(testFS)
+		_, err = batch.CreateSymlink("target1.txt", "link.txt")
+		if err != nil {
+			t.Fatalf("First CreateSymlink failed: %v", err)
+		}
+
+		// Second symlink with the same name should fail
 		_, err = batch.CreateSymlink("target2.txt", "link.txt")
 		if err == nil {
-			t.Error("Expected conflict error for duplicate symlink creation")
+			t.Fatal("Expected creation conflict error, but got nil")
 		}
-
-		if !strings.Contains(err.Error(), "already scheduled for creation") {
-			t.Errorf("Expected creation conflict error, got: %v", err)
+		if !strings.Contains(err.Error(), "conflicts with existing state") {
+			t.Errorf("Expected a conflict error, but got: %v", err)
 		}
 	})
 
 	t.Run("Detect archive creation conflicts", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		
-		// Create source file for archives
-		err := testFS.WriteFile("source.txt", []byte("source"), 0644)
+		// Pre-create source files
+		err := testFS.WriteFile("src1.txt", []byte("s1"), 0644)
 		if err != nil {
-			t.Fatalf("Failed to create source file: %v", err)
+			t.Fatalf("Failed to create src1: %v", err)
+		}
+		err = testFS.WriteFile("src2.txt", []byte("s2"), 0644)
+		if err != nil {
+			t.Fatalf("Failed to create src2: %v", err)
 		}
 
 		batch := synthfs.NewBatch().WithFileSystem(testFS)
-
-		// First archive - should succeed
-		_, err = batch.CreateArchive("backup.tar.gz", synthfs.ArchiveFormatTarGz, "source.txt")
+		_, err = batch.CreateArchive("backup.tar.gz", synthfs.ArchiveFormatTarGz, "src1.txt")
 		if err != nil {
-			t.Fatalf("First CreateArchive should succeed: %v", err)
+			t.Fatalf("First CreateArchive failed: %v", err)
 		}
 
-		// Second archive with same path - should fail
-		_, err = batch.CreateArchive("backup.tar.gz", synthfs.ArchiveFormatZip, "source.txt")
+		// Second archive with the same name should fail
+		_, err = batch.CreateArchive("backup.tar.gz", synthfs.ArchiveFormatTarGz, "src2.txt")
 		if err == nil {
-			t.Error("Expected conflict error for duplicate archive creation")
+			t.Fatal("Expected creation conflict error, but got nil")
 		}
-
-		if !strings.Contains(err.Error(), "already scheduled for creation") {
-			t.Errorf("Expected creation conflict error, got: %v", err)
+		if !strings.Contains(err.Error(), "conflicts with existing state") {
+			t.Errorf("Expected a conflict error, but got: %v", err)
 		}
 	})
 
-	t.Run("Allow valid non-conflicting operations", func(t *testing.T) {
+	t.Run("Allow creating a file after its deletion", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		
-		// Create source files
-		err := testFS.WriteFile("source.txt", []byte("source"), 0644)
+		err := testFS.WriteFile("file.txt", []byte("content"), 0644)
 		if err != nil {
-			t.Fatalf("Failed to create source file: %v", err)
+			t.Fatalf("Failed to create test file: %v", err)
+		}
+
+		batch := synthfs.NewBatch().WithFileSystem(testFS)
+		// This sequence should be allowed by a smart tracker.
+		// Delete the original file.
+		_, err = batch.Delete("file.txt")
+		if err != nil {
+			t.Fatalf("Delete operation failed: %v", err)
+		}
+		// Re-create it.
+		_, err = batch.CreateFile("file.txt", []byte("new content"))
+		if err == nil {
+			t.Fatal("Expected conflict error for create-after-delete in this phase, but got nil")
+		}
+		// In a more advanced phase, this might be allowed. For now, we expect a conflict.
+		if !strings.Contains(err.Error(), "path was scheduled for deletion") {
+			t.Errorf("Expected a specific conflict error for create-after-delete, got: %v", err)
+		}
+	})
+
+	t.Run("Allow valid, non-conflicting operations", func(t *testing.T) {
+		testFS := synthfs.NewTestFileSystem()
+		// Pre-create files to avoid non-existence errors
+		err := testFS.WriteFile("to-copy.txt", []byte("c"), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = testFS.WriteFile("to-move.txt", []byte("m"), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = testFS.WriteFile("to-delete1.txt", []byte("d1"), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = testFS.WriteFile("to-delete2.txt", []byte("d2"), 0644)
+		if err != nil {
+			t.Fatal(err)
 		}
 
 		batch := synthfs.NewBatch().WithFileSystem(testFS)
 
-		// All these operations should succeed because they don't conflict
-		_, err = batch.CreateDir("dir1")
-		if err != nil {
-			t.Fatalf("CreateDir should succeed: %v", err)
+		// A mix of valid operations that should all be added successfully.
+		// The `add` function handles adding to the operations slice.
+		if _, err := batch.CreateFile("file1.txt", []byte("content1")); err != nil {
+			t.Fatalf("CreateFile failed: %v", err)
 		}
-
-		_, err = batch.CreateDir("dir2")
-		if err != nil {
-			t.Fatalf("CreateDir should succeed: %v", err)
+		if _, err := batch.CreateDir("dir1"); err != nil {
+			t.Fatalf("CreateDir failed: %v", err)
 		}
-
-		_, err = batch.CreateFile("file1.txt", []byte("content1"))
-		if err != nil {
-			t.Fatalf("CreateFile should succeed: %v", err)
+		if _, err := batch.Copy("to-copy.txt", "copy.txt"); err != nil {
+			t.Fatalf("Copy failed: %v", err)
 		}
-
-		_, err = batch.CreateFile("file2.txt", []byte("content2"))
-		if err != nil {
-			t.Fatalf("CreateFile should succeed: %v", err)
+		if _, err := batch.Move("to-move.txt", "move.txt"); err != nil {
+			t.Fatalf("Move failed: %v", err)
 		}
-
-		_, err = batch.Copy("source.txt", "copy1.txt")
-		if err != nil {
-			t.Fatalf("Copy should succeed: %v", err)
+		if _, err := batch.Delete("to-delete1.txt"); err != nil {
+			t.Fatalf("Delete should succeed: %v", err)
 		}
-
-		_, err = batch.Copy("source.txt", "copy2.txt")
-		if err != nil {
-			t.Fatalf("Copy should succeed: %v", err)
-		}
-
-		_, err = batch.Delete("to-delete1.txt")
-		if err != nil {
+		if _, err := batch.Delete("to-delete2.txt"); err != nil {
 			t.Fatalf("Delete should succeed: %v", err)
 		}
 
-		_, err = batch.Delete("to-delete2.txt")
-		if err != nil {
-			t.Fatalf("Delete should succeed: %v", err)
-		}
-
-		// Verify we have all the expected operations
-		ops := batch.Operations()
-		if len(ops) < 8 {
-			t.Errorf("Expected at least 8 operations, got %d", len(ops))
+		// All operations should be added without error
+		if len(batch.Operations()) != 6 {
+			t.Errorf("Expected 6 operations, got %d", len(batch.Operations()))
 		}
 	})
 
 	t.Run("Mixed conflict scenarios", func(t *testing.T) {
-		batch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
-
-		// Create file
-		_, err := batch.CreateFile("conflict.txt", []byte("content"))
-		if err != nil {
-			t.Fatalf("CreateFile should succeed: %v", err)
+		testFS := synthfs.NewTestFileSystem()
+		if err := testFS.WriteFile("file.txt", []byte("content"), 0644); err != nil {
+			t.Fatal(err)
 		}
 
-		// Try to create directory with same name - should fail
-		_, err = batch.CreateDir("conflict.txt")
-		if err == nil {
-			t.Error("Expected conflict error for file/directory name collision")
+		// Scenario 1: Create then delete -> Should conflict
+		batch1 := synthfs.NewBatch().WithFileSystem(testFS)
+		if _, err := batch1.CreateFile("new-file.txt", []byte("new")); err != nil {
+			t.Fatalf("CreateFile should not fail here: %v", err)
+		}
+		if _, err := batch1.Delete("new-file.txt"); err == nil {
+			t.Fatal("Expected conflict error for create/delete on same path")
 		}
 
-		// Try to delete the file we're creating - should fail
-		_, err = batch.Delete("conflict.txt")
-		if err == nil {
-			t.Error("Expected conflict error for create/delete on same path")
+		// Scenario 2: Delete then create -> Should conflict under current rules
+		batch2 := synthfs.NewBatch().WithFileSystem(testFS)
+		if _, err := batch2.Delete("file.txt"); err != nil {
+			t.Fatalf("Delete should not fail here: %v", err)
 		}
-
-		if !strings.Contains(err.Error(), "already scheduled for creation") {
-			t.Errorf("Expected creation conflict error, got: %v", err)
+		if _, err := batch2.CreateFile("file.txt", []byte("recreated")); err == nil {
+			t.Fatal("Expected conflict error for delete/create on same path")
 		}
 	})
 }

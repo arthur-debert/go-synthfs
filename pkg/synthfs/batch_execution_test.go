@@ -140,7 +140,19 @@ func TestBatchRollback(t *testing.T) {
 }
 
 func TestBatchOperationCounts(t *testing.T) {
-	batch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
+	testFS := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch().WithFileSystem(testFS)
+
+	// Pre-create files for Copy, Move, Delete to be valid
+	if err := testFS.WriteFile("to-copy.txt", []byte("c"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := testFS.WriteFile("to-move.txt", []byte("m"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := testFS.WriteFile("to-delete.txt", []byte("d"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Track operations as we add them
 	expectedCount := 0
@@ -169,12 +181,20 @@ func TestBatchOperationCounts(t *testing.T) {
 		t.Errorf("Expected %d operations after nested CreateFile, got %d", expectedCount, len(ops))
 	}
 
-	// Add more operations
-	// Phase I, Milestone 1: Copy and Move operations now validate source existence
-	// These will fail since sources don't exist, so skip them for this count test
-	t.Log("Skipping Copy and Move operations since sources don't exist (Phase I validation)")
+	// Add more operations, which are now valid.
+	_, err = batch.Copy("to-copy.txt", "copied.txt")
+	if err != nil {
+		t.Fatalf("Copy failed: %v", err)
+	}
+	expectedCount++
 
-	_, err = batch.Delete("to-delete")
+	_, err = batch.Move("to-move.txt", "moved.txt")
+	if err != nil {
+		t.Fatalf("Move failed: %v", err)
+	}
+	expectedCount++
+
+	_, err = batch.Delete("to-delete.txt")
 	if err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}

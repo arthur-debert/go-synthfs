@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites tests="222" failures="0" errors="0" time="0.687111">
-	<testsuite tests="1" failures="0" time="0.151000" name="github.com/arthur-debert/synthfs/cmd/synthfs" timestamp="2025-06-25T03:45:10-03:00">
+<testsuites tests="223" failures="0" errors="0" time="0.667217">
+	<testsuite tests="1" failures="0" time="0.155000" name="github.com/arthur-debert/synthfs/cmd/synthfs" timestamp="2025-06-25T05:45:11-03:00">
 		<properties>
 			<property name="go.version" value="go1.24.4 darwin/arm64"></property>
 		</properties>
 		<testcase classname="github.com/arthur-debert/synthfs/cmd/synthfs" name="TestRootCmdSetup" time="0.000000"></testcase>
 	</testsuite>
-	<testsuite tests="207" failures="0" time="0.177000" name="github.com/arthur-debert/synthfs/pkg/synthfs" timestamp="2025-06-25T03:45:11-03:00">
+	<testsuite tests="208" failures="0" time="0.177000" name="github.com/arthur-debert/synthfs/pkg/synthfs" timestamp="2025-06-25T05:45:11-03:00">
 		<properties>
 			<property name="go.version" value="go1.24.4 darwin/arm64"></property>
 		</properties>
@@ -120,7 +120,8 @@
 		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestBatchDuplicatePathDetection/Detect_move_destination_conflicts" time="0.000000"></testcase>
 		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestBatchDuplicatePathDetection/Detect_symlink_creation_conflicts" time="0.000000"></testcase>
 		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestBatchDuplicatePathDetection/Detect_archive_creation_conflicts" time="0.000000"></testcase>
-		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestBatchDuplicatePathDetection/Allow_valid_non-conflicting_operations" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestBatchDuplicatePathDetection/Allow_creating_a_file_after_its_deletion" time="0.000000"></testcase>
+		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestBatchDuplicatePathDetection/Allow_valid,_non-conflicting_operations" time="0.000000"></testcase>
 		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestBatchDuplicatePathDetection/Mixed_conflict_scenarios" time="0.000000"></testcase>
 		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestBatchDuplicatePathDetection" time="0.000000"></testcase>
 		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestBatchExecution/Execute_simple_operations" time="0.000000"></testcase>
@@ -218,7 +219,7 @@
 		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestIsSubPath" time="0.000000"></testcase>
 		<testcase classname="github.com/arthur-debert/synthfs/pkg/synthfs" name="TestTestFileSystem_fstest_Compliance" time="0.000000"></testcase>
 	</testsuite>
-	<testsuite tests="14" failures="0" time="0.321000" name="github.com/arthur-debert/synthfs/pkg/synthfs/testutil" timestamp="2025-06-25T03:45:11-03:00">
+	<testsuite tests="14" failures="0" time="0.316000" name="github.com/arthur-debert/synthfs/pkg/synthfs/testutil" timestamp="2025-06-25T05:45:11-03:00">
 		<properties>
 			<property name="go.version" value="go1.24.4 darwin/arm64"></property>
 		</properties>

@@ -328,16 +328,31 @@ func TestBatchValidation(t *testing.T) {
 	})
 
 	t.Run("Delete validation", func(t *testing.T) {
-		batch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
+		testFS := synthfs.NewTestFileSystem()
+		batch := synthfs.NewBatch().WithFileSystem(testFS)
 
-		// Delete operations with non-existent target should validate successfully
-		// (existence is checked at execution time)
+		// With Phase II state tracking, deleting a non-existent file should fail validation.
 		_, err := batch.Delete("does-not-exist.txt")
-		if err != nil {
-			t.Errorf("Delete validation should succeed, file existence checked at execution time: %v", err)
+		if err == nil {
+			t.Error("Expected validation error for deleting non-existent file, but got nil")
+		}
+		if !strings.Contains(err.Error(), "is not projected to exist") {
+			t.Errorf("Expected 'not projected to exist' error, got: %v", err)
 		}
 
-		// But empty paths should still fail validation
+		// Deleting a file that DOES exist should pass validation.
+		// Use a new batch and FS for a clean state.
+		testFS2 := synthfs.NewTestFileSystem()
+		if err := testFS2.WriteFile("exists.txt", []byte("data"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		batch2 := synthfs.NewBatch().WithFileSystem(testFS2)
+		_, err = batch2.Delete("exists.txt")
+		if err != nil {
+			t.Errorf("Expected delete to succeed for existing file, but got error: %v", err)
+		}
+
+		// But empty paths should still fail validation regardless.
 		_, err = batch.Delete("")
 		if err == nil {
 			t.Error("Expected validation error for empty path")
