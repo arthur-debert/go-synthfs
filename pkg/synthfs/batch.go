@@ -8,128 +8,6 @@ import (
 	"strings"
 )
 
-// PathTracker tracks operations by path to detect conflicts
-type PathTracker struct {
-	CreatedPaths  map[string]OperationID // paths that will be created
-	DeletedPaths  map[string]OperationID // paths that will be deleted
-	ModifiedPaths map[string]OperationID // paths that will be modified
-	fs            FullFileSystem         // Filesystem to check for existing paths
-}
-
-// NewPathTracker creates a new path tracker
-func NewPathTracker(fs FullFileSystem) *PathTracker {
-	return &PathTracker{
-		CreatedPaths:  make(map[string]OperationID),
-		DeletedPaths:  make(map[string]OperationID),
-		ModifiedPaths: make(map[string]OperationID),
-		fs:            fs,
-	}
-}
-
-// CheckPathConflict checks if adding an operation would conflict with existing operations
-func (pt *PathTracker) CheckPathConflict(opID OperationID, opType, path string, destPath string) error {
-	// Phase I, Milestone 2: Duplicate path detection
-	switch opType {
-	case "create_file", "create_directory":
-		if existingOpID, exists := pt.CreatedPaths[path]; exists {
-			return fmt.Errorf("operation %s conflicts with %s: cannot create %s - already scheduled for creation",
-				opID, existingOpID, path)
-		}
-		if existingOpID, exists := pt.DeletedPaths[path]; exists {
-			return fmt.Errorf("operation %s conflicts with %s: cannot create %s - already scheduled for deletion",
-				opID, existingOpID, path)
-		}
-		if existingOpID, exists := pt.ModifiedPaths[path]; exists {
-			return fmt.Errorf("operation %s conflicts with %s: cannot create %s - path already scheduled for modification",
-				opID, existingOpID, path)
-		}
-
-	case "delete":
-		if existingOpID, exists := pt.DeletedPaths[path]; exists {
-			return fmt.Errorf("operation %s conflicts with %s: cannot delete %s - already scheduled for deletion",
-				opID, existingOpID, path)
-		}
-		if existingOpID, exists := pt.CreatedPaths[path]; exists {
-			return fmt.Errorf("operation %s conflicts with %s: cannot delete %s - already scheduled for creation",
-				opID, existingOpID, path)
-		}
-
-	case "copy", "move":
-		// Check destination conflicts
-		if destPath != "" {
-			if existingOpID, exists := pt.CreatedPaths[destPath]; exists {
-				return fmt.Errorf("operation %s conflicts with %s: cannot %s to %s - already scheduled for creation",
-					opID, existingOpID, opType, destPath)
-			}
-			if existingOpID, exists := pt.ModifiedPaths[destPath]; exists {
-				return fmt.Errorf("operation %s conflicts with %s: cannot %s to %s - already scheduled for modification",
-					opID, existingOpID, opType, destPath)
-			}
-		}
-
-	case "create_symlink":
-		if existingOpID, exists := pt.CreatedPaths[path]; exists {
-			return fmt.Errorf("operation %s conflicts with %s: cannot create symlink %s - already scheduled for creation",
-				opID, existingOpID, path)
-		}
-		if existingOpID, exists := pt.ModifiedPaths[path]; exists {
-			return fmt.Errorf("operation %s conflicts with %s: cannot create symlink %s - path already scheduled for modification",
-				opID, existingOpID, path)
-		}
-
-	case "create_archive":
-		if existingOpID, exists := pt.CreatedPaths[path]; exists {
-			return fmt.Errorf("operation %s conflicts with %s: cannot create archive %s - already scheduled for creation",
-				opID, existingOpID, path)
-		}
-		if existingOpID, exists := pt.ModifiedPaths[path]; exists {
-			return fmt.Errorf("operation %s conflicts with %s: cannot create archive %s - path already scheduled for modification",
-				opID, existingOpID, path)
-		}
-
-	case "unarchive":
-		// Unarchive operations can conflict on extraction directory, but this is complex to predict
-		// For now, we'll rely on execution-time validation
-	}
-
-	return nil
-}
-
-// RecordOperation records an operation in the path tracker
-func (pt *PathTracker) RecordOperation(opID OperationID, opType, path string, destPath string) {
-	// Phase I, Milestone 2: Record path usage
-	switch opType {
-	case "create_file", "create_directory", "create_symlink", "create_archive":
-		pt.CreatedPaths[path] = opID
-
-	case "delete":
-		pt.DeletedPaths[path] = opID
-
-	case "copy":
-		if destPath != "" {
-			// Check if destination exists to decide if it's a create or modify
-			if _, err := pt.fs.Stat(destPath); err == nil {
-				pt.ModifiedPaths[destPath] = opID
-			} else {
-				pt.CreatedPaths[destPath] = opID
-			}
-		}
-
-	case "move":
-		if destPath != "" {
-			if _, err := pt.fs.Stat(destPath); err == nil {
-				pt.ModifiedPaths[destPath] = opID
-			} else {
-				pt.CreatedPaths[destPath] = opID
-			}
-		}
-		pt.DeletedPaths[path] = opID
-
-	case "unarchive":
-		// Complex to predict all extracted paths, skip for now
-	}
-}
-
 // computeFileChecksum computes MD5 checksum for a file
 func (b *Batch) computeFileChecksum(filePath string) (*ChecksumRecord, error) {
 	// Phase I, Milestone 3: Basic checksumming for copy/move operations
@@ -143,7 +21,7 @@ type Batch struct {
 	fs          FullFileSystem // Use FullFileSystem to have access to Stat method
 	ctx         context.Context
 	idCounter   int
-	pathTracker *PathTracker // Phase I, Milestone 2: Track path conflicts
+	pathTracker *PathStateTracker // Phase II: Track projected path state
 }
 
 // NewBatch creates a new operation batch with default filesystem and context.
@@ -154,7 +32,7 @@ func NewBatch() *Batch {
 		fs:          fs,
 		ctx:         context.Background(),
 		idCounter:   0,
-		pathTracker: NewPathTracker(fs), // Phase I, Milestone 2: Initialize path tracker
+		pathTracker: NewPathStateTracker(fs), // Phase II: Initialize path state tracker
 	}
 }
 
@@ -179,6 +57,38 @@ func (b *Batch) Operations() []Operation {
 	return opsCopy
 }
 
+// add adds an operation to the batch and validates it against the projected filesystem state
+func (b *Batch) add(op Operation) error {
+	// Phase II: Validate against projected state and update it.
+	if err := b.pathTracker.UpdateState(op); err != nil {
+		return err
+	}
+
+	// Auto-resolve dependencies (ensure parent directories exist)
+	// This will need to be updated to use the PathStateTracker as well.
+	var opPath string
+	if simpleOp, ok := op.(*SimpleOperation); ok {
+		if simpleOp.dstPath != "" {
+			opPath = simpleOp.dstPath
+		} else {
+			opPath = simpleOp.description.Path
+		}
+	} else {
+		opPath = op.Describe().Path
+	}
+
+	if parentDeps := b.ensureParentDirectories(opPath); len(parentDeps) > 0 {
+		if simpleOp, ok := op.(*SimpleOperation); ok {
+			for _, depID := range parentDeps {
+				simpleOp.AddDependency(depID)
+			}
+		}
+	}
+
+	b.operations = append(b.operations, op)
+	return nil
+}
+
 // CreateDir adds a directory creation operation to the batch.
 // It validates the operation immediately and resolves dependencies automatically.
 func (b *Batch) CreateDir(path string, mode ...fs.FileMode) (Operation, error) {
@@ -196,28 +106,15 @@ func (b *Batch) CreateDir(path string, mode ...fs.FileMode) (Operation, error) {
 	op.SetItem(dirItem)
 	op.SetDescriptionDetail("mode", fileMode.String())
 
-	// Validate immediately
+	// Validate immediately against the real filesystem.
 	if err := op.Validate(b.ctx, b.fs); err != nil {
 		return nil, fmt.Errorf("validation failed for CreateDir(%s): %w", path, err)
 	}
 
-	// Phase I, Milestone 2: Check for path conflicts
-	if err := b.pathTracker.CheckPathConflict(op.ID(), "create_directory", path, ""); err != nil {
-		return nil, fmt.Errorf("validation failed for CreateDir(%s): %w", path, err)
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("failed to add CreateDir(%s): %w", path, err)
 	}
 
-	// Auto-resolve dependencies (ensure parent directories exist)
-	if parentDeps := b.ensureParentDirectories(path); len(parentDeps) > 0 {
-		for _, depID := range parentDeps {
-			op.AddDependency(depID)
-		}
-	}
-
-	// Phase I, Milestone 2: Record operation in path tracker
-	b.pathTracker.RecordOperation(op.ID(), "create_directory", path, "")
-
-	// Add to batch
-	b.operations = append(b.operations, op)
 	Logger().Info().
 		Str("op_id", string(op.ID())).
 		Str("path", path).
@@ -250,23 +147,10 @@ func (b *Batch) CreateFile(path string, content []byte, mode ...fs.FileMode) (Op
 		return nil, fmt.Errorf("validation failed for CreateFile(%s): %w", path, err)
 	}
 
-	// Phase I, Milestone 2: Check for path conflicts
-	if err := b.pathTracker.CheckPathConflict(op.ID(), "create_file", path, ""); err != nil {
-		return nil, fmt.Errorf("validation failed for CreateFile(%s): %w", path, err)
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("failed to add CreateFile(%s): %w", path, err)
 	}
 
-	// Auto-resolve dependencies (ensure parent directories exist)
-	if parentDeps := b.ensureParentDirectories(path); len(parentDeps) > 0 {
-		for _, depID := range parentDeps {
-			op.AddDependency(depID)
-		}
-	}
-
-	// Phase I, Milestone 2: Record operation in path tracker
-	b.pathTracker.RecordOperation(op.ID(), "create_file", path, "")
-
-	// Add to batch
-	b.operations = append(b.operations, op)
 	Logger().Info().
 		Str("op_id", string(op.ID())).
 		Str("path", path).
@@ -299,23 +183,10 @@ func (b *Batch) Copy(src, dst string) (Operation, error) {
 		op.SetDescriptionDetail("source_checksum", checksum.MD5)
 	}
 
-	// Phase I, Milestone 2: Check for path conflicts
-	if err := b.pathTracker.CheckPathConflict(op.ID(), "copy", src, dst); err != nil {
-		return nil, fmt.Errorf("validation failed for Copy(%s, %s): %w", src, dst, err)
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("failed to add Copy(%s, %s): %w", src, dst, err)
 	}
 
-	// Auto-resolve dependencies (ensure destination parent directories exist)
-	if parentDeps := b.ensureParentDirectories(dst); len(parentDeps) > 0 {
-		for _, depID := range parentDeps {
-			op.AddDependency(depID)
-		}
-	}
-
-	// Phase I, Milestone 2: Record operation in path tracker
-	b.pathTracker.RecordOperation(op.ID(), "copy", src, dst)
-
-	// Add to batch
-	b.operations = append(b.operations, op)
 	Logger().Info().
 		Str("op_id", string(op.ID())).
 		Str("src", src).
@@ -347,23 +218,10 @@ func (b *Batch) Move(src, dst string) (Operation, error) {
 		op.SetDescriptionDetail("source_checksum", checksum.MD5)
 	}
 
-	// Phase I, Milestone 2: Check for path conflicts
-	if err := b.pathTracker.CheckPathConflict(op.ID(), "move", src, dst); err != nil {
-		return nil, fmt.Errorf("validation failed for Move(%s, %s): %w", src, dst, err)
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("failed to add Move(%s, %s): %w", src, dst, err)
 	}
 
-	// Auto-resolve dependencies (ensure destination parent directories exist)
-	if parentDeps := b.ensureParentDirectories(dst); len(parentDeps) > 0 {
-		for _, depID := range parentDeps {
-			op.AddDependency(depID)
-		}
-	}
-
-	// Phase I, Milestone 2: Record operation in path tracker
-	b.pathTracker.RecordOperation(op.ID(), "move", src, dst)
-
-	// Add to batch
-	b.operations = append(b.operations, op)
 	Logger().Info().
 		Str("op_id", string(op.ID())).
 		Str("src", src).
@@ -385,16 +243,11 @@ func (b *Batch) Delete(path string) (Operation, error) {
 		return nil, fmt.Errorf("validation failed for Delete(%s): %w", path, err)
 	}
 
-	// Phase I, Milestone 2: Check for path conflicts
-	if err := b.pathTracker.CheckPathConflict(op.ID(), "delete", path, ""); err != nil {
-		return nil, fmt.Errorf("validation failed for Delete(%s): %w", path, err)
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("failed to add Delete(%s): %w", path, err)
 	}
 
-	// Phase I, Milestone 2: Record operation in path tracker
-	b.pathTracker.RecordOperation(op.ID(), "delete", path, "")
-
 	// Add to batch (no dependency resolution needed for delete)
-	b.operations = append(b.operations, op)
 	Logger().Info().
 		Str("op_id", string(op.ID())).
 		Str("path", path).
@@ -420,23 +273,10 @@ func (b *Batch) CreateSymlink(target, linkPath string) (Operation, error) {
 		return nil, fmt.Errorf("validation failed for CreateSymlink(%s, %s): %w", target, linkPath, err)
 	}
 
-	// Phase I, Milestone 2: Check for path conflicts
-	if err := b.pathTracker.CheckPathConflict(op.ID(), "create_symlink", linkPath, ""); err != nil {
-		return nil, fmt.Errorf("validation failed for CreateSymlink(%s, %s): %w", target, linkPath, err)
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("failed to add CreateSymlink(%s, %s): %w", target, linkPath, err)
 	}
 
-	// Auto-resolve dependencies (ensure parent directories exist)
-	if parentDeps := b.ensureParentDirectories(linkPath); len(parentDeps) > 0 {
-		for _, depID := range parentDeps {
-			op.AddDependency(depID)
-		}
-	}
-
-	// Phase I, Milestone 2: Record operation in path tracker
-	b.pathTracker.RecordOperation(op.ID(), "create_symlink", linkPath, "")
-
-	// Add to batch
-	b.operations = append(b.operations, op)
 	Logger().Info().
 		Str("op_id", string(op.ID())).
 		Str("target", target).
@@ -479,23 +319,10 @@ func (b *Batch) CreateArchive(archivePath string, format ArchiveFormat, sources 
 	}
 	op.SetDescriptionDetail("sources_checksummed", len(sources))
 
-	// Phase I, Milestone 2: Check for path conflicts
-	if err := b.pathTracker.CheckPathConflict(op.ID(), "create_archive", archivePath, ""); err != nil {
-		return nil, fmt.Errorf("validation failed for CreateArchive(%s): %w", archivePath, err)
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("failed to add CreateArchive(%s): %w", archivePath, err)
 	}
 
-	// Auto-resolve dependencies (ensure parent directories exist)
-	if parentDeps := b.ensureParentDirectories(archivePath); len(parentDeps) > 0 {
-		for _, depID := range parentDeps {
-			op.AddDependency(depID)
-		}
-	}
-
-	// Phase I, Milestone 2: Record operation in path tracker
-	b.pathTracker.RecordOperation(op.ID(), "create_archive", archivePath, "")
-
-	// Add to batch
-	b.operations = append(b.operations, op)
 	Logger().Info().
 		Str("op_id", string(op.ID())).
 		Str("archive_path", archivePath).
@@ -523,23 +350,10 @@ func (b *Batch) Unarchive(archivePath, extractPath string) (Operation, error) {
 		return nil, fmt.Errorf("validation failed for Unarchive(%s, %s): %w", archivePath, extractPath, err)
 	}
 
-	// Phase I, Milestone 2: Check for path conflicts (limited for unarchive)
-	if err := b.pathTracker.CheckPathConflict(op.ID(), "unarchive", archivePath, extractPath); err != nil {
-		return nil, fmt.Errorf("validation failed for Unarchive(%s, %s): %w", archivePath, extractPath, err)
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("failed to add Unarchive(%s, %s): %w", archivePath, extractPath, err)
 	}
 
-	// Auto-resolve dependencies (ensure extract path parent directories exist)
-	if parentDeps := b.ensureParentDirectories(extractPath); len(parentDeps) > 0 {
-		for _, depID := range parentDeps {
-			op.AddDependency(depID)
-		}
-	}
-
-	// Phase I, Milestone 2: Record operation in path tracker
-	b.pathTracker.RecordOperation(op.ID(), "unarchive", archivePath, extractPath)
-
-	// Add to batch
-	b.operations = append(b.operations, op)
 	Logger().Info().
 		Str("op_id", string(op.ID())).
 		Str("archive_path", archivePath).
@@ -568,23 +382,10 @@ func (b *Batch) UnarchiveWithPatterns(archivePath, extractPath string, patterns 
 		return nil, fmt.Errorf("validation failed for UnarchiveWithPatterns(%s, %s): %w", archivePath, extractPath, err)
 	}
 
-	// Phase I, Milestone 2: Check for path conflicts (limited for unarchive)
-	if err := b.pathTracker.CheckPathConflict(op.ID(), "unarchive", archivePath, extractPath); err != nil {
-		return nil, fmt.Errorf("validation failed for UnarchiveWithPatterns(%s, %s): %w", archivePath, extractPath, err)
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("failed to add UnarchiveWithPatterns(%s, %s): %w", archivePath, extractPath, err)
 	}
 
-	// Auto-resolve dependencies (ensure extract path parent directories exist)
-	if parentDeps := b.ensureParentDirectories(extractPath); len(parentDeps) > 0 {
-		for _, depID := range parentDeps {
-			op.AddDependency(depID)
-		}
-	}
-
-	// Phase I, Milestone 2: Record operation in path tracker
-	b.pathTracker.RecordOperation(op.ID(), "unarchive", archivePath, extractPath)
-
-	// Add to batch
-	b.operations = append(b.operations, op)
 	Logger().Info().
 		Str("op_id", string(op.ID())).
 		Str("archive_path", archivePath).
@@ -649,19 +450,15 @@ func (b *Batch) ensureParentDirectories(path string) []OperationID {
 		return dependencyIDs
 	}
 
-	// Check if parent directory already exists in filesystem
-	if _, err := b.fs.Stat(parentDir); err == nil {
-		// Parent exists, no need to create
-		return dependencyIDs
-	}
-
-	// Check if we already have a CreateDir operation for this parent
-	for _, op := range b.operations {
-		if op.Describe().Type == "create_directory" && op.Describe().Path == parentDir {
-			// Already have an operation to create this parent
-			dependencyIDs = append(dependencyIDs, op.ID())
-			return dependencyIDs
+	// Phase II: Check if parent directory is projected to exist
+	parentState, err := b.pathTracker.GetState(parentDir)
+	if err == nil && parentState.WillExist {
+		if parentState.CreatedBy != "" {
+			// If it was created by a previous operation in this batch, we depend on it.
+			dependencyIDs = append(dependencyIDs, parentState.CreatedBy)
 		}
+		// If it exists (either on disk or projected), we don't need to do anything else.
+		return dependencyIDs
 	}
 
 	// Recursively ensure parent's parents exist
@@ -680,17 +477,17 @@ func (b *Batch) ensureParentDirectories(path string) []OperationID {
 		parentOp.AddDependency(depID)
 	}
 
-	// Validate the auto-generated parent operation
-	if err := parentOp.Validate(b.ctx, b.fs); err != nil {
+	// Validate the auto-generated parent operation and add it to the batch
+	if err := b.add(parentOp); err != nil {
 		// Log error but don't fail - might be resolved at execution time
 		Logger().Warn().
 			Err(err).
 			Str("path", parentDir).
 			Msg("validation warning for auto-generated parent directory")
+		// Even if it fails validation (e.g., conflict), other operations might depend on its ID.
+		// We'll still add the ID to dependencies. The conflict will be reported when the batch is run.
 	}
 
-	// Add to operations
-	b.operations = append(b.operations, parentOp)
 	dependencyIDs = append(dependencyIDs, parentOp.ID())
 
 	Logger().Info().

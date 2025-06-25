@@ -222,6 +222,13 @@ func TestBatchChecksumVerification(t *testing.T) {
 			t.Fatalf("CreateFile operation failed: %v", err)
 		}
 
+		// To make the Delete operation valid under Phase II rules, the file must exist
+		// or be projected to exist. We'll create it first.
+		err = testFS.WriteFile("nonexistent.txt", []byte("delete me"), 0644)
+		if err != nil {
+			t.Fatalf("Failed to create file for deletion test: %v", err)
+		}
+
 		_, err = batch.Delete("nonexistent.txt")
 		if err != nil {
 			t.Fatalf("Delete operation failed: %v", err)

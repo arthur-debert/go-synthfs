@@ -2,17 +2,26 @@ package synthfs_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
 )
 
 func TestBatchBasicUsage(t *testing.T) {
-	// Create a batch with OS filesystem
-	batch := synthfs.NewBatch().
-		WithFileSystem(synthfs.NewOSFileSystem(".")).
-		WithContext(context.Background())
+	// Use a test filesystem for controlled testing
+	testFS := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch().WithFileSystem(testFS).WithContext(context.Background())
+
+	// Pre-create files needed for valid operations in Phase II
+	if err := testFS.WriteFile("source.txt", []byte("s"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := testFS.WriteFile("old-location.txt", []byte("o"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := testFS.WriteFile("to-delete.txt", []byte("d"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Run("CreateDir", func(t *testing.T) {
 		op, err := batch.CreateDir("test-batch-dir")
@@ -63,26 +72,16 @@ func TestBatchBasicUsage(t *testing.T) {
 	})
 
 	t.Run("Copy", func(t *testing.T) {
-		// Phase I, Milestone 1: Copy operations now validate source existence at creation time
 		_, err := batch.Copy("source.txt", "destination.txt")
-		if err == nil {
-			t.Error("Expected validation error for non-existent source")
-		}
-		
-		if !strings.Contains(err.Error(), "copy source does not exist") {
-			t.Errorf("Expected source existence error, got: %v", err)
+		if err != nil {
+			t.Fatalf("Copy failed: %v", err)
 		}
 	})
 
 	t.Run("Move", func(t *testing.T) {
-		// Phase I, Milestone 1: Move operations now validate source existence at creation time
 		_, err := batch.Move("old-location.txt", "new-location.txt")
-		if err == nil {
-			t.Error("Expected validation error for non-existent source")
-		}
-		
-		if !strings.Contains(err.Error(), "move source does not exist") {
-			t.Errorf("Expected source existence error, got: %v", err)
+		if err != nil {
+			t.Fatalf("Move failed: %v", err)
 		}
 	})
 
@@ -108,8 +107,8 @@ func TestBatchBasicUsage(t *testing.T) {
 
 	t.Run("Operations", func(t *testing.T) {
 		ops := batch.Operations()
-		// Phase I, Milestone 1: Copy and Move operations now fail validation, so we have fewer operations
-		expectedCount := 3 // CreateDir, CreateFile, Delete (Copy and Move failed validation)
+		// All operations should now be valid and added to the batch.
+		expectedCount := 5 // CreateDir, CreateFile, Copy, Move, Delete
 		if len(ops) != expectedCount {
 			t.Errorf("Expected %d operations in batch, got %d", expectedCount, len(ops))
 		}
