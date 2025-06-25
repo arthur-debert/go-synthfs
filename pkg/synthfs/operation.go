@@ -182,7 +182,7 @@ func (op *SimpleOperation) GetAllChecksums() map[string]*ChecksumRecord {
 
 // verifyChecksums verifies all stored checksums against current file state (Phase I, Milestone 4)
 func (op *SimpleOperation) verifyChecksums(ctx context.Context, fsys FileSystem) error {
-	if op.checksums == nil || len(op.checksums) == 0 {
+	if len(op.checksums) == 0 {
 		return nil // No checksums to verify
 	}
 

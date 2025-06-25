@@ -195,7 +195,11 @@ func ComputeFileChecksum(fsys FullFileSystem, filePath string) (*ChecksumRecord,
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file %s for checksumming: %w", filePath, err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			Logger().Warn().Err(closeErr).Str("path", filePath).Msg("failed to close file during checksumming")
+		}
+	}()
 
 	// Compute MD5 hash
 	hasher := md5.New()
