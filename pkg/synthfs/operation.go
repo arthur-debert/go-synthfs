@@ -1480,7 +1480,11 @@ func (op *SimpleOperation) reverseDelete(ctx context.Context, fsys FileSystem, b
 			}
 			return nil, nil, fmt.Errorf("cannot open file for backup: %w", err)
 		}
-		defer file.Close()
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil {
+				Logger().Warn().Err(closeErr).Str("path", path).Msg("failed to close file during backup")
+			}
+		}()
 		
 		content, err := io.ReadAll(file)
 		if err != nil {
