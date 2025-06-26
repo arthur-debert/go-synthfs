@@ -14,57 +14,7 @@ import (
 	"time"
 )
 
-// OperationID is a unique identifier for an operation.
-type OperationID string
-
-// ChecksumRecord stores file checksum information for validation
-type ChecksumRecord struct {
-	Path         string
-	MD5          string
-	Size         int64
-	ModTime      time.Time
-	ChecksumTime time.Time
-}
-
-// FileSystem interface is defined in fs.go
-
-// OperationDesc provides a human-readable description of an operation.
-type OperationDesc struct {
-	Type    string                 // e.g., "create_file", "delete_directory"
-	Path    string                 // Primary path affected
-	Details map[string]interface{} // Additional operation-specific details
-}
-
-// BackupData stores the data needed to restore an operation's effects
-type BackupData struct {
-	OperationID   OperationID              `json:"operation_id"`
-	BackupType    string                   `json:"backup_type"`    // "file", "directory", "none"
-	OriginalPath  string                   `json:"original_path"`  // Path that was affected
-	BackupContent []byte                   `json:"backup_content"` // File content backup
-	BackupMode    fs.FileMode              `json:"backup_mode"`    // Original file mode
-	BackupTime    time.Time                `json:"backup_time"`    // When backup was created
-	SizeMB        float64                  `json:"size_mb"`        // Size in MB for budget tracking
-	Metadata      map[string]interface{}   `json:"metadata"`       // Additional metadata
-	                                                           // For "directory_tree", Metadata["items"] will be []BackedUpItem
-}
-
-// BackedUpItem represents a single file or directory within a backed-up directory tree.
-// This struct will be stored in the Metadata field of the main BackupData object for the directory.
-type BackedUpItem struct {
-	RelativePath string      `json:"relative_path"` // Path relative to the root of the backup
-	ItemType     string      `json:"item_type"`     // "file" or "directory"
-	Mode         fs.FileMode `json:"mode"`          // Original file/directory mode
-	Content      []byte      `json:"-"`             // File content (nil for directories); json ignored for cleaner metadata logs
-	Size         int64       `json:"size"`          // File size (0 for directories if not storing their own metadata size)
-	ModTime      time.Time   `json:"mod_time"`      // Original modification time
-}
-
-// BackupBudget tracks memory usage for backup operations
-type BackupBudget struct {
-	TotalMB     float64 `json:"total_mb"`
-	RemainingMB float64 `json:"remaining_mb"`
-	UsedMB      float64 `json:"used_mb"`
-}
+// Operation types are now defined in types.go
 
 // ConsumeBackup reduces the remaining budget by the specified amount
 func (bb *BackupBudget) ConsumeBackup(sizeMB float64) error {
@@ -88,47 +38,7 @@ func (bb *BackupBudget) RestoreBackup(sizeMB float64) {
 	}
 }
 
-// Operation defines a single abstract filesystem operation.
-type Operation interface {
-	// ID returns the unique identifier of the operation.
-	ID() OperationID
-
-	// Dependencies returns a list of OperationIDs that must be successfully
-	// executed before this operation can run.
-	Dependencies() []OperationID
-
-	// Conflicts returns a list of OperationIDs that cannot run concurrently
-	// with this operation or that represent incompatible desired states.
-	Conflicts() []OperationID
-
-	// Execute performs the operation on the given filesystem.
-	Execute(ctx context.Context, fsys FileSystem) error
-
-	// Validate checks if the operation can be performed.
-	Validate(ctx context.Context, fsys FileSystem) error
-
-	// Rollback attempts to undo the effects of the Execute method.
-	Rollback(ctx context.Context, fsys FileSystem) error
-
-	// Describe returns a structured description of the operation.
-	Describe() OperationDesc
-
-	// GetItem returns the FsItem associated with this operation, if any.
-	// This is primarily relevant for Create operations.
-	// Returns nil if no item is directly associated (e.g., for Delete, Copy, Move by path).
-	GetItem() FsItem
-
-	// GetChecksum retrieves a checksum record for a file path (Phase I, Milestone 3)
-	GetChecksum(path string) *ChecksumRecord
-
-	// GetAllChecksums returns all checksum records (Phase I, Milestone 3)
-	GetAllChecksums() map[string]*ChecksumRecord
-
-	// ReverseOps generates operations that would undo this operation's effects (Phase III)
-	// Returns a slice of operations that, when executed, will restore the filesystem
-	// to the state it was in before this operation was executed.
-	ReverseOps(ctx context.Context, fsys FileSystem, budget *BackupBudget) ([]Operation, *BackupData, error)
-}
+// Operation interface is defined in types.go
 
 // --- SimpleOperation: Basic Operation Implementation ---
 
@@ -1274,7 +1184,7 @@ func (op *SimpleOperation) reverseCreateFile(ctx context.Context, fsys FileSyste
 		"delete",
 		op.description.Path,
 	)
-	
+
 	// No backup needed for create operations - we just delete what was created
 	backupData := &BackupData{
 		OperationID:   op.ID(),
@@ -1285,7 +1195,7 @@ func (op *SimpleOperation) reverseCreateFile(ctx context.Context, fsys FileSyste
 		SizeMB:        0,
 		Metadata:      map[string]interface{}{"reverse_type": "delete_created_file"},
 	}
-	
+
 	return []Operation{reverseOp}, backupData, nil
 }
 
@@ -1297,7 +1207,7 @@ func (op *SimpleOperation) reverseCreateDirectory(ctx context.Context, fsys File
 		"delete",
 		op.description.Path,
 	)
-	
+
 	// No backup needed for create operations - we just delete what was created
 	backupData := &BackupData{
 		OperationID:   op.ID(),
@@ -1308,7 +1218,7 @@ func (op *SimpleOperation) reverseCreateDirectory(ctx context.Context, fsys File
 		SizeMB:        0,
 		Metadata:      map[string]interface{}{"reverse_type": "delete_created_directory"},
 	}
-	
+
 	return []Operation{reverseOp}, backupData, nil
 }
 
@@ -1320,7 +1230,7 @@ func (op *SimpleOperation) reverseCreateSymlink(ctx context.Context, fsys FileSy
 		"delete",
 		op.description.Path,
 	)
-	
+
 	// No backup needed for create operations - we just delete what was created
 	backupData := &BackupData{
 		OperationID:   op.ID(),
@@ -1331,7 +1241,7 @@ func (op *SimpleOperation) reverseCreateSymlink(ctx context.Context, fsys FileSy
 		SizeMB:        0,
 		Metadata:      map[string]interface{}{"reverse_type": "delete_created_symlink"},
 	}
-	
+
 	return []Operation{reverseOp}, backupData, nil
 }
 
@@ -1343,7 +1253,7 @@ func (op *SimpleOperation) reverseCreateArchive(ctx context.Context, fsys FileSy
 		"delete",
 		op.description.Path,
 	)
-	
+
 	// No backup needed for create operations - we just delete what was created
 	backupData := &BackupData{
 		OperationID:   op.ID(),
@@ -1354,7 +1264,7 @@ func (op *SimpleOperation) reverseCreateArchive(ctx context.Context, fsys FileSy
 		SizeMB:        0,
 		Metadata:      map[string]interface{}{"reverse_type": "delete_created_archive"},
 	}
-	
+
 	return []Operation{reverseOp}, backupData, nil
 }
 
@@ -1363,7 +1273,7 @@ func (op *SimpleOperation) reverseUnarchive(ctx context.Context, fsys FileSystem
 	// For unarchive, we need to delete the extraction directory
 	// This is simplified - a full implementation might track individual extracted files
 	var reverseOps []Operation
-	
+
 	if item := op.GetItem(); item != nil {
 		if unarchiveItem, ok := item.(*UnarchiveItem); ok {
 			// Delete the extraction directory
@@ -1375,7 +1285,7 @@ func (op *SimpleOperation) reverseUnarchive(ctx context.Context, fsys FileSystem
 			reverseOps = append(reverseOps, reverseOp)
 		}
 	}
-	
+
 	// No backup needed for unarchive operations - we just delete what was extracted
 	backupData := &BackupData{
 		OperationID:   op.ID(),
@@ -1386,7 +1296,7 @@ func (op *SimpleOperation) reverseUnarchive(ctx context.Context, fsys FileSystem
 		SizeMB:        0,
 		Metadata:      map[string]interface{}{"reverse_type": "delete_extracted_files"},
 	}
-	
+
 	return reverseOps, backupData, nil
 }
 
@@ -1398,7 +1308,7 @@ func (op *SimpleOperation) reverseCopy(ctx context.Context, fsys FileSystem, bud
 		"delete",
 		op.dstPath,
 	)
-	
+
 	// No backup needed for copy operations - we just delete the copy
 	backupData := &BackupData{
 		OperationID:   op.ID(),
@@ -1409,7 +1319,7 @@ func (op *SimpleOperation) reverseCopy(ctx context.Context, fsys FileSystem, bud
 		SizeMB:        0,
 		Metadata:      map[string]interface{}{"reverse_type": "delete_copied_file"},
 	}
-	
+
 	return []Operation{reverseOp}, backupData, nil
 }
 
@@ -1423,7 +1333,7 @@ func (op *SimpleOperation) reverseMove(ctx context.Context, fsys FileSystem, bud
 	)
 	reverseOp.SetPaths(op.dstPath, op.srcPath)
 	reverseOp.SetDescriptionDetail("destination", op.srcPath)
-	
+
 	// No backup needed for move operations - we just move it back
 	backupData := &BackupData{
 		OperationID:   op.ID(),
@@ -1434,31 +1344,31 @@ func (op *SimpleOperation) reverseMove(ctx context.Context, fsys FileSystem, bud
 		SizeMB:        0,
 		Metadata:      map[string]interface{}{"reverse_type": "move_back", "original_src": op.srcPath, "original_dst": op.dstPath},
 	}
-	
+
 	return []Operation{reverseOp}, backupData, nil
 }
 
 // reverseDelete generates create operation to undo delete (with budget-aware backup)
 func (op *SimpleOperation) reverseDelete(ctx context.Context, fsys FileSystem, budget *BackupBudget) ([]Operation, *BackupData, error) {
 	path := op.description.Path
-	
+
 	// Check if the filesystem supports Stat to determine file type and size
 	fullFS, ok := fsys.(FullFileSystem)
 	if !ok {
 		return nil, nil, fmt.Errorf("reverse delete requires filesystem with Stat support")
 	}
-	
+
 	// Get file info to determine type and size
 	info, err := fullFS.Stat(path)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot backup file for delete operation: %w", err)
 	}
-	
+
 	var reverseOps []Operation
 	var backupData *BackupData
 	// err is already declared from fullFS.Stat(path) and is nil if we reached here.
 	// It will be updated by walkAndBackup or file processing errors.
-	
+
 	if info.IsDir() {
 		backedUpItems := make([]BackedUpItem, 0)
 		var totalBackedUpSize int64 // Accumulates byte size of backed-up files
@@ -1546,7 +1456,7 @@ func (op *SimpleOperation) reverseDelete(ctx context.Context, fsys FileSystem, b
 		if walkErr != nil {
 			err = walkErr // Update the main error for reverseDelete
 		}
-		
+
 		totalBackedUpSizeMB := float64(totalBackedUpSize) / (1024 * 1024)
 		backupData = &BackupData{
 			OperationID:   op.ID(),
@@ -1564,13 +1474,13 @@ func (op *SimpleOperation) reverseDelete(ctx context.Context, fsys FileSystem, b
 	} else {
 		// Regular file - backup content
 		sizeMB := float64(info.Size()) / (1024 * 1024)
-		
+
 		if budget != nil {
 			if budgetErr := budget.ConsumeBackup(sizeMB); budgetErr != nil {
 				return nil, nil, fmt.Errorf("cannot backup file '%s' (%.2fMB): %w", path, sizeMB, budgetErr)
 			}
 		}
-		
+
 		content, fileReadErr := readFileContent(fullFS, path)
 		if fileReadErr != nil {
 			if budget != nil {
@@ -1578,7 +1488,7 @@ func (op *SimpleOperation) reverseDelete(ctx context.Context, fsys FileSystem, b
 			}
 			return nil, nil, fmt.Errorf("cannot read file content for backup for %s: %w", path, fileReadErr)
 		}
-		
+
 		reverseOp := NewSimpleOperation(
 			OperationID("reverse_"+string(op.ID())),
 			"create_file",
@@ -1587,7 +1497,7 @@ func (op *SimpleOperation) reverseDelete(ctx context.Context, fsys FileSystem, b
 		fileItem := NewFile(path).WithContent(content).WithMode(info.Mode())
 		reverseOp.SetItem(fileItem)
 		reverseOps = append(reverseOps, reverseOp)
-		
+
 		backupData = &BackupData{
 			OperationID:   op.ID(),
 			BackupType:    "file",
@@ -1628,6 +1538,6 @@ func (op *SimpleOperation) reverseDelete(ctx context.Context, fsys FileSystem, b
 			reverseOps = generatedOps
 		}
 	}
-	
+
 	return reverseOps, backupData, err
 }

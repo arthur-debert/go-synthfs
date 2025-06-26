@@ -11,66 +11,7 @@ import (
 	"time"
 )
 
-// ReadFS is an alias for fs.FS, representing a read-only file system.
-type ReadFS = fs.FS
-
-// WriteFS defines the interface for write operations on a file system.
-type WriteFS interface {
-	// WriteFile writes data to a file named name.
-	// If the file does not exist, WriteFile creates it with permissions perm;
-	// otherwise WriteFile truncates it before writing.
-	WriteFile(name string, data []byte, perm fs.FileMode) error
-
-	// MkdirAll creates a directory named path,
-	// along with any necessary parents, and returns nil,
-	// or else returns an error.
-	// The permission bits perm (before umask) are used for all
-	// directories that MkdirAll creates.
-	MkdirAll(path string, perm fs.FileMode) error
-
-	// Remove removes the named file or (empty) directory.
-	Remove(name string) error
-
-	// RemoveAll removes path and any children it contains.
-	// It removes everything it can but returns the first error
-	// it encounters. If the path does not exist, RemoveAll
-	// returns nil (no error).
-	RemoveAll(name string) error
-
-	// Symlink creates newname as a symbolic link to oldname.
-	// On Windows, a symlink to a non-existent oldname creates a file symlink;
-	// if oldname is later created as a directory, the symlink will not work.
-	// If there is an error, it will be of type *LinkError.
-	Symlink(oldname, newname string) error
-
-	// Readlink returns the destination of the named symbolic link.
-	// If there is an error, it will be of type *PathError.
-	Readlink(name string) (string, error)
-
-	// Rename renames (moves) oldpath to newpath.
-	// If newpath already exists and is not a directory, Rename replaces it.
-	// OS-specific restrictions may apply when oldpath and newpath are in different directories.
-	// If there is an error, it will be of type *LinkError.
-	Rename(oldpath, newpath string) error
-}
-
-// FileSystem combines read and write operations.
-type FileSystem interface {
-	ReadFS
-	WriteFS
-}
-
-// StatFS extends ReadFS with Stat capabilities for better io/fs compatibility
-type StatFS interface {
-	ReadFS
-	Stat(name string) (fs.FileInfo, error)
-}
-
-// FullFileSystem provides the complete filesystem interface including Stat
-type FullFileSystem interface {
-	FileSystem
-	Stat(name string) (fs.FileInfo, error)
-}
+// Filesystem interfaces are defined in types.go
 
 // OSFileSystem implements FullFileSystem using the OS filesystem
 type OSFileSystem struct {
@@ -201,48 +142,47 @@ func ComputeFileChecksum(fsys FullFileSystem, filePath string) (*ChecksumRecord,
 		}
 	}()
 
-	// Compute MD5 hash
-	hasher := md5.New()
-	if _, err := io.Copy(hasher, file); err != nil {
-		return nil, fmt.Errorf("failed to compute checksum for %s: %w", filePath, err)
+	// Calculate MD5 hash
+	hash := md5.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return nil, fmt.Errorf("failed to calculate checksum for %s: %w", filePath, err)
 	}
 
-	checksum := fmt.Sprintf("%x", hasher.Sum(nil))
-
-	return &ChecksumRecord{
+	// Create checksum record
+	checksum := &ChecksumRecord{
 		Path:         filePath,
-		MD5:          checksum,
+		MD5:          fmt.Sprintf("%x", hash.Sum(nil)),
 		Size:         info.Size(),
 		ModTime:      info.ModTime(),
 		ChecksumTime: time.Now(),
-	}, nil
+	}
+
+	return checksum, nil
 }
 
-// ReadOnlyWrapper wraps any fs.FS to provide StatFS functionality if possible
+// ReadOnlyWrapper wraps an fs.FS to add StatFS capabilities if not already present
 type ReadOnlyWrapper struct {
 	fs.FS
 }
 
-// NewReadOnlyWrapper creates a wrapper around any fs.FS
+// NewReadOnlyWrapper creates a new wrapper for an fs.FS
 func NewReadOnlyWrapper(fsys fs.FS) *ReadOnlyWrapper {
 	return &ReadOnlyWrapper{FS: fsys}
 }
 
-// Stat implements StatFS if the underlying filesystem supports fs.StatFS
+// Stat implements the StatFS interface
 func (w *ReadOnlyWrapper) Stat(name string) (fs.FileInfo, error) {
-	if statFS, ok := w.FS.(fs.StatFS); ok {
+	// If the underlying FS already implements StatFS, use that
+	if statFS, ok := w.FS.(StatFS); ok {
 		return statFS.Stat(name)
 	}
-	// Fallback: try to open and get file info
-	file, err := w.Open(name)
+
+	// Otherwise, open the file and get its info
+	file, err := w.FS.Open(name)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if closeErr := file.Close(); closeErr != nil {
-			// Log error but don't fail the operation
-			Logger().Warn().Err(closeErr).Msg("failed to close file in Stat fallback")
-		}
-	}()
+	defer file.Close()
+
 	return file.Stat()
 }
