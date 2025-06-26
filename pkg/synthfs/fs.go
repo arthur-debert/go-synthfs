@@ -178,11 +178,15 @@ func (w *ReadOnlyWrapper) Stat(name string) (fs.FileInfo, error) {
 	}
 
 	// Otherwise, open the file and get its info
-	file, err := w.FS.Open(name)
+	file, err := w.Open(name)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			Logger().Warn().Err(closeErr).Msg("failed to close file in Stat wrapper")
+		}
+	}()
 
 	return file.Stat()
 }

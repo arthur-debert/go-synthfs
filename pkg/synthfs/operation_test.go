@@ -129,17 +129,26 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 	ctx := context.Background()
 	defaultBudgetMB := 10.0
 
-	setupTestFSForDirDelete := func(fs *TestFileSystem) {
-		fs.MkdirAll("dir1", 0755)
-		fs.WriteFile("dir1/file1.txt", []byte("content1"), 0644) // 8 bytes
-		fs.MkdirAll("dir1/subdir", 0755)
-		fs.WriteFile("dir1/subdir/file2.txt", []byte("content2 is longer"), 0644) // 18 bytes
-		fs.WriteFile("dir1/file3.txt", []byte("content3"), 0644) // 8 bytes
+	setupTestFSForDirDelete := func(t *testing.T, fs *TestFileSystem) {
+		t.Helper()
+		must := func(err error) {
+			t.Helper()
+			if err != nil {
+				t.Fatalf("test setup failed: %v", err)
+			}
+		}
+		must(fs.MkdirAll("dir1", 0755))
+		must(fs.WriteFile("dir1/file1.txt", []byte("content1"), 0644)) // 8 bytes
+		must(fs.MkdirAll("dir1/subdir", 0755))
+		must(fs.WriteFile("dir1/subdir/file2.txt", []byte("content2 is longer"), 0644)) // 18 bytes
+		must(fs.WriteFile("dir1/file3.txt", []byte("content3"), 0644))                  // 8 bytes
 	}
 
 	t.Run("delete empty directory", func(t *testing.T) {
 		fs := NewTestFileSystem()
-		fs.MkdirAll("empty_dir", 0755)
+		if err := fs.MkdirAll("empty_dir", 0755); err != nil {
+			t.Fatalf("test setup failed: %v", err)
+		}
 
 		op := NewSimpleOperation("test-del-empty-dir", "delete", "empty_dir")
 		budget := &BackupBudget{TotalMB: defaultBudgetMB, RemainingMB: defaultBudgetMB}
@@ -166,7 +175,7 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 
 	t.Run("delete directory with content, sufficient budget", func(t *testing.T) {
 		fs := NewTestFileSystem()
-		setupTestFSForDirDelete(fs)
+		setupTestFSForDirDelete(t, fs)
 
 		op := NewSimpleOperation("test-del-dir-full", "delete", "dir1")
 		budget := &BackupBudget{TotalMB: defaultBudgetMB, RemainingMB: defaultBudgetMB}
@@ -192,12 +201,15 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 
 		// Check item order and types (basic check)
 		// Order of siblings is not guaranteed by ReadDir, so we check for presence and correctness.
-		expectedItems := map[string]struct{ ItemType string; Content_or_Nil interface{} }{
-			".":                               {ItemType: "directory"},
-			"file1.txt":                       {ItemType: "file", Content_or_Nil: "content1"},
-			"subdir":                          {ItemType: "directory"},
+		expectedItems := map[string]struct {
+			ItemType       string
+			Content_or_Nil interface{}
+		}{
+			".":                                  {ItemType: "directory"},
+			"file1.txt":                          {ItemType: "file", Content_or_Nil: "content1"},
+			"subdir":                             {ItemType: "directory"},
 			filepath.Join("subdir", "file2.txt"): {ItemType: "file", Content_or_Nil: "content2 is longer"},
-			"file3.txt":                       {ItemType: "file", Content_or_Nil: "content3"},
+			"file3.txt":                          {ItemType: "file", Content_or_Nil: "content3"},
 		}
 		if len(items) != len(expectedItems) {
 			t.Errorf("Number of backed up items mismatch. Expected %d, Got %d: %+v", len(expectedItems), len(items), items)
@@ -220,17 +232,16 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 			t.Errorf("Not all expected items were found in backup. Missing: %v", expectedItems)
 		}
 
-
 		if len(reverseOps) != 5 {
 			t.Fatalf("Expected 5 reverse operations, got %d", len(reverseOps))
 		}
 		// Check reverse op types and paths more flexibly
 		expectedRevOps := map[string]string{ // path -> type
-			"dir1":                                "create_directory",
-			filepath.Join("dir1", "file1.txt"):       "create_file",
-			filepath.Join("dir1", "subdir"):          "create_directory",
+			"dir1":                                       "create_directory",
+			filepath.Join("dir1", "file1.txt"):           "create_file",
+			filepath.Join("dir1", "subdir"):              "create_directory",
 			filepath.Join("dir1", "subdir", "file2.txt"): "create_file",
-			filepath.Join("dir1", "file3.txt"):       "create_file",
+			filepath.Join("dir1", "file3.txt"):           "create_file",
 		}
 		for _, ro := range reverseOps {
 			path := ro.Describe().Path
@@ -266,7 +277,7 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 
 	t.Run("delete directory, budget insufficient for all files", func(t *testing.T) {
 		fs := NewTestFileSystem()
-		setupTestFSForDirDelete(fs) // total 34 bytes needed
+		setupTestFSForDirDelete(t, fs) // total 34 bytes needed
 
 		op := NewSimpleOperation("test-del-dir-partial", "delete", "dir1")
 		// Budget enough for file1.txt (8b) and a bit more, but not file2.txt (18b)
@@ -319,7 +330,7 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 
 	t.Run("delete directory, budget insufficient for any file", func(t *testing.T) {
 		fs := NewTestFileSystem()
-		setupTestFSForDirDelete(fs) // Smallest file is 8 bytes
+		setupTestFSForDirDelete(t, fs) // Smallest file is 8 bytes
 
 		op := NewSimpleOperation("test-del-dir-none", "delete", "dir1")
 		tinyBudgetMB := float64(1) / (1024 * 1024) // 1 byte budget
@@ -341,9 +352,10 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 		dirCount := 0
 		fileCount := 0
 		for _, item := range items {
-			if item.ItemType == "directory" {
+			switch item.ItemType {
+			case "directory":
 				dirCount++
-			} else if item.ItemType == "file" {
+			case "file":
 				fileCount++
 			}
 		}
@@ -355,7 +367,6 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 		}
 	})
 }
-
 
 func TestSimpleOperation_Rollback(t *testing.T) {
 	ctx := context.Background()
@@ -918,7 +929,7 @@ func TestSimpleOperation_ValidateCopy_EdgeCases(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create test source file: %v", err)
 		}
-		
+
 		op := NewSimpleOperation("test-op", "copy", "test/source.txt")
 		op.SetPaths("test/source.txt", "test/destination.txt")
 
@@ -937,7 +948,7 @@ func TestSimpleOperation_ValidateCopy_EdgeCases(t *testing.T) {
 		if err == nil {
 			t.Error("Expected validation error for non-existent source, but got none")
 		}
-		
+
 		if !strings.Contains(err.Error(), "copy source does not exist") {
 			t.Errorf("Expected source existence error, got: %v", err)
 		}
@@ -1019,28 +1030,28 @@ func (fs *errorFS) Stat(name string) (fs.FileInfo, error) {
 func TestSourceExistenceValidation(t *testing.T) {
 	ctx := context.Background()
 	testFS := NewTestFileSystem()
-	
+
 	// Create some test files and directories for validation tests
 	err := testFS.WriteFile("existing_file.txt", []byte("test content"), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	
+
 	err = testFS.MkdirAll("existing_dir", 0755)
 	if err != nil {
 		t.Fatalf("Failed to create test directory: %v", err)
 	}
-	
+
 	err = testFS.WriteFile("source1.txt", []byte("source 1"), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create source1.txt: %v", err)
 	}
-	
+
 	err = testFS.WriteFile("source2.txt", []byte("source 2"), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create source2.txt: %v", err)
 	}
-	
+
 	// Create a test archive for unarchive tests
 	archiveContent := createSimpleZip(t, map[string]string{
 		"file1.txt": "content1",
@@ -1054,7 +1065,7 @@ func TestSourceExistenceValidation(t *testing.T) {
 	t.Run("Copy validation - source exists", func(t *testing.T) {
 		op := NewSimpleOperation("copy-op", "copy", "existing_file.txt")
 		op.SetPaths("existing_file.txt", "destination.txt")
-		
+
 		err := op.Validate(ctx, testFS)
 		if err != nil {
 			t.Errorf("Expected no validation error for existing source, got: %v", err)
@@ -1064,12 +1075,12 @@ func TestSourceExistenceValidation(t *testing.T) {
 	t.Run("Copy validation - source does not exist", func(t *testing.T) {
 		op := NewSimpleOperation("copy-op", "copy", "nonexistent_file.txt")
 		op.SetPaths("nonexistent_file.txt", "destination.txt")
-		
+
 		err := op.Validate(ctx, testFS)
 		if err == nil {
 			t.Error("Expected validation error for non-existent source, but got none")
 		}
-		
+
 		if !strings.Contains(err.Error(), "copy source does not exist") {
 			t.Errorf("Expected 'copy source does not exist' error, got: %v", err)
 		}
@@ -1078,492 +1089,10 @@ func TestSourceExistenceValidation(t *testing.T) {
 	t.Run("Move validation - source exists", func(t *testing.T) {
 		op := NewSimpleOperation("move-op", "move", "existing_file.txt")
 		op.SetPaths("existing_file.txt", "new_location.txt")
-		
+
 		err := op.Validate(ctx, testFS)
 		if err != nil {
 			t.Errorf("Expected no validation error for existing source, got: %v", err)
-		}
-	})
-
-	t.Run("Move validation - source does not exist", func(t *testing.T) {
-		op := NewSimpleOperation("move-op", "move", "nonexistent_file.txt")
-		op.SetPaths("nonexistent_file.txt", "new_location.txt")
-		
-		err := op.Validate(ctx, testFS)
-		if err == nil {
-			t.Error("Expected validation error for non-existent source, but got none")
-		}
-		
-		if !strings.Contains(err.Error(), "move source does not exist") {
-			t.Errorf("Expected 'move source does not exist' error, got: %v", err)
-		}
-	})
-
-	t.Run("Archive validation - all sources exist", func(t *testing.T) {
-		op := NewSimpleOperation("archive-op", "create_archive", "archive.zip")
-		archiveItem := NewArchive("archive.zip", ArchiveFormatZip, []string{"source1.txt", "source2.txt"})
-		op.SetItem(archiveItem)
-		
-		err := op.Validate(ctx, testFS)
-		if err != nil {
-			t.Errorf("Expected no validation error for existing sources, got: %v", err)
-		}
-	})
-
-	t.Run("Archive validation - some sources do not exist", func(t *testing.T) {
-		op := NewSimpleOperation("archive-op", "create_archive", "archive.zip")
-		archiveItem := NewArchive("archive.zip", ArchiveFormatZip, []string{"source1.txt", "nonexistent.txt"})
-		op.SetItem(archiveItem)
-		
-		err := op.Validate(ctx, testFS)
-		if err == nil {
-			t.Error("Expected validation error for non-existent source, but got none")
-		}
-		
-		if !strings.Contains(err.Error(), "archive source does not exist") {
-			t.Errorf("Expected 'archive source does not exist' error, got: %v", err)
-		}
-	})
-
-	t.Run("Archive validation - directory source exists", func(t *testing.T) {
-		op := NewSimpleOperation("archive-op", "create_archive", "archive.zip")
-		archiveItem := NewArchive("archive.zip", ArchiveFormatZip, []string{"existing_dir"})
-		op.SetItem(archiveItem)
-		
-		err := op.Validate(ctx, testFS)
-		if err != nil {
-			t.Errorf("Expected no validation error for existing directory source, got: %v", err)
-		}
-	})
-
-	t.Run("Unarchive validation - archive exists", func(t *testing.T) {
-		op := NewSimpleOperation("unarchive-op", "unarchive", "test_archive.zip")
-		unarchiveItem := NewUnarchive("test_archive.zip", "extracted/")
-		op.SetItem(unarchiveItem)
-		
-		err := op.Validate(ctx, testFS)
-		if err != nil {
-			t.Errorf("Expected no validation error for existing archive, got: %v", err)
-		}
-	})
-
-	t.Run("Unarchive validation - archive does not exist", func(t *testing.T) {
-		op := NewSimpleOperation("unarchive-op", "unarchive", "nonexistent_archive.zip")
-		unarchiveItem := NewUnarchive("nonexistent_archive.zip", "extracted/")
-		op.SetItem(unarchiveItem)
-		
-		err := op.Validate(ctx, testFS)
-		if err == nil {
-			t.Error("Expected validation error for non-existent archive, but got none")
-		}
-		
-		if !strings.Contains(err.Error(), "archive file does not exist") {
-			t.Errorf("Expected 'archive file does not exist' error, got: %v", err)
-		}
-	})
-}
-
-// Test that source existence validation is skipped when filesystem doesn't support Stat
-func TestSourceExistenceValidation_WithoutStatSupport(t *testing.T) {
-	ctx := context.Background()
-	
-	// Create a filesystem that doesn't implement FullFileSystem interface
-	basicFS := &basicFileSystem{}
-	
-	t.Run("Copy validation without Stat support", func(t *testing.T) {
-		op := NewSimpleOperation("copy-op", "copy", "some_file.txt")
-		op.SetPaths("some_file.txt", "destination.txt")
-		
-		// Should not error since filesystem doesn't support Stat
-		err := op.Validate(ctx, basicFS)
-		if err != nil {
-			t.Errorf("Expected no validation error when filesystem doesn't support Stat, got: %v", err)
-		}
-	})
-}
-
-// Batch-level tests for source existence validation
-func TestBatchSourceExistenceValidation(t *testing.T) {
-	testFS := NewTestFileSystem()
-	
-	// Create test files
-	err := testFS.WriteFile("existing.txt", []byte("content"), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	t.Run("Batch Copy - source does not exist", func(t *testing.T) {
-		batch := NewBatch().WithFileSystem(testFS)
-		
-		_, err := batch.Copy("nonexistent.txt", "destination.txt")
-		if err == nil {
-			t.Error("Expected batch.Copy to fail for non-existent source")
-		}
-		
-		if !strings.Contains(err.Error(), "copy source does not exist") {
-			t.Errorf("Expected source existence error, got: %v", err)
-		}
-	})
-
-	t.Run("Batch Move - source does not exist", func(t *testing.T) {
-		batch := NewBatch().WithFileSystem(testFS)
-		
-		_, err := batch.Move("nonexistent.txt", "destination.txt")
-		if err == nil {
-			t.Error("Expected batch.Move to fail for non-existent source")
-		}
-		
-		if !strings.Contains(err.Error(), "move source does not exist") {
-			t.Errorf("Expected source existence error, got: %v", err)
-		}
-	})
-
-	t.Run("Batch CreateArchive - source does not exist", func(t *testing.T) {
-		batch := NewBatch().WithFileSystem(testFS)
-		
-		_, err := batch.CreateArchive("archive.zip", ArchiveFormatZip, "existing.txt", "nonexistent.txt")
-		if err == nil {
-			t.Error("Expected batch.CreateArchive to fail for non-existent source")
-		}
-		
-		if !strings.Contains(err.Error(), "archive source does not exist") {
-			t.Errorf("Expected source existence error, got: %v", err)
-		}
-	})
-
-	t.Run("Batch Unarchive - archive does not exist", func(t *testing.T) {
-		batch := NewBatch().WithFileSystem(testFS)
-		
-		_, err := batch.Unarchive("nonexistent.zip", "extracted/")
-		if err == nil {
-			t.Error("Expected batch.Unarchive to fail for non-existent archive")
-		}
-		
-		if !strings.Contains(err.Error(), "archive file does not exist") {
-			t.Errorf("Expected archive existence error, got: %v", err)
-		}
-	})
-}
-
-// Helper function to create a simple zip file for testing
-func createSimpleZip(t *testing.T, files map[string]string) []byte {
-	var buf bytes.Buffer
-	w := zip.NewWriter(&buf)
-	
-	for filename, content := range files {
-		f, err := w.Create(filename)
-		if err != nil {
-			t.Fatalf("Failed to create zip entry %s: %v", filename, err)
-		}
-		
-		_, err = f.Write([]byte(content))
-		if err != nil {
-			t.Fatalf("Failed to write zip entry %s: %v", filename, err)
-		}
-	}
-	
-	err := w.Close()
-	if err != nil {
-		t.Fatalf("Failed to close zip writer: %v", err)
-	}
-	
-	return buf.Bytes()
-}
-
-// Basic filesystem implementation that doesn't support Stat
-type basicFileSystem struct{}
-
-func (bfs *basicFileSystem) Open(name string) (fs.File, error) {
-	return nil, fs.ErrNotExist
-}
-
-func (fs *basicFileSystem) WriteFile(name string, data []byte, perm fs.FileMode) error {
-	return nil
-}
-
-func (fs *basicFileSystem) MkdirAll(path string, perm fs.FileMode) error {
-	return nil
-}
-
-func (fs *basicFileSystem) Remove(name string) error {
-	return nil
-}
-
-func (fs *basicFileSystem) RemoveAll(name string) error {
-	return nil
-}
-
-func (fs *basicFileSystem) Symlink(oldname, newname string) error {
-	return nil
-}
-
-func (fs *basicFileSystem) Readlink(name string) (string, error) {
-	return "", nil
-}
-
-func (fs *basicFileSystem) Rename(oldpath, newpath string) error {
-	return nil
-}
-
-// Add new comprehensive tests for directory delete ReverseOps
-func TestReverseOperations_DeleteDirectory_Comprehensive(t *testing.T) {
-	ctx := context.Background()
-	defaultBudgetMB := 10.0 // Default 10MB budget for most tests
-
-	// Helper to create a filesystem structure for testing
-	setupTestFS := func(t *testing.T, fs *TestFileSystem, structure map[string]interface{}) {
-		for path, content := range structure {
-			if strings.HasSuffix(path, "/") { // Directory
-				err := fs.MkdirAll(strings.TrimSuffix(path, "/"), 0755)
-				if err != nil {
-					t.Fatalf("Failed to create dir %s: %v", path, err)
-				}
-			} else { // File
-				err := fs.WriteFile(path, []byte(content.(string)), 0644)
-				if err != nil {
-					t.Fatalf("Failed to create file %s: %v", path, err)
-				}
-			}
-		}
-	}
-
-	t.Run("delete empty directory", func(t *testing.T) {
-		fs := NewTestFileSystem()
-		setupTestFS(t, fs, map[string]interface{}{"empty_dir/": nil})
-
-		op := NewSimpleOperation("test-del-empty", "delete", "empty_dir")
-		budget := &BackupBudget{TotalMB: defaultBudgetMB, RemainingMB: defaultBudgetMB}
-
-		reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
-		if err != nil {
-			t.Fatalf("ReverseOps failed: %v", err)
-		}
-
-		if backupData.BackupType != "directory_tree" {
-			t.Errorf("Expected BackupType 'directory_tree', got '%s'", backupData.BackupType)
-		}
-		if backupData.SizeMB != 0 {
-			t.Errorf("Expected SizeMB 0 for empty dir backup, got %f", backupData.SizeMB)
-		}
-		metadataItems, ok := backupData.Metadata["items"].([]BackedUpItem)
-		if !ok || len(metadataItems) != 1 {
-			t.Fatalf("Expected 1 metadata item for the dir itself, got %d", len(metadataItems))
-		}
-		if metadataItems[0].RelativePath != "." || metadataItems[0].ItemType != "directory" {
-			t.Errorf("Unexpected metadata item for empty dir: %+v", metadataItems[0])
-		}
-		if len(reverseOps) != 1 || reverseOps[0].Describe().Type != "create_directory" || reverseOps[0].Describe().Path != "empty_dir" {
-			t.Errorf("Expected 1 create_directory reverse op for empty_dir, got ops: %+v", reverseOps)
-		}
-	})
-
-	t.Run("directory with files only", func(t *testing.T) {
-		fs := NewTestFileSystem()
-		setupTestFS(t, fs, map[string]interface{}{
-			"dir_files/":        nil,
-			"dir_files/f1.txt":  "file1", // 5 bytes
-			"dir_files/f2.txt":  "file22", // 6 bytes
-		})
-		op := NewSimpleOperation("test-del-files", "delete", "dir_files")
-		budget := &BackupBudget{TotalMB: defaultBudgetMB, RemainingMB: defaultBudgetMB}
-
-		reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
-		if err != nil {
-			t.Fatalf("ReverseOps failed: %v", err)
-		}
-
-		expectedSize := int64(5 + 6)
-		expectedSizeMB := float64(expectedSize) / (1024 * 1024)
-		if backupData.SizeMB != expectedSizeMB {
-			t.Errorf("Expected SizeMB %f, got %f", expectedSizeMB, backupData.SizeMB)
-		}
-		metadataItems, _ := backupData.Metadata["items"].([]BackedUpItem)
-		if len(metadataItems) != 3 { // root dir + 2 files
-			t.Fatalf("Expected 3 metadata items, got %d: %+v", len(metadataItems), metadataItems)
-		}
-		if len(reverseOps) != 3 {
-			t.Fatalf("Expected 3 reverse ops, got %d", len(reverseOps))
-		}
-		// Basic check for reverse op types and paths
-		if !(reverseOps[0].Describe().Type == "create_directory" && reverseOps[0].Describe().Path == "dir_files" &&
-			reverseOps[1].Describe().Type == "create_file" && reverseOps[1].Describe().Path == filepath.Join("dir_files", "f1.txt") &&
-			reverseOps[2].Describe().Type == "create_file" && reverseOps[2].Describe().Path == filepath.Join("dir_files", "f2.txt")) {
-			t.Error("Unexpected reverse operations structure")
-		}
-		// Check content of one file
-		file1Item, _ := reverseOps[1].GetItem().(*FileItem)
-		if string(file1Item.Content()) != "file1" {
-			t.Errorf("Expected f1.txt content 'file1', got '%s'", string(file1Item.Content()))
-		}
-
-	})
-
-	t.Run("directory with nested structure", func(t *testing.T) {
-		fs := NewTestFileSystem()
-		setupTestFS(t, fs, map[string]interface{}{
-			"root/":               nil,
-			"root/file_root.txt":  "root_content", // 12 bytes
-			"root/sub1/":          nil,
-			"root/sub1/file_s1.txt": "sub1_content", // 12 bytes
-			"root/sub2/":          nil,
-			"root/sub2/deep/":     nil,
-			"root/sub2/deep/file_d.txt": "deep_content", // 12 bytes
-		})
-		op := NewSimpleOperation("test-del-nested", "delete", "root")
-		budget := &BackupBudget{TotalMB: defaultBudgetMB, RemainingMB: defaultBudgetMB}
-
-		reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
-		if err != nil {
-			t.Fatalf("ReverseOps failed: %v", err)
-		}
-
-		expectedSize := int64(12 + 12 + 12)
-		expectedSizeMB := float64(expectedSize) / (1024 * 1024)
-		if backupData.SizeMB != expectedSizeMB {
-			t.Errorf("Expected SizeMB %f, got %f", expectedSizeMB, backupData.SizeMB)
-		}
-
-		// Expected items: root, file_root.txt, sub1, file_s1.txt, sub2, deep, file_d.txt (7 items)
-		// Order by walk: ., file_root.txt, sub1, sub1/file_s1.txt, sub2, sub2/deep, sub2/deep/file_d.txt
-		metadataItems, _ := backupData.Metadata["items"].([]BackedUpItem)
-		if len(metadataItems) != 7 {
-			t.Fatalf("Expected 7 metadata items, got %d: %+v", len(metadataItems), metadataItems)
-		}
-		if len(reverseOps) != 7 {
-			t.Fatalf("Expected 7 reverse ops, got %d", len(reverseOps))
-		}
-
-		paths := []string{
-			"root", // .
-			filepath.Join("root", "file_root.txt"),
-			filepath.Join("root", "sub1"),
-			filepath.Join("root", "sub1", "file_s1.txt"),
-			filepath.Join("root", "sub2"),
-			filepath.Join("root", "sub2", "deep"),
-			filepath.Join("root", "sub2", "deep", "file_d.txt"),
-		}
-		types := []string{"create_directory", "create_file", "create_directory", "create_file", "create_directory", "create_directory", "create_file"}
-
-		for i, ro := range reverseOps {
-			if ro.Describe().Path != paths[i] || ro.Describe().Type != types[i] {
-				t.Errorf("Unexpected reverse op at index %d: got Path %s Type %s, expected Path %s Type %s",
-					i, ro.Describe().Path, ro.Describe().Type, paths[i], types[i])
-			}
-		}
-	})
-
-	t.Run("budget exactly sufficient", func(t *testing.T) {
-		fs := NewTestFileSystem()
-		setupTestFS(t, fs, map[string]interface{}{
-			"budget_dir/":       nil,
-			"budget_dir/f1.txt": "12345", // 5 bytes
-			"budget_dir/f2.txt": "67890", // 5 bytes
-		})
-		op := NewSimpleOperation("test-del-budget-exact", "delete", "budget_dir")
-
-		exactBudgetBytes := int64(10)
-		exactBudgetMB := float64(exactBudgetBytes) / (1024 * 1024)
-		budget := &BackupBudget{TotalMB: exactBudgetMB, RemainingMB: exactBudgetMB}
-
-		_, backupData, err := op.ReverseOps(ctx, fs, budget)
-		if err != nil {
-			t.Fatalf("ReverseOps failed with exact budget: %v", err)
-		}
-		if backupData.SizeMB != exactBudgetMB {
-			t.Errorf("Expected SizeMB %f with exact budget, got %f", exactBudgetMB, backupData.SizeMB)
-		}
-		if budget.RemainingMB != 0 {
-			t.Errorf("Expected 0 remaining budget, got %f", budget.RemainingMB)
-		}
-	})
-
-	t.Run("budget insufficient for all (partial backup)", func(t *testing.T) {
-		fs := NewTestFileSystem()
-		// Order of files read by ReadDir is not guaranteed, so use distinct sizes
-		// f1: 5 bytes, f2: 10 bytes. Total 15 bytes.
-		setupTestFS(t, fs, map[string]interface{}{
-			"partial_dir/":      nil,
-			"partial_dir/f1.txt": "12345",      // 5 bytes
-			"partial_dir/f2.txt": "1234567890", // 10 bytes
-		})
-		op := NewSimpleOperation("test-del-partial", "delete", "partial_dir")
-
-		partialBudgetBytes := int64(7) // Enough for f1 (5b) but not f2 (10b)
-		partialBudgetMB := float64(partialBudgetBytes) / (1024 * 1024)
-		budget := &BackupBudget{TotalMB: partialBudgetMB, RemainingMB: partialBudgetMB}
-
-		reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
-		if err == nil {
-			t.Fatal("Expected error due to insufficient budget for all files")
-		}
-		if !strings.Contains(err.Error(), "budget exceeded") {
-			t.Errorf("Expected 'budget exceeded' error, got: %v", err)
-		}
-
-		metadataItems, _ := backupData.Metadata["items"].([]BackedUpItem)
-		// Depending on ReadDir order, either f1 or nothing might be backed up if f2 is encountered first.
-		// The current walkAndBackup processes files as they come from ReadDir.
-		// Let's assume for testing f1 (smaller) is processed first.
-		// We expect the root dir item + f1.txt to be in metadataItems
-		if len(metadataItems) < 2 || metadataItems[0].ItemType != "directory" { // root dir + at least one file attempt
-			t.Fatalf("Expected at least root dir and one file attempt in metadata items, got %d: %+v", len(metadataItems), metadataItems)
-		}
-
-		var backedUpFileCount int
-		var actualBackedUpSize int64
-		for _, item := range metadataItems {
-			if item.ItemType == "file" {
-				backedUpFileCount++
-				actualBackedUpSize += item.Size
-			}
-		}
-
-		if backedUpFileCount != 1 {
-			t.Errorf("Expected 1 file to be backed up, got %d. Items: %+v", backedUpFileCount, metadataItems)
-		}
-		if actualBackedUpSize != 5 { // Assuming f1.txt (5 bytes) was backed up
-			t.Errorf("Expected actual backed up size to be 5 bytes, got %d. Items: %+v", actualBackedUpSize, metadataItems)
-		}
-
-		if backupData.SizeMB != float64(5)/(1024*1024) {
-			 t.Errorf("BackupData.SizeMB should reflect only successfully backed up files. Expected %f, got %f", float64(5)/(1024*1024), backupData.SizeMB)
-		}
-
-		// Check that reverseOps were generated for the partially backed up items
-		if len(reverseOps) != len(metadataItems) {
-			t.Errorf("Expected %d reverseOps for partially backed up items, got %d", len(metadataItems), len(reverseOps))
-		}
-
-	})
-
-	t.Run("budget insufficient for any file (only dir entry)", func(t *testing.T) {
-		fs := NewTestFileSystem()
-		setupTestFS(t, fs, map[string]interface{}{
-			"no_budget_dir/":      nil,
-			"no_budget_dir/f1.txt": "12345", // 5 bytes
-		})
-		op := NewSimpleOperation("test-del-no-budget", "delete", "no_budget_dir")
-
-		tinyBudgetBytes := int64(1) // 1 byte, not enough for the 5-byte file
-		tinyBudgetMB := float64(tinyBudgetBytes) / (1024 * 1024)
-		budget := &BackupBudget{TotalMB: tinyBudgetMB, RemainingMB: tinyBudgetMB}
-
-		reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
-		if err == nil {
-			t.Fatal("Expected error due to insufficient budget for any file")
-		}
-		if !strings.Contains(err.Error(), "budget exceeded") {
-			t.Errorf("Expected 'budget exceeded' error, got: %v", err)
-		}
-		if backupData.SizeMB != 0 {
-			t.Errorf("Expected SizeMB 0, got %f", backupData.SizeMB)
-		}
-		metadataItems, _ := backupData.Metadata["items"].([]BackedUpItem)
-		if len(metadataItems) != 1 || metadataItems[0].ItemType != "directory" { // Only the root dir item
-			t.Fatalf("Expected 1 metadata item (root dir), got %d: %+v", len(metadataItems), metadataItems)
-		}
-		if len(reverseOps) != 1 || reverseOps[0].Describe().Type != "create_directory" {
-			t.Errorf("Expected 1 reverse op (create root dir), got %d", len(reverseOps))
 		}
 	})
 }

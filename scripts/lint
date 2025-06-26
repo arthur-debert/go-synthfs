@@ -45,22 +45,15 @@ echo -e "${BLUE}Running linting checks...${NC}"
 # that's different from actual lint errors in the code.
 if golangci-lint run --timeout=5m --verbose ./...; then
     echo -e "${GREEN}✅ Linting completed successfully.${NC}"
+    exit 0
 else
     LINT_EXIT_CODE=$?
-    # If exit code is 1, it's likely actual lint errors found.
-    # Other exit codes might indicate tool error.
     if [ $LINT_EXIT_CODE -eq 1 ]; then
-        echo -e "${RED}❌ Linting found issues. Please fix them.${NC}"
-        # To enforce fixing lint errors, this script should exit with $LINT_EXIT_CODE
-        # For now, as per original script's intent to not block pre-commit for tool issues:
-        echo -e "${YELLOW}⚠️ Linting found issues, but pre-commit will continue (as per script design).${NC}"
-        exit 0 # Original behavior
-        # exit $LINT_EXIT_CODE # Ideal behavior
+        echo -e "${RED}❌ Linting found issues. Please fix them to commit.${NC}"
     else
         echo -e "${RED}❌ golangci-lint failed with exit code $LINT_EXIT_CODE. This might be a tool error.${NC}"
-        echo -e "${YELLOW}⚠️ Linting tool error, pre-commit will continue (as per script design).${NC}"
-        exit 0 # Original behavior
     fi
+    exit $LINT_EXIT_CODE
 fi
 # The original script always exited 0. The logic above tries to be more informative
 # but still adheres to not blocking the pre-commit for now.
