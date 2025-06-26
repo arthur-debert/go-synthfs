@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
+
+	"github.com/arthur-debert/synthfs/pkg/synthfs/targets"
 )
 
 // computeFileChecksum computes MD5 checksum for a file
@@ -301,7 +303,7 @@ func (b *Batch) CreateArchive(archivePath string, format ArchiveFormat, sources 
 	// Set the ArchiveItem for this create operation
 	archiveItem := NewArchive(archivePath, format, sources)
 	op.SetItem(archiveItem)
-	op.SetDescriptionDetail("format", format.String())
+	op.SetDescriptionDetail("format", targets.ArchiveFormat(format).String())
 	op.SetDescriptionDetail("source_count", len(sources))
 
 	// Validate immediately
@@ -326,7 +328,7 @@ func (b *Batch) CreateArchive(archivePath string, format ArchiveFormat, sources 
 	Logger().Info().
 		Str("op_id", string(op.ID())).
 		Str("archive_path", archivePath).
-		Str("format", format.String()).
+		Str("format", targets.ArchiveFormat(format).String()).
 		Int("source_count", len(sources)).
 		Msg("CreateArchive operation added to batch")
 

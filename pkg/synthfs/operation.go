@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/arthur-debert/synthfs/pkg/synthfs/targets"
 )
 
 // Operation types are now defined in types.go
@@ -365,9 +367,9 @@ func (op *SimpleOperation) executeCreateArchive(ctx context.Context, fsys FileSy
 	}
 
 	switch archiveItem.Format() {
-	case ArchiveFormatTarGz:
+	case targets.ArchiveFormatTarGz:
 		return op.createTarGzArchive(archiveItem, fsys)
-	case ArchiveFormatZip:
+	case targets.ArchiveFormatZip:
 		return op.createZipArchive(archiveItem, fsys)
 	default:
 		return fmt.Errorf("unsupported archive format: %s", archiveItem.Format())
@@ -547,13 +549,9 @@ func (op *SimpleOperation) executeUnarchive(ctx context.Context, fsys FileSystem
 
 	// Determine archive format from file extension
 	archivePath := unarchiveItem.ArchivePath()
-	var format ArchiveFormat
-	if strings.HasSuffix(strings.ToLower(archivePath), ".tar.gz") || strings.HasSuffix(strings.ToLower(archivePath), ".tgz") {
-		format = ArchiveFormatTarGz
-	} else if strings.HasSuffix(strings.ToLower(archivePath), ".zip") {
-		format = ArchiveFormatZip
-	} else {
-		return fmt.Errorf("unsupported archive format for file: %s", archivePath)
+	format, err := determineArchiveFormat(archivePath)
+	if err != nil {
+		return fmt.Errorf("could not determine archive format for %s: %w", archivePath, err)
 	}
 
 	switch format {
@@ -562,7 +560,7 @@ func (op *SimpleOperation) executeUnarchive(ctx context.Context, fsys FileSystem
 	case ArchiveFormatZip:
 		return op.extractZipArchive(unarchiveItem, fsys)
 	default:
-		return fmt.Errorf("unsupported archive format: %s", format.String())
+		return fmt.Errorf("unsupported archive format: %s", targets.ArchiveFormat(format).String())
 	}
 }
 
@@ -1497,4 +1495,16 @@ func (op *SimpleOperation) reverseDelete(ctx context.Context, fsys FileSystem, b
 	}
 
 	return reverseOps, backupData, err
+}
+
+// determineArchiveFormat inspects the filename to determine the archive format.
+func determineArchiveFormat(filename string) (ArchiveFormat, error) {
+	lowerFilename := strings.ToLower(filename)
+	if strings.HasSuffix(lowerFilename, ".tar.gz") || strings.HasSuffix(lowerFilename, ".tgz") {
+		return ArchiveFormatTarGz, nil
+	}
+	if strings.HasSuffix(lowerFilename, ".zip") {
+		return ArchiveFormatZip, nil
+	}
+	return -1, fmt.Errorf("unsupported archive format for file: %s", filename)
 }
