@@ -6,26 +6,19 @@ import (
 	"time"
 )
 
-// OperationStatus indicates the outcome of an individual operation's execution.
-type OperationStatus string
-
-const (
-	StatusSuccess    OperationStatus = "SUCCESS"
-	StatusFailure    OperationStatus = "FAILURE"
-	StatusValidation OperationStatus = "VALIDATION_FAILURE"
-)
+// OperationStatus and related constants are defined in constants.go
 
 // PipelineOptions controls how operations are executed (Phase III)
 type PipelineOptions struct {
-	Restorable      bool    // Whether to enable reversible operations with backup
-	MaxBackupSizeMB int     // Maximum backup size in MB (default: 10MB)
+	Restorable      bool // Whether to enable reversible operations with backup
+	MaxBackupSizeMB int  // Maximum backup size in MB (default: 10MB)
 }
 
 // DefaultPipelineOptions returns sensible defaults for pipeline execution
 func DefaultPipelineOptions() PipelineOptions {
 	return PipelineOptions{
-		Restorable:      false, // No backup overhead by default
-		MaxBackupSizeMB: 10,    // 10MB default budget - perfect for config files
+		Restorable:      false,              // No backup overhead by default
+		MaxBackupSizeMB: DefaultMaxBackupMB, // Default budget - perfect for config files
 	}
 }
 
@@ -47,10 +40,10 @@ type Result struct {
 	Duration   time.Duration
 	Errors     []error                     // Aggregated errors from operations that failed
 	Rollback   func(context.Context) error // Rollback function for failed transactions
-	
+
 	// Phase III: Enhanced restoration functionality
-	Budget     *BackupBudget               // Backup budget information (only if restorable=true)
-	RestoreOps []Operation                 // Generated reverse operations for restoration
+	Budget     *BackupBudget // Backup budget information (only if restorable=true)
+	RestoreOps []Operation   // Generated reverse operations for restoration
 }
 
 // Executor processes a pipeline of operations.
@@ -101,7 +94,7 @@ func (e *Executor) RunWithOptions(ctx context.Context, pipeline Pipeline, fs Fil
 			UsedMB:      0,
 		}
 		result.Budget = budget
-		
+
 		Logger().Info().
 			Float64("total_budget_mb", budget.TotalMB).
 			Msg("backup budget initialized for restorable execution")
@@ -150,13 +143,13 @@ func (e *Executor) RunWithOptions(ctx context.Context, pipeline Pipeline, fs Fil
 		var reverseOps []Operation
 		var backupData *BackupData
 		var reverseErr error
-		
+
 		if opts.Restorable {
 			Logger().Debug().
 				Str("op_id", string(op.ID())).
 				Float64("remaining_budget_mb", budget.RemainingMB).
 				Msg("generating reverse operations for backup")
-			
+
 			reverseOps, backupData, reverseErr = op.ReverseOps(ctx, fs, budget)
 			if reverseErr != nil {
 				Logger().Warn().
@@ -185,7 +178,7 @@ func (e *Executor) RunWithOptions(ctx context.Context, pipeline Pipeline, fs Fil
 			BackupData:   backupData,
 			BackupSizeMB: 0,
 		}
-		
+
 		if backupData != nil {
 			opResult.BackupSizeMB = backupData.SizeMB
 		}
@@ -203,7 +196,7 @@ func (e *Executor) RunWithOptions(ctx context.Context, pipeline Pipeline, fs Fil
 			opResult.Error = err
 			result.Success = false
 			result.Errors = append(result.Errors, fmt.Errorf("operation %s failed: %w", op.ID(), err))
-			
+
 			// Phase III: Restore budget if operation failed and backup was created
 			if opts.Restorable && backupData != nil && budget != nil {
 				budget.RestoreBackup(backupData.SizeMB)
@@ -223,7 +216,7 @@ func (e *Executor) RunWithOptions(ctx context.Context, pipeline Pipeline, fs Fil
 
 			opResult.Status = StatusSuccess
 			rollbackOps = append(rollbackOps, op)
-			
+
 			// Phase III: Add reverse operations to result if available
 			if opts.Restorable && reverseOps != nil {
 				result.RestoreOps = append(result.RestoreOps, reverseOps...)
@@ -248,7 +241,7 @@ func (e *Executor) RunWithOptions(ctx context.Context, pipeline Pipeline, fs Fil
 		Int("restore_operations", len(result.RestoreOps)).
 		Dur("total_duration", result.Duration).
 		Msg("execution completed")
-		
+
 	// Phase III: Log budget usage summary
 	if opts.Restorable && budget != nil {
 		Logger().Info().

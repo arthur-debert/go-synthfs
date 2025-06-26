@@ -78,8 +78,9 @@ Migration Steps:
 	3.1 Create new directory structure
 	3.2 Move implementation code to appropriate packages
 	3.3. Update imports throughout codebase
-	3.4. Verify tests pass
-	3.5. Update documentation
+	3.4 Remove old files.
+	3.5. Verify tests pass
+	3.6. Update documentation
 	Commit and push to git. T
 
 Files to Split:
