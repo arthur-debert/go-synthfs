@@ -67,10 +67,10 @@ Migration Steps:
 
 	Note that we should have the same number of tests, we don't want to refactor, just redistrubute them. Ditto for code, no new code.
 
-2.  Shared things
+2.  Shared things DONE
 	2.1 Extract types to types.go
-	2..2 Extract constants to constants.go  
-	2. 3Extract errors to errors.go
+	2.2 Extract constants to constants.go  
+	2.3 Extract errors to errors.go
 
 	Make sure that all test pass
 
