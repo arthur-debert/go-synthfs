@@ -1096,3 +1096,28 @@ func TestSourceExistenceValidation(t *testing.T) {
 		}
 	})
 }
+
+// Helper function to create a simple zip file for testing
+func createSimpleZip(t *testing.T, files map[string]string) []byte {
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+
+	for filename, content := range files {
+		f, err := w.Create(filename)
+		if err != nil {
+			t.Fatalf("Failed to create zip entry %s: %v", filename, err)
+		}
+
+		_, err = f.Write([]byte(content))
+		if err != nil {
+			t.Fatalf("Failed to write zip entry %s: %v", filename, err)
+		}
+	}
+
+	err := w.Close()
+	if err != nil {
+		t.Fatalf("Failed to close zip writer: %v", err)
+	}
+
+	return buf.Bytes()
+}
