@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/validation"
 )
 
 // --- Core Interface Types ---
@@ -31,13 +32,8 @@ type FsItem interface {
 
 type OperationID string
 
-type ChecksumRecord struct {
-	Path         string
-	MD5          string
-	Size         int64
-	ModTime      time.Time
-	ChecksumTime time.Time
-}
+// ChecksumRecord is now defined in the validation package
+type ChecksumRecord = validation.ChecksumRecord
 
 type OperationDesc struct {
 	Type    string
