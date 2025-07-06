@@ -86,6 +86,7 @@ ARCHITECTURAL IMPROVEMENT PLAN
        Conflicts() []OperationID
    }
    ```
+   - DONE (Executable in main package to avoid circular deps)
 
 2. Keep Operation interface but compose it:
    ```go
@@ -97,8 +98,9 @@ ARCHITECTURAL IMPROVEMENT PLAN
        Rollback(context.Context, filesystem.FileSystem) error
    }
    ```
+   - DONE
 
-3. Tests still pass because Operation still has all methods ✓
+3. Tests still pass because Operation still has all methods ✓ - DONE
 
 ## Phase 3: Extract Operation Registry (Release 3)
 **Goal**: Decouple operation creation from batch

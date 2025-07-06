@@ -51,14 +51,18 @@ type BackedUpItem struct {
 // BackupBudget is now defined in the core package
 type BackupBudget = core.BackupBudget
 
-type Operation interface {
-	ID() core.OperationID
-	Dependencies() []core.OperationID
-	Conflicts() []core.OperationID
+// Executable defines execution capabilities for operations
+type Executable interface {
 	Execute(ctx context.Context, fsys FileSystem) error
 	Validate(ctx context.Context, fsys FileSystem) error
+}
+
+// Operation is the main interface that composes all operation capabilities
+type Operation interface {
+	core.OperationMetadata  // ID(), Describe()
+	core.DependencyAware    // Dependencies(), Conflicts()
+	Executable              // Execute(), Validate()
 	Rollback(ctx context.Context, fsys FileSystem) error
-	Describe() core.OperationDesc
 	GetItem() FsItem
 	GetChecksum(path string) *ChecksumRecord
 	GetAllChecksums() map[string]*ChecksumRecord
