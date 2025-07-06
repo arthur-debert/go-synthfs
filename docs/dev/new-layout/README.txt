@@ -111,8 +111,15 @@ Migration Steps:
 	3.d backup/ - NOT STARTED
 		- Will extract backup/restore functionality from operation.go
 
-	3.e filesystem/ - NOT STARTED
-		- Will contain: interfaces.go, os.go, memory.go from current fs.go and testing.go
+	3.e filesystem/ - DONE
+		- Created filesystem/ directory
+		- Moved FileSystem interfaces to filesystem/interfaces.go
+		- Moved OSFileSystem to filesystem/os.go
+		- Moved ReadOnlyWrapper to filesystem/wrapper.go
+		- Updated types.go to use type aliases for backward compatibility
+		- Left TestFileSystem in testing.go (appropriate for test utilities)
+		- Left ComputeFileChecksum in fs.go (small utility function)
+		- All tests passing
 
 	3.f validation/ - NOT STARTED
 		- Will contain: checksum.go, validator.go
@@ -155,12 +162,14 @@ Recommendation: Skip operations/ for now and proceed with execution/ package,
 which should have fewer dependency issues. The execution package can be created
 without circular dependencies since it doesn't need to be imported by batch.go.
 
-CURRENT STATUS (after operation.go refactoring):
-===============================================
+CURRENT STATUS (after filesystem package extraction):
+===================================================
 - operation.go successfully split from 1,510 lines to 7 focused files
-- Total lines remain roughly the same (no new functionality added)
+- filesystem package created with clean separation of interfaces and implementations
+- fs.go reduced from 186 lines to 66 lines
+- Type aliases maintained for backward compatibility
 - All tests passing (235 tests)
-- Code is more maintainable with clear separation of concerns
+- Code structure becoming clearer with proper package organization
 
 NEXT RECOMMENDED STEPS:
 ======================
@@ -175,15 +184,36 @@ Option 1: Split batch.go next
 - Keep batch.go but reduce its size
 - Challenge: batch.go has tight coupling with operations
 
-Option 2: Split fs.go next (RECOMMENDED)
-- Move FileSystem interfaces to filesystem/interfaces.go
-- Move OSFileSystem to filesystem/os.go
-- Move test filesystem to filesystem/memory.go or testing/
-- This is more straightforward with fewer dependencies
-- Will make the codebase cleaner before tackling batch.go
+Option 2: Split fs.go next (COMPLETED ✓)
+- Moved FileSystem interfaces to filesystem/interfaces.go
+- Moved OSFileSystem to filesystem/os.go
+- Moved ReadOnlyWrapper to filesystem/wrapper.go
+- fs.go now only contains utility functions
+- Clean separation achieved with no circular dependencies
 
 Option 3: Extract validation logic
 - Create validation/ package
 - Move checksum functionality from various files
 - Move validation logic from operations
 - This is relatively independent and low risk
+
+UPDATED RECOMMENDATIONS (after filesystem refactoring):
+=====================================================
+With filesystem package complete, we should now tackle:
+
+Option A: Create validation/ package (RECOMMENDED NEXT)
+- Move ComputeFileChecksum from fs.go
+- Create a checksum.go with all checksum-related code
+- This is low-risk and will further clean up the codebase
+- Will help before tackling the larger batch.go refactoring
+
+Option B: Start on execution/ package
+- Move pipeline.go content (currently in batch.go)
+- Move executor.go to execution/executor.go
+- Move state.go to execution/state.go
+- More complex due to interdependencies
+
+Option C: Extract backup/ package
+- Move backup-related code from operation_backup.go and operation_reverse.go
+- Create backup/budget.go, backup/restore.go
+- Medium complexity
