@@ -147,14 +147,16 @@ that reference Operation interface. This will be resolved in Phase 5 with Execut
        Budget     *core.BackupBudget
    }
    ```
+   - DONE (Logger interface in core, FileSystem passed separately)
 
 2. Change Execute signature:
    ```go
    Execute(ctx context.Context, execCtx *ExecutionContext) error
    ```
+   - DONE (as ExecuteV2 for backward compatibility)
 
-3. Update all operations to use context
-4. Tests pass with cleaner separation ✓
+3. Update all operations to use context - DONE
+4. Tests pass with cleaner separation ✓ - DONE
 
 ## Phase 6: Create Execution Package (Release 6)
 **Goal**: Extract execution logic now that it's decoupled

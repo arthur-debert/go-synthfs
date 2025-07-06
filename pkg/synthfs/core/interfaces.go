@@ -15,6 +15,12 @@ type DependencyAware interface {
 // Note: Executable interface will be defined in the main synthfs package
 // because it depends on filesystem.FileSystem which would create a circular dependency
 
+// ExecutableV2 defines execution capabilities using ExecutionContext
+type ExecutableV2 interface {
+	ExecuteV2(ctx interface{}, execCtx *ExecutionContext, fsys interface{}) error
+	ValidateV2(ctx interface{}, execCtx *ExecutionContext, fsys interface{}) error
+}
+
 // OperationFactory creates operations based on type and item
 // Note: The actual Operation interface is defined in the main synthfs package
 type OperationFactory interface {

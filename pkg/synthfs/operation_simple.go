@@ -3,6 +3,8 @@ package synthfs
 import (
 	"context"
 	"fmt"
+
+	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
 // SimpleOperation provides a straightforward implementation of Operation.
@@ -157,6 +159,24 @@ func (op *SimpleOperation) verifyChecksums(ctx context.Context, fsys FileSystem)
 	return nil
 }
 
+// ExecuteV2 performs the actual filesystem operation using ExecutionContext.
+func (op *SimpleOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Convert interfaces back to concrete types
+	context, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
+	
+	filesystem, ok := fsys.(FileSystem)
+	if !ok {
+		return fmt.Errorf("invalid filesystem type")
+	}
+	
+	// For now, delegate to the original method
+	// In the future, we'll use execCtx.Logger and execCtx.Budget
+	return op.Execute(context, filesystem)
+}
+
 // Execute performs the actual filesystem operation.
 func (op *SimpleOperation) Execute(ctx context.Context, fsys FileSystem) error {
 	switch op.description.Type {
@@ -179,6 +199,24 @@ func (op *SimpleOperation) Execute(ctx context.Context, fsys FileSystem) error {
 	default:
 		return fmt.Errorf("unknown operation type: %s", op.description.Type)
 	}
+}
+
+// ValidateV2 checks if the operation can be performed using ExecutionContext.
+func (op *SimpleOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Convert interfaces back to concrete types
+	context, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
+	
+	filesystem, ok := fsys.(FileSystem)
+	if !ok {
+		return fmt.Errorf("invalid filesystem type")
+	}
+	
+	// For now, delegate to the original method
+	// In the future, we'll use execCtx.Logger instead of global Logger()
+	return op.Validate(context, filesystem)
 }
 
 // Validate checks if the operation can be performed.
