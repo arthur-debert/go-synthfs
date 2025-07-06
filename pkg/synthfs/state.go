@@ -5,19 +5,7 @@ import (
 	"io/fs"
 )
 
-// PathStateType represents the type of a filesystem object in the projected state.
-type PathStateType int
-
-const (
-	// PathStateUnknown represents an unknown or non-existent path.
-	PathStateUnknown PathStateType = iota
-	// PathStateFile represents a file.
-	PathStateFile
-	// PathStateDir represents a directory.
-	PathStateDir
-	// PathStateSymlink represents a symbolic link.
-	PathStateSymlink
-)
+// PathStateType and related constants are defined in constants.go
 
 // String returns the string representation of the PathStateType.
 func (t PathStateType) String() string {
@@ -213,6 +201,15 @@ func (pst *PathStateTracker) UpdateState(op Operation) error {
 	}
 
 	return nil
+}
+
+// IsDeleted returns true if the path is scheduled for deletion by any operation.
+func (pst *PathStateTracker) IsDeleted(path string) bool {
+	state, err := pst.GetState(path)
+	if err != nil {
+		return false
+	}
+	return state.DeletedBy != ""
 }
 
 func (pst *PathStateTracker) updateStateForCreate(opID OperationID, path string, createType PathStateType) error {
