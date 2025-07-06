@@ -7,20 +7,6 @@ import (
 
 // PathStateType and related constants are defined in constants.go
 
-// String returns the string representation of the PathStateType.
-func (t PathStateType) String() string {
-	switch t {
-	case PathStateFile:
-		return "file"
-	case PathStateDir:
-		return "directory"
-	case PathStateSymlink:
-		return "symlink"
-	default:
-		return "unknown"
-	}
-}
-
 // PathState holds the projected state of a single path after all operations in a batch are applied.
 // This is central to the Smart Dependencies feature (Phase II).
 type PathState struct {

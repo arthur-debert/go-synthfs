@@ -1,45 +1,47 @@
 package synthfs
 
+import "github.com/arthur-debert/synthfs/pkg/synthfs/core"
+
 // --- Archive Format Constants ---
 
-// ArchiveFormat defines the type of archive.
-type ArchiveFormat int
+// ArchiveFormat is now defined in the core package
+type ArchiveFormat = core.ArchiveFormat
 
 const (
 	// ArchiveFormatTarGz represents a tar.gz archive format.
-	ArchiveFormatTarGz ArchiveFormat = iota
+	ArchiveFormatTarGz = core.ArchiveFormatTarGz
 	// ArchiveFormatZip represents a zip archive format.
-	ArchiveFormatZip
+	ArchiveFormatZip = core.ArchiveFormatZip
 )
 
 // --- Path State Constants ---
 
-// PathStateType represents the type of a filesystem object in the projected state.
-type PathStateType int
+// PathStateType is now defined in the core package
+type PathStateType = core.PathStateType
 
 const (
 	// PathStateUnknown represents an unknown or non-existent path.
-	PathStateUnknown PathStateType = iota
+	PathStateUnknown = core.PathStateUnknown
 	// PathStateFile represents a file.
-	PathStateFile
+	PathStateFile = core.PathStateFile
 	// PathStateDir represents a directory.
-	PathStateDir
+	PathStateDir = core.PathStateDir
 	// PathStateSymlink represents a symbolic link.
-	PathStateSymlink
+	PathStateSymlink = core.PathStateSymlink
 )
 
 // --- Operation Status Constants ---
 
-// OperationStatus indicates the outcome of an individual operation's execution.
-type OperationStatus string
+// OperationStatus is now defined in the core package
+type OperationStatus = core.OperationStatus
 
 const (
 	// StatusSuccess indicates the operation completed successfully.
-	StatusSuccess OperationStatus = "SUCCESS"
+	StatusSuccess = core.StatusSuccess
 	// StatusFailure indicates the operation failed during execution.
-	StatusFailure OperationStatus = "FAILURE"
+	StatusFailure = core.StatusFailure
 	// StatusValidation indicates the operation failed during validation.
-	StatusValidation OperationStatus = "VALIDATION_FAILURE"
+	StatusValidation = core.StatusValidation
 )
 
 // --- Item Type Constants ---

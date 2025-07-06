@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"time"
 
+	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/validation"
 )
@@ -30,27 +31,13 @@ type FsItem interface {
 
 // --- Operation Types ---
 
-type OperationID string
+// Type aliases for core types
+type OperationID = core.OperationID
+type OperationDesc = core.OperationDesc
+type BackupData = core.BackupData
 
 // ChecksumRecord is now defined in the validation package
 type ChecksumRecord = validation.ChecksumRecord
-
-type OperationDesc struct {
-	Type    string
-	Path    string
-	Details map[string]interface{}
-}
-
-type BackupData struct {
-	OperationID   OperationID
-	BackupType    string
-	OriginalPath  string
-	BackupContent []byte
-	BackupMode    fs.FileMode
-	BackupTime    time.Time
-	SizeMB        float64
-	Metadata      map[string]interface{}
-}
 
 type BackedUpItem struct {
 	RelativePath string
@@ -61,24 +48,21 @@ type BackedUpItem struct {
 	ModTime      time.Time
 }
 
-type BackupBudget struct {
-	TotalMB     float64
-	RemainingMB float64
-	UsedMB      float64
-}
+// BackupBudget is now defined in the core package
+type BackupBudget = core.BackupBudget
 
 type Operation interface {
-	ID() OperationID
-	Dependencies() []OperationID
-	Conflicts() []OperationID
+	ID() core.OperationID
+	Dependencies() []core.OperationID
+	Conflicts() []core.OperationID
 	Execute(ctx context.Context, fsys FileSystem) error
 	Validate(ctx context.Context, fsys FileSystem) error
 	Rollback(ctx context.Context, fsys FileSystem) error
-	Describe() OperationDesc
+	Describe() core.OperationDesc
 	GetItem() FsItem
 	GetChecksum(path string) *ChecksumRecord
 	GetAllChecksums() map[string]*ChecksumRecord
-	ReverseOps(ctx context.Context, fsys FileSystem, budget *BackupBudget) ([]Operation, *BackupData, error)
+	ReverseOps(ctx context.Context, fsys FileSystem, budget *core.BackupBudget) ([]Operation, *core.BackupData, error)
 }
 
 // ValidationError represents an error during operation validation.
