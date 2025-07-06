@@ -3,14 +3,13 @@ package synthfs
 import (
 	"fmt"
 	"io/fs"
-	"path/filepath"
-	"strings"
-
 )
 
-// String returns the string representation of the path state type.
-func (pst PathStateType) String() string {
-	switch pst {
+// PathStateType and related constants are defined in constants.go
+
+// String returns the string representation of the PathStateType.
+func (t PathStateType) String() string {
+	switch t {
 	case PathStateFile:
 		return "file"
 	case PathStateDir:
@@ -22,7 +21,8 @@ func (pst PathStateType) String() string {
 	}
 }
 
-// PathState represents the state of a path in the synthetic filesystem.
+// PathState holds the projected state of a single path after all operations in a batch are applied.
+// This is central to the Smart Dependencies feature (Phase II).
 type PathState struct {
 	// Path is the full path being tracked.
 	Path string
@@ -108,7 +108,8 @@ func (pst *PathStateTracker) UpdateState(op Operation) error {
 	case "create_symlink":
 		return pst.updateStateForCreate(opID, desc.Path, PathStateSymlink)
 	case "create_archive":
-		return pst.updateStateForCreate(opID, desc.Path, PathStateFile)
+		return pst.updateStateForCreate(opID, desc.Path, PathStateFile) // Archives are files
+
 	case "delete":
 		state, err := pst.GetState(desc.Path)
 		if err != nil {
@@ -128,6 +129,7 @@ func (pst *PathStateTracker) UpdateState(op Operation) error {
 		}
 		state.WillExist = false
 		state.DeletedBy = opID
+
 	case "copy":
 		simpleOp, ok := op.(*SimpleOperation)
 		if !ok {
@@ -147,6 +149,7 @@ func (pst *PathStateTracker) UpdateState(op Operation) error {
 
 		// Update destination
 		return pst.updateStateForCreate(opID, dstPath, srcState.WillBeType)
+
 	case "move":
 		simpleOp, ok := op.(*SimpleOperation)
 		if !ok {
@@ -173,6 +176,7 @@ func (pst *PathStateTracker) UpdateState(op Operation) error {
 
 		// Update destination to be created
 		return pst.updateStateForCreate(opID, dstPath, srcState.WillBeType)
+
 	case "unarchive":
 		// This is more complex as it affects an unknown number of paths.
 		// For now, we'll just check the source archive exists and treat the destination as modified.
@@ -199,6 +203,15 @@ func (pst *PathStateTracker) UpdateState(op Operation) error {
 	return nil
 }
 
+// IsDeleted returns true if the path is scheduled for deletion by any operation.
+func (pst *PathStateTracker) IsDeleted(path string) bool {
+	state, err := pst.GetState(path)
+	if err != nil {
+		return false
+	}
+	return state.DeletedBy != ""
+}
+
 func (pst *PathStateTracker) updateStateForCreate(opID OperationID, path string, createType PathStateType) error {
 	state, err := pst.GetState(path)
 	if err != nil {
@@ -219,148 +232,4 @@ func (pst *PathStateTracker) updateStateForCreate(opID OperationID, path string,
 	state.CreatedBy = opID
 	state.DeletedBy = "" // Reset deleted status
 	return nil
-}
-
-// SetState sets the state of a path.
-func (pst *PathStateTracker) SetState(path string, state *PathState) {
-	cleanPath := filepath.Clean(path)
-	pst.states[cleanPath] = state
-}
-
-// Exists checks if a path exists in the synthetic state.
-func (pst *PathStateTracker) Exists(path string) bool {
-	state, _ := pst.GetState(path)
-	return state != nil && state.WillExist
-}
-
-// IsCreated checks if a path was created by an operation.
-func (pst *PathStateTracker) IsCreated(path string) bool {
-	state, _ := pst.GetState(path)
-	return state != nil && state.CreatedBy != ""
-}
-
-// IsDeleted checks if a path was deleted by an operation.
-func (pst *PathStateTracker) IsDeleted(path string) bool {
-	state, _ := pst.GetState(path)
-	return state != nil && state.DeletedBy != ""
-}
-
-// GetCreator returns the operation ID that created the path.
-func (pst *PathStateTracker) GetCreator(path string) OperationID {
-	state, _ := pst.GetState(path)
-	if state != nil {
-		return state.CreatedBy
-	}
-	return ""
-}
-
-// GetDeleter returns the operation ID that deleted the path.
-func (pst *PathStateTracker) GetDeleter(path string) OperationID {
-	state, _ := pst.GetState(path)
-	if state != nil {
-		return state.DeletedBy
-	}
-	return ""
-}
-
-// GetModifiers returns the operation IDs that modified the path.
-func (pst *PathStateTracker) GetModifiers(path string) []OperationID {
-	state, _ := pst.GetState(path)
-	if state != nil {
-		return state.ModifiedBy
-	}
-	return nil
-}
-
-// GetAllPaths returns all paths tracked by the state tracker.
-func (pst *PathStateTracker) GetAllPaths() []string {
-	paths := make([]string, 0, len(pst.states))
-	for path := range pst.states {
-		paths = append(paths, path)
-	}
-	return paths
-}
-
-// GetPathsByCreator returns all paths created by a specific operation.
-func (pst *PathStateTracker) GetPathsByCreator(opID OperationID) []string {
-	var paths []string
-	for path, state := range pst.states {
-		if state.CreatedBy == opID {
-			paths = append(paths, path)
-		}
-	}
-	return paths
-}
-
-// GetPathsByDeleter returns all paths deleted by a specific operation.
-func (pst *PathStateTracker) GetPathsByDeleter(opID OperationID) []string {
-	var paths []string
-	for path, state := range pst.states {
-		if state.DeletedBy == opID {
-			paths = append(paths, path)
-		}
-	}
-	return paths
-}
-
-// GetExistingPaths returns all paths that currently exist in the synthetic state.
-func (pst *PathStateTracker) GetExistingPaths() []string {
-	var paths []string
-	for path, state := range pst.states {
-		if state.WillExist {
-			paths = append(paths, path)
-		}
-	}
-	return paths
-}
-
-// GetDeletedPaths returns all paths that have been deleted in the synthetic state.
-func (pst *PathStateTracker) GetDeletedPaths() []string {
-	var paths []string
-	for path, state := range pst.states {
-		if !state.WillExist && state.DeletedBy != "" {
-			paths = append(paths, path)
-		}
-	}
-	return paths
-}
-
-// Clear clears all tracked state.
-func (pst *PathStateTracker) Clear() {
-	pst.states = make(map[string]*PathState)
-}
-
-// Clone creates a deep copy of the path state tracker.
-func (pst *PathStateTracker) Clone() *PathStateTracker {
-	clone := &PathStateTracker{
-		states: make(map[string]*PathState),
-		fs:     pst.fs,
-	}
-
-	for path, state := range pst.states {
-		clonedState := &PathState{
-			Path:         state.Path,
-			WillExist:    state.WillExist,
-			WillBeType:   state.WillBeType,
-			CreatedBy:    state.CreatedBy,
-			DeletedBy:    state.DeletedBy,
-			ModifiedBy:   append([]OperationID{}, state.ModifiedBy...),
-			InitialState: state.InitialState,
-		}
-		clone.states[path] = clonedState
-	}
-
-	return clone
-}
-
-// String returns a string representation of the path state tracker.
-func (pst *PathStateTracker) String() string {
-	var builder strings.Builder
-	builder.WriteString("PathStateTracker{\n")
-	for path, state := range pst.states {
-		builder.WriteString(fmt.Sprintf("  %s: {WillExist: %t, WillBeType: %s, CreatedBy: %s, DeletedBy: %s, ModifiedBy: %v}\n",
-			path, state.WillExist, state.WillBeType, state.CreatedBy, state.DeletedBy, state.ModifiedBy))
-	}
-	builder.WriteString("}")
-	return builder.String()
 }

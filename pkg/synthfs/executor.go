@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"time"
-
 )
 
 // OperationStatus and related constants are defined in constants.go
@@ -31,7 +30,7 @@ type OperationResult struct {
 	Error        error
 	Duration     time.Duration
 	BackupData   *BackupData // Phase III: Backup data for restoration (only if restorable=true)
-	BackupSizeMB float64          // Phase III: Actual backup size consumed
+	BackupSizeMB float64     // Phase III: Actual backup size consumed
 }
 
 // Result holds the overall outcome of running a pipeline of operations.
@@ -262,24 +261,17 @@ func (e *Executor) createRollbackFunc(executedOps []Operation, fsys FileSystem) 
 	}
 
 	return func(ctx context.Context) error {
-		Logger().Info().Int("count", len(executedOps)).Msg("starting rollback")
-		var firstErr error
 		// Rollback in reverse order
+		var rollbackErrors []error
 		for i := len(executedOps) - 1; i >= 0; i-- {
 			op := executedOps[i]
 			if err := op.Rollback(ctx, fsys); err != nil {
-				if firstErr == nil {
-					firstErr = err
-				}
-				Logger().Info().
-					Str("op_id", string(op.ID())).
-					Err(err).
-					Msg("rollback failed for operation")
+				rollbackErrors = append(rollbackErrors, fmt.Errorf("rollback failed for operation %s: %w", op.ID(), err))
 			}
 		}
 
-		if firstErr != nil {
-			return fmt.Errorf("rollback errors: %w", firstErr)
+		if len(rollbackErrors) > 0 {
+			return fmt.Errorf("rollback errors: %v", rollbackErrors)
 		}
 		return nil
 	}
