@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
 )
 
 // Filesystem interfaces are defined in types.go
@@ -118,37 +119,31 @@ func (osfs *OSFileSystem) Rename(oldpath, newpath string) error {
 }
 
 // ComputeFileChecksum calculates the MD5 checksum and gathers file metadata.
-// It requires a FullFileSystem to access both file content and metadata.
 func ComputeFileChecksum(fsys FullFileSystem, filePath string) (*ChecksumRecord, error) {
-	// Get file info first
 	info, err := fsys.Stat(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to stat file %s: %w", filePath, err)
 	}
 
-	// Skip checksumming for directories
 	if info.IsDir() {
 		return nil, nil
 	}
 
-	// Open file for reading
 	file, err := fsys.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file %s for checksumming: %w", filePath, err)
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			Logger().Warn().Err(closeErr).Str("path", filePath).Msg("failed to close file during checksumming")
+			Logger().Warn().Err(closeErr).Str("file", filePath).Msg("failed to close file after checksumming")
 		}
 	}()
 
-	// Calculate MD5 hash
 	hash := md5.New()
 	if _, err := io.Copy(hash, file); err != nil {
 		return nil, fmt.Errorf("failed to calculate checksum for %s: %w", filePath, err)
 	}
 
-	// Create checksum record
 	checksum := &ChecksumRecord{
 		Path:         filePath,
 		MD5:          fmt.Sprintf("%x", hash.Sum(nil)),
@@ -172,7 +167,6 @@ func NewReadOnlyWrapper(fsys fs.FS) *ReadOnlyWrapper {
 
 // Stat implements the StatFS interface
 func (w *ReadOnlyWrapper) Stat(name string) (fs.FileInfo, error) {
-	// If the underlying FS already implements StatFS, use that
 	if statFS, ok := w.FS.(StatFS); ok {
 		return statFS.Stat(name)
 	}

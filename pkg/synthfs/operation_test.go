@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
 )
 
 func TestSimpleOperation_GetItem(t *testing.T) {
@@ -97,7 +98,7 @@ func TestValidationError_Unwrap(t *testing.T) {
 }
 
 func TestDependencyError_Error(t *testing.T) {
-	op := NewSimpleOperation("test-op", "create_file", "test/path")
+	op := NewSimpleOperation(OperationID("test-op"), "create_file", "test/path")
 
 	err := &DependencyError{
 		Operation:    op,
@@ -112,7 +113,7 @@ func TestDependencyError_Error(t *testing.T) {
 }
 
 func TestConflictError_Error(t *testing.T) {
-	op := NewSimpleOperation("test-op", "create_file", "test/path")
+	op := NewSimpleOperation(OperationID("test-op"), "create_file", "test/path")
 
 	err := &ConflictError{
 		Operation: op,
@@ -150,7 +151,7 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 			t.Fatalf("test setup failed: %v", err)
 		}
 
-		op := NewSimpleOperation("test-del-empty-dir", "delete", "empty_dir")
+		op := NewSimpleOperation(OperationID("test-del-empty-dir"), "delete", "empty_dir")
 		budget := &BackupBudget{TotalMB: defaultBudgetMB, RemainingMB: defaultBudgetMB}
 
 		reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
@@ -177,7 +178,7 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 		fs := NewTestFileSystem()
 		setupTestFSForDirDelete(t, fs)
 
-		op := NewSimpleOperation("test-del-dir-full", "delete", "dir1")
+		op := NewSimpleOperation(OperationID("test-del-dir-full"), "delete", "dir1")
 		budget := &BackupBudget{TotalMB: defaultBudgetMB, RemainingMB: defaultBudgetMB}
 
 		reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
@@ -279,7 +280,7 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 		fs := NewTestFileSystem()
 		setupTestFSForDirDelete(t, fs) // total 34 bytes needed
 
-		op := NewSimpleOperation("test-del-dir-partial", "delete", "dir1")
+		op := NewSimpleOperation(OperationID("test-del-dir-partial"), "delete", "dir1")
 		// Budget enough for file1.txt (8b) and a bit more, but not file2.txt (18b)
 		smallBudgetMB := float64(10) / (1024 * 1024) // Approx 10 bytes
 		budget := &BackupBudget{TotalMB: smallBudgetMB, RemainingMB: smallBudgetMB}
@@ -332,7 +333,7 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 		fs := NewTestFileSystem()
 		setupTestFSForDirDelete(t, fs) // Smallest file is 8 bytes
 
-		op := NewSimpleOperation("test-del-dir-none", "delete", "dir1")
+		op := NewSimpleOperation(OperationID("test-del-dir-none"), "delete", "dir1")
 		tinyBudgetMB := float64(1) / (1024 * 1024) // 1 byte budget
 		budget := &BackupBudget{TotalMB: tinyBudgetMB, RemainingMB: tinyBudgetMB}
 
