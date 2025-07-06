@@ -61,6 +61,21 @@ func (b *Batch) Operations() []Operation {
 
 // add adds an operation to the batch and validates it against the projected filesystem state
 func (b *Batch) add(op Operation) error {
+	// First validate the operation itself (basic validation)
+	if err := op.Validate(b.ctx, b.fs); err != nil {
+		// For create operations, if the error is "file already exists" and the file
+		// is scheduled for deletion, we should give a more specific error
+		if validationErr, ok := err.(*ValidationError); ok {
+			if validationErr.Reason == "file already exists" {
+				if b.pathTracker.IsDeleted(op.Describe().Path) {
+					return fmt.Errorf("validation error for operation %s (%s): path was scheduled for deletion", 
+						op.ID(), op.Describe().Path)
+				}
+			}
+		}
+		return err
+	}
+
 	// Phase II: Validate against projected state and update it.
 	if err := b.pathTracker.UpdateState(op); err != nil {
 		return err
@@ -108,13 +123,9 @@ func (b *Batch) CreateDir(path string, mode ...fs.FileMode) (Operation, error) {
 	op.SetItem(dirItem)
 	op.SetDescriptionDetail("mode", fileMode.String())
 
-	// Validate immediately against the real filesystem.
-	if err := op.Validate(b.ctx, b.fs); err != nil {
-		return nil, fmt.Errorf("validation failed for CreateDir(%s): %w", path, err)
-	}
-
+	// Add to batch first (which validates against projected state)
 	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("failed to add CreateDir(%s): %w", path, err)
+		return nil, fmt.Errorf("validation failed for CreateDir(%s): %w", path, err)
 	}
 
 	Logger().Info().
@@ -144,13 +155,9 @@ func (b *Batch) CreateFile(path string, content []byte, mode ...fs.FileMode) (Op
 	op.SetDescriptionDetail("content_length", len(content))
 	op.SetDescriptionDetail("mode", fileMode.String())
 
-	// Validate immediately
-	if err := op.Validate(b.ctx, b.fs); err != nil {
-		return nil, fmt.Errorf("validation failed for CreateFile(%s): %w", path, err)
-	}
-
+	// Add to batch first (which validates against projected state)
 	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("failed to add CreateFile(%s): %w", path, err)
+		return nil, fmt.Errorf("validation failed for CreateFile(%s): %w", path, err)
 	}
 
 	Logger().Info().
@@ -172,21 +179,20 @@ func (b *Batch) Copy(src, dst string) (Operation, error) {
 	op.SetDescriptionDetail("destination", dst)
 	op.SetPaths(src, dst)
 
-	// Validate immediately
-	if err := op.Validate(b.ctx, b.fs); err != nil {
+	// Add to batch first (which validates the operation)
+	if err := b.add(op); err != nil {
 		return nil, fmt.Errorf("validation failed for Copy(%s, %s): %w", src, dst, err)
 	}
 
-	// Phase I, Milestone 3: Compute checksum for source file
-	if checksum, err := b.computeFileChecksum(src); err != nil {
-		return nil, fmt.Errorf("validation failed for Copy(%s, %s): failed to compute source checksum: %w", src, dst, err)
-	} else if checksum != nil {
+	// Phase I, Milestone 3: Compute checksum for source file (after validation)
+	if checksum, err := b.computeFileChecksum(src); err == nil && checksum != nil {
 		op.SetChecksum(src, checksum)
 		op.SetDescriptionDetail("source_checksum", checksum.MD5)
-	}
-
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("failed to add Copy(%s, %s): %w", src, dst, err)
+		Logger().Debug().
+			Str("op_id", string(op.ID())).
+			Str("src", src).
+			Str("checksum", checksum.MD5).
+			Msg("Computed source checksum for copy operation")
 	}
 
 	Logger().Info().
@@ -207,21 +213,20 @@ func (b *Batch) Move(src, dst string) (Operation, error) {
 	op.SetDescriptionDetail("destination", dst)
 	op.SetPaths(src, dst)
 
-	// Validate immediately
-	if err := op.Validate(b.ctx, b.fs); err != nil {
+	// Add to batch first (which validates the operation)
+	if err := b.add(op); err != nil {
 		return nil, fmt.Errorf("validation failed for Move(%s, %s): %w", src, dst, err)
 	}
 
-	// Phase I, Milestone 3: Compute checksum for source file
-	if checksum, err := b.computeFileChecksum(src); err != nil {
-		return nil, fmt.Errorf("validation failed for Move(%s, %s): failed to compute source checksum: %w", src, dst, err)
-	} else if checksum != nil {
+	// Phase I, Milestone 3: Compute checksum for source file (after validation)
+	if checksum, err := b.computeFileChecksum(src); err == nil && checksum != nil {
 		op.SetChecksum(src, checksum)
 		op.SetDescriptionDetail("source_checksum", checksum.MD5)
-	}
-
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("failed to add Move(%s, %s): %w", src, dst, err)
+		Logger().Debug().
+			Str("op_id", string(op.ID())).
+			Str("src", src).
+			Str("checksum", checksum.MD5).
+			Msg("Computed source checksum for move operation")
 	}
 
 	Logger().Info().
@@ -240,10 +245,7 @@ func (b *Batch) Delete(path string) (Operation, error) {
 	opID := b.generateID("delete", path)
 	op := NewSimpleOperation(opID, "delete", path)
 
-	// Validate immediately
-	if err := op.Validate(b.ctx, b.fs); err != nil {
-		return nil, fmt.Errorf("validation failed for Delete(%s): %w", path, err)
-	}
+	// We'll validate when adding to batch
 
 	if err := b.add(op); err != nil {
 		return nil, fmt.Errorf("failed to add Delete(%s): %w", path, err)

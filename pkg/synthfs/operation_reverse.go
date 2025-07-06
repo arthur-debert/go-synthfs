@@ -152,12 +152,8 @@ func (op *SimpleOperation) reverseDelete(ctx context.Context, fsys FileSystem, b
 			},
 		}
 		
-		// If there was an error during walk, return it along with partial backup data
-		if walkErr != nil {
-			return nil, backupData, walkErr
-		}
-
 		// Generate reverse operations from backed up items
+		// Even if there was an error, we still generate ops for what we backed up
 		for i, item := range backedUpItems {
 			revOpID := OperationID(fmt.Sprintf("reverse_%s_item_%d", op.ID(), i))
 			itemAbsPath := filepath.Join(path, item.RelativePath)
@@ -176,6 +172,11 @@ func (op *SimpleOperation) reverseDelete(ctx context.Context, fsys FileSystem, b
 				revOp.SetItem(fileItem)
 				reverseOps = append(reverseOps, revOp)
 			}
+		}
+		
+		// If there was an error during walk, return it along with partial backup data
+		if walkErr != nil {
+			return reverseOps, backupData, walkErr
 		}
 	} else {
 		// Regular file - backup content
@@ -226,7 +227,11 @@ func readFileContent(fsys FullFileSystem, path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			Logger().Warn().Err(err).Str("path", path).Msg("failed to close file")
+		}
+	}()
 
 	info, err := fsys.Stat(path)
 	if err != nil {

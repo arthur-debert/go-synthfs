@@ -2,6 +2,7 @@ package synthfs
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"testing"
 	"testing/fstest"
@@ -66,9 +67,23 @@ func (tfs *TestFileSystem) Remove(name string) error {
 	if !fs.ValidPath(name) {
 		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrInvalid}
 	}
-	if _, exists := tfs.MapFS[name]; !exists {
+	
+	entry, exists := tfs.MapFS[name]
+	if !exists {
 		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrNotExist}
 	}
+	
+	// Check if it's a directory with children
+	if entry.Mode.IsDir() {
+		// Check if any paths have this directory as a prefix
+		for path := range tfs.MapFS {
+			if path != name && isSubPath(name, path) {
+				// Directory is not empty
+				return &fs.PathError{Op: "remove", Path: name, Err: fmt.Errorf("directory not empty")}
+			}
+		}
+	}
+	
 	delete(tfs.MapFS, name)
 	return nil
 }
@@ -182,6 +197,9 @@ func (tfs *TestFileSystem) Stat(name string) (fs.FileInfo, error) {
 func isSubPath(parent, child string) bool {
 	if parent == "" || parent == "." {
 		return true
+	}
+	if child == parent {
+		return true // The path itself should be included
 	}
 	if len(child) <= len(parent) {
 		return false

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"time"
 )
 
 // executeCreateFile creates a new file with content.
@@ -251,7 +252,15 @@ func (op *SimpleOperation) reverseCreateFile(ctx context.Context, fsys FileSyste
 		path,
 	)
 
-	return []Operation{reverseOp}, nil, nil
+	// Create operations don't require backup data
+	backupData := &BackupData{
+		OperationID: op.ID(),
+		BackupType:  "none",
+		BackupTime:  time.Now(),
+		SizeMB:      0,
+	}
+
+	return []Operation{reverseOp}, backupData, nil
 }
 
 // reverseCreateDirectory generates operations to reverse a directory creation.

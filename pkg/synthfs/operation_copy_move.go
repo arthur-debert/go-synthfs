@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"strings"
+	"time"
 )
 
 // executeCopy copies a file or directory to a new location.
@@ -150,7 +152,8 @@ func (op *SimpleOperation) validateCopy(ctx context.Context, fsys FileSystem) er
 		// Check if destination is inside source (would create infinite loop)
 		srcAbs := filepath.Clean(op.srcPath)
 		dstAbs := filepath.Clean(op.dstPath)
-		if filepath.HasPrefix(dstAbs, srcAbs+string(filepath.Separator)) {
+		// Check if dstAbs starts with srcAbs followed by a separator
+		if strings.HasPrefix(dstAbs, srcAbs+string(filepath.Separator)) {
 			return &ValidationError{
 				Operation: op,
 				Reason:    "cannot copy directory into itself",
@@ -170,8 +173,56 @@ func (op *SimpleOperation) validateMove(ctx context.Context, fsys FileSystem) er
 		}
 	}
 
-	// Most validation is the same as copy
-	return op.validateCopy(ctx, fsys)
+	// Check if source exists
+	srcInfo, err := fs.Stat(fsys, op.srcPath)
+	if err != nil {
+		return &ValidationError{
+			Operation: op,
+			Reason:    fmt.Sprintf("move source does not exist: %s", op.srcPath),
+			Cause:     err,
+		}
+	}
+
+	// Check if destination already exists
+	if _, err := fs.Stat(fsys, op.dstPath); err == nil {
+		return &ValidationError{
+			Operation: op,
+			Reason:    fmt.Sprintf("destination path %s already exists", op.dstPath),
+		}
+	}
+
+	// Check if destination parent directory exists
+	dstDir := filepath.Dir(op.dstPath)
+	if dstDir != "." && dstDir != "/" {
+		if stat, err := fs.Stat(fsys, dstDir); err != nil {
+			// Parent doesn't exist - this might be created by another operation
+			Logger().Debug().
+				Str("op_id", string(op.ID())).
+				Str("parent", dstDir).
+				Msg("destination parent directory does not exist yet")
+		} else if !stat.IsDir() {
+			return &ValidationError{
+				Operation: op,
+				Reason:    fmt.Sprintf("destination parent %s exists but is not a directory", dstDir),
+			}
+		}
+	}
+
+	// Additional validation for directories
+	if srcInfo.IsDir() {
+		// Check if destination is inside source (would create infinite loop)
+		srcAbs := filepath.Clean(op.srcPath)
+		dstAbs := filepath.Clean(op.dstPath)
+		// Check if dstAbs starts with srcAbs followed by a separator
+		if strings.HasPrefix(dstAbs, srcAbs+string(filepath.Separator)) {
+			return &ValidationError{
+				Operation: op,
+				Reason:    "cannot move directory into itself",
+			}
+		}
+	}
+
+	return nil
 }
 
 // rollbackCopy rolls back a copy operation by removing the destination.
@@ -232,7 +283,15 @@ func (op *SimpleOperation) reverseCopy(ctx context.Context, fsys FileSystem, bud
 		op.dstPath,
 	)
 
-	return []Operation{reverseOp}, nil, nil
+	// Copy operations don't require backup data
+	backupData := &BackupData{
+		OperationID: op.ID(),
+		BackupType:  "none",
+		BackupTime:  time.Now(),
+		SizeMB:      0,
+	}
+
+	return []Operation{reverseOp}, backupData, nil
 }
 
 // reverseMove generates operations to reverse a move.
@@ -246,7 +305,14 @@ func (op *SimpleOperation) reverseMove(ctx context.Context, fsys FileSystem, bud
 	reverseOp.SetPaths(op.dstPath, op.srcPath)
 	reverseOp.SetDescriptionDetail("destination", op.srcPath)
 
-	return []Operation{reverseOp}, nil, nil
+	// Move operations don't require backup data
+	backupData := &BackupData{
+		OperationID: op.ID(),
+		BackupType:  "none",
+		BackupTime:  time.Now(),
+	}
+
+	return []Operation{reverseOp}, backupData, nil
 }
 
 // Helper method to copy a single file

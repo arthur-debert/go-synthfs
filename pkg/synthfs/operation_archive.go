@@ -122,11 +122,44 @@ func (op *SimpleOperation) validateCreateArchive(ctx context.Context, fsys FileS
 
 // validateUnarchive validates an unarchive operation.
 func (op *SimpleOperation) validateUnarchive(ctx context.Context, fsys FileSystem) error {
-	unarchiveItem, ok := op.item.(*UnarchiveItem)
-	if !ok || unarchiveItem == nil {
+	// First check if we have the right item type
+	if op.item == nil {
 		return &ValidationError{
 			Operation: op,
 			Reason:    "unarchive operation requires an UnarchiveItem",
+		}
+	}
+	
+	unarchiveItem, ok := op.item.(*UnarchiveItem)
+	if !ok {
+		return &ValidationError{
+			Operation: op,
+			Reason:    "expected UnarchiveItem but got different type",
+		}
+	}
+
+	// Validate archive path is not empty
+	if unarchiveItem.ArchivePath() == "" {
+		return &ValidationError{
+			Operation: op,
+			Reason:    "archive path cannot be empty",
+		}
+	}
+
+	// Validate extract path is not empty
+	if unarchiveItem.ExtractPath() == "" {
+		return &ValidationError{
+			Operation: op,
+			Reason:    "extract path cannot be empty",
+		}
+	}
+
+	// Validate archive format
+	if _, err := determineArchiveFormat(unarchiveItem.ArchivePath()); err != nil {
+		return &ValidationError{
+			Operation: op,
+			Reason:    fmt.Sprintf("unsupported archive format for file: %s", unarchiveItem.ArchivePath()),
+			Cause:     err,
 		}
 	}
 
@@ -220,11 +253,19 @@ func (op *SimpleOperation) createTarGzArchive(archiveItem *ArchiveItem, fsys Fil
 
 	// Create gzip writer
 	gzipWriter := gzip.NewWriter(&buf)
-	defer gzipWriter.Close()
+	defer func() {
+		if err := gzipWriter.Close(); err != nil {
+			Logger().Warn().Err(err).Msg("failed to close gzip writer")
+		}
+	}()
 
 	// Create tar writer
 	tarWriter := tar.NewWriter(gzipWriter)
-	defer tarWriter.Close()
+	defer func() {
+		if err := tarWriter.Close(); err != nil {
+			Logger().Warn().Err(err).Msg("failed to close tar writer")
+		}
+	}()
 
 	// Add each source to the archive
 	for _, source := range archiveItem.Sources() {
@@ -260,7 +301,11 @@ func (op *SimpleOperation) createZipArchive(archiveItem *ArchiveItem, fsys FileS
 
 	// Create zip writer
 	zipWriter := zip.NewWriter(&buf)
-	defer zipWriter.Close()
+	defer func() {
+		if err := zipWriter.Close(); err != nil {
+			Logger().Warn().Err(err).Msg("failed to close zip writer")
+		}
+	}()
 
 	// Add each source to the archive
 	for _, source := range archiveItem.Sources() {
@@ -319,7 +364,11 @@ func (op *SimpleOperation) addToTarArchive(tarWriter *tar.Writer, sourcePath str
 		if err != nil {
 			return fmt.Errorf("failed to open file %s: %w", sourcePath, err)
 		}
-		defer file.Close()
+		defer func() {
+			if err := file.Close(); err != nil {
+				Logger().Warn().Err(err).Str("path", sourcePath).Msg("failed to close file")
+			}
+		}()
 
 		if _, err := io.Copy(tarWriter, file); err != nil {
 			return fmt.Errorf("failed to write file content for %s: %w", sourcePath, err)
@@ -396,7 +445,11 @@ func (op *SimpleOperation) addToZipArchive(zipWriter *zip.Writer, sourcePath str
 	if err != nil {
 		return fmt.Errorf("failed to open file %s: %w", sourcePath, err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			Logger().Warn().Err(err).Str("path", sourcePath).Msg("failed to close file")
+		}
+	}()
 
 	if _, err := io.Copy(writer, file); err != nil {
 		return fmt.Errorf("failed to write file content for %s: %w", sourcePath, err)
@@ -414,14 +467,22 @@ func (op *SimpleOperation) extractTarGzArchive(unarchiveItem *UnarchiveItem, fsy
 	if err != nil {
 		return fmt.Errorf("failed to open archive %s: %w", unarchiveItem.ArchivePath(), err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			Logger().Warn().Err(err).Str("path", unarchiveItem.ArchivePath()).Msg("failed to close archive file")
+		}
+	}()
 
 	// Create gzip reader
 	gzipReader, err := gzip.NewReader(file)
 	if err != nil {
 		return fmt.Errorf("failed to create gzip reader: %w", err)
 	}
-	defer gzipReader.Close()
+	defer func() {
+		if err := gzipReader.Close(); err != nil {
+			Logger().Warn().Err(err).Msg("failed to close gzip reader")
+		}
+	}()
 
 	// Create tar reader
 	tarReader := tar.NewReader(gzipReader)
@@ -490,7 +551,11 @@ func (op *SimpleOperation) extractZipArchive(unarchiveItem *UnarchiveItem, fsys 
 	if err != nil {
 		return fmt.Errorf("failed to open archive %s: %w", unarchiveItem.ArchivePath(), err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			Logger().Warn().Err(err).Str("path", unarchiveItem.ArchivePath()).Msg("failed to close archive file")
+		}
+	}()
 
 	// Get file info for size
 	fullFS, ok := fsys.(FullFileSystem)
@@ -596,7 +661,11 @@ func (op *SimpleOperation) extractFileFromZip(f *zip.File, extractPath string, o
 	if err != nil {
 		return fmt.Errorf("failed to open file in archive: %w", err)
 	}
-	defer reader.Close()
+	defer func() {
+		if err := reader.Close(); err != nil {
+			Logger().Warn().Err(err).Msg("failed to close zip file reader")
+		}
+	}()
 
 	// Read file content
 	content, err := io.ReadAll(reader)
