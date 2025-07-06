@@ -121,8 +121,13 @@ Migration Steps:
 		- Left ComputeFileChecksum in fs.go (small utility function)
 		- All tests passing
 
-	3.f validation/ - NOT STARTED
-		- Will contain: checksum.go, validator.go
+	3.f validation/ - DONE
+		- Created validation/ directory
+		- Moved ChecksumRecord type to validation/checksum.go
+		- Moved ComputeFileChecksum to validation/checksum.go
+		- Updated types.go with type alias for backward compatibility
+		- fs.go now just wraps the validation package function
+		- All tests passing
 
 Files to Split:
 - operation.go (1600+ lines) -> operations/ + backup/ + types.go + errors.go
@@ -162,11 +167,12 @@ Recommendation: Skip operations/ for now and proceed with execution/ package,
 which should have fewer dependency issues. The execution package can be created
 without circular dependencies since it doesn't need to be imported by batch.go.
 
-CURRENT STATUS (after filesystem package extraction):
+CURRENT STATUS (after validation package extraction):
 ===================================================
 - operation.go successfully split from 1,510 lines to 7 focused files
 - filesystem package created with clean separation of interfaces and implementations
-- fs.go reduced from 186 lines to 66 lines
+- validation package created for checksum functionality
+- fs.go reduced from 186 lines to 29 lines (now just wrapper functions)
 - Type aliases maintained for backward compatibility
 - All tests passing (235 tests)
 - Code structure becoming clearer with proper package organization
@@ -201,11 +207,11 @@ UPDATED RECOMMENDATIONS (after filesystem refactoring):
 =====================================================
 With filesystem package complete, we should now tackle:
 
-Option A: Create validation/ package (RECOMMENDED NEXT)
-- Move ComputeFileChecksum from fs.go
-- Create a checksum.go with all checksum-related code
-- This is low-risk and will further clean up the codebase
-- Will help before tackling the larger batch.go refactoring
+Option A: Create validation/ package (COMPLETED ✓)
+- Moved ComputeFileChecksum from fs.go
+- Created checksum.go with ChecksumRecord type and ComputeFileChecksum
+- fs.go now contains only wrapper functions
+- Clean separation achieved
 
 Option B: Start on execution/ package
 - Move pipeline.go content (currently in batch.go)
@@ -217,3 +223,23 @@ Option C: Extract backup/ package
 - Move backup-related code from operation_backup.go and operation_reverse.go
 - Create backup/budget.go, backup/restore.go
 - Medium complexity
+
+NEW RECOMMENDATIONS (after validation package complete):
+=======================================================
+With validation, filesystem, and operation refactoring done:
+
+Option 1: Tackle execution/ package (RECOMMENDED NEXT)
+- Move executor.go (286 lines) to execution/executor.go
+- Move pipeline-related code from batch.go
+- Move state.go (366 lines) to execution/state.go
+- This would organize execution logic together
+
+Option 2: Extract backup/ package
+- Move BackupBudget from types.go
+- Move operation_backup.go content
+- Move backup-related parts of operation_reverse.go
+- Create cohesive backup functionality package
+
+Option 3: Clean up remaining small files
+- fs.go (29 lines) could be merged into another file or removed
+- Consider if any other small consolidations make sense
