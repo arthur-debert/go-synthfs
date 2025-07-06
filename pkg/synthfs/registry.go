@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
 )
 
 // OperationRegistry implements the core.OperationFactory interface
@@ -44,4 +45,15 @@ var defaultRegistry = NewOperationRegistry()
 // GetDefaultRegistry returns the default operation registry
 func GetDefaultRegistry() core.OperationFactory {
 	return defaultRegistry
+}
+
+// RegisterFactory implements the OperationRegistrar interface
+func (r *OperationRegistry) RegisterFactory(factory core.OperationFactory) {
+	// For now, we don't need to do anything as we have a single factory
+	// In the future, this could maintain a map of operation types to factories
+}
+
+// init function to initialize the operations package
+func init() {
+	operations.Initialize(defaultRegistry)
 }

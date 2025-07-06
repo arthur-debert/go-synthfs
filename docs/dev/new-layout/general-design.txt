@@ -122,14 +122,18 @@ ARCHITECTURAL IMPROVEMENT PLAN
 **Goal**: Now we can extract operations without circular deps
 **Shippable**: Yes - registry breaks the circular dependency
 
-1. Create `pkg/synthfs/operations` package
-2. Move all operation implementations
+1. Create `pkg/synthfs/operations` package - DONE
+2. Move all operation implementations - PARTIALLY DONE (created structure)
 3. Operations import:
    - core (for types)
    - targets (for items)
    - filesystem (for fs access)
-4. Main package imports operations to register them
-5. No circular dependency! Tests pass ✓
+   - DONE (prepared for future)
+4. Main package imports operations to register them - DONE
+5. No circular dependency! Tests pass ✓ - DONE
+
+Note: Full extraction of operations is blocked by ValidationError and other error types
+that reference Operation interface. This will be resolved in Phase 5 with ExecutionContext.
 
 ## Phase 5: Extract Execution Context (Release 5)
 **Goal**: Separate execution concerns from operation data
