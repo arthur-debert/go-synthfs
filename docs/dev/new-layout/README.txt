@@ -81,7 +81,32 @@ Migration Steps:
 	3.4 Remove old files.
 	3.5. Verify tests pass
 	3.6. Update documentation
-	Commit and push to git. T
+	Commit and push to git.
+
+	3.a targets/ - DONE
+		- Created targets/ directory
+		- Moved FileItem, DirectoryItem, SymlinkItem, ArchiveItem to respective files
+		- Created interface.go for FsItem interface
+		- Moved tests to targets/*_test.go
+		- All tests passing
+
+	3.b operations/ - ATTEMPTED BUT REVERTED
+		- Created operations/ directory structure
+		- Encountered circular dependency between synthfs and operations packages
+		- Reverted changes to maintain working state
+		- NEXT STEP: Need different approach to avoid circular dependencies
+
+	3.c execution/ - NOT STARTED
+		- Will contain: pipeline.go, executor.go, batch.go, state.go
+
+	3.d backup/ - NOT STARTED
+		- Will extract backup/restore functionality from operation.go
+
+	3.e filesystem/ - NOT STARTED
+		- Will contain: interfaces.go, os.go, memory.go from current fs.go and testing.go
+
+	3.f validation/ - NOT STARTED
+		- Will contain: checksum.go, validator.go
 
 Files to Split:
 - operation.go (1600+ lines) -> operations/ + backup/ + types.go + errors.go
@@ -96,3 +121,27 @@ Current Issues Addressed:
 - Mixed concerns in large files
 - Poor discoverability of core types
 - No centralized constants
+
+NEXT RECOMMENDED STEP:
+====================
+The operations/ package failed due to circular dependencies. Before proceeding with more package splits,
+we should consider one of these approaches:
+
+1. Keep operations in the main synthfs package (current state)
+   - SimpleOperation stays in operation.go
+   - Avoids circular dependency issues
+   - Less ideal structure but functional
+
+2. Create an internal/core package
+   - Move shared interfaces/types to internal/core
+   - Both synthfs and operations can import internal/core
+   - Prevents external packages from importing internal/core
+
+3. Restructure to avoid the dependency
+   - Move operation creation logic out of batch.go
+   - Use factory functions or builders
+   - More complex refactoring
+
+Recommendation: Skip operations/ for now and proceed with execution/ package,
+which should have fewer dependency issues. The execution package can be created
+without circular dependencies since it doesn't need to be imported by batch.go.
