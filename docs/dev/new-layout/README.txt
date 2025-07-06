@@ -90,11 +90,20 @@ Migration Steps:
 		- Moved tests to targets/*_test.go
 		- All tests passing
 
-	3.b operations/ - ATTEMPTED BUT REVERTED
+	3.b operations/ - ATTEMPTED BUT REVERTED, THEN RESOLVED DIFFERENTLY
 		- Created operations/ directory structure
 		- Encountered circular dependency between synthfs and operations packages
 		- Reverted changes to maintain working state
-		- NEXT STEP: Need different approach to avoid circular dependencies
+		- RESOLVED: Split operation.go into multiple files within synthfs package:
+		  * operation_simple.go - SimpleOperation struct and core methods
+		  * operation_create.go - create file/dir/symlink operations
+		  * operation_delete.go - delete operations
+		  * operation_copy_move.go - copy and move operations
+		  * operation_archive.go - archive/unarchive operations
+		  * operation_reverse.go - reverse operations for Phase 3
+		  * operation_backup.go - backup budget methods
+		- Fixed all test failures after refactoring
+		- All 235 tests passing
 
 	3.c execution/ - NOT STARTED
 		- Will contain: pipeline.go, executor.go, batch.go, state.go
@@ -145,3 +154,36 @@ we should consider one of these approaches:
 Recommendation: Skip operations/ for now and proceed with execution/ package,
 which should have fewer dependency issues. The execution package can be created
 without circular dependencies since it doesn't need to be imported by batch.go.
+
+CURRENT STATUS (after operation.go refactoring):
+===============================================
+- operation.go successfully split from 1,510 lines to 7 focused files
+- Total lines remain roughly the same (no new functionality added)
+- All tests passing (235 tests)
+- Code is more maintainable with clear separation of concerns
+
+NEXT RECOMMENDED STEPS:
+======================
+Now that operation.go is refactored, we have two main large files left:
+1. batch.go (1,041 lines) - Contains batch operations and dependency resolution
+2. fs.go (368 lines) - Contains filesystem interfaces and implementations
+
+Option 1: Split batch.go next
+- Move pipeline interface and implementation to execution/pipeline.go
+- Move executor to execution/executor.go  
+- Move state tracking to execution/state.go
+- Keep batch.go but reduce its size
+- Challenge: batch.go has tight coupling with operations
+
+Option 2: Split fs.go next (RECOMMENDED)
+- Move FileSystem interfaces to filesystem/interfaces.go
+- Move OSFileSystem to filesystem/os.go
+- Move test filesystem to filesystem/memory.go or testing/
+- This is more straightforward with fewer dependencies
+- Will make the codebase cleaner before tackling batch.go
+
+Option 3: Extract validation logic
+- Create validation/ package
+- Move checksum functionality from various files
+- Move validation logic from operations
+- This is relatively independent and low risk
