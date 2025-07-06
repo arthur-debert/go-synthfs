@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/targets"
 )
 
@@ -24,6 +25,7 @@ type Batch struct {
 	ctx         context.Context
 	idCounter   int
 	pathTracker *PathStateTracker // Phase II: Track projected path state
+	registry    core.OperationFactory // Phase 3: Operation registry for decoupling
 }
 
 // NewBatch creates a new operation batch with default filesystem and context.
@@ -35,6 +37,7 @@ func NewBatch() *Batch {
 		ctx:         context.Background(),
 		idCounter:   0,
 		pathTracker: NewPathStateTracker(fs), // Phase II: Initialize path state tracker
+		registry:    GetDefaultRegistry(),    // Phase 3: Use default operation registry
 	}
 }
 
@@ -48,6 +51,12 @@ func (b *Batch) WithFileSystem(fs FullFileSystem) *Batch {
 // WithContext sets the context for the batch operations.
 func (b *Batch) WithContext(ctx context.Context) *Batch {
 	b.ctx = ctx
+	return b
+}
+
+// WithRegistry sets a custom operation registry for the batch.
+func (b *Batch) WithRegistry(registry core.OperationFactory) *Batch {
+	b.registry = registry
 	return b
 }
 
@@ -114,13 +123,17 @@ func (b *Batch) CreateDir(path string, mode ...fs.FileMode) (Operation, error) {
 		fileMode = mode[0]
 	}
 
-	// Create the operation directly to avoid circular import
-	opID := b.generateID("create_dir", path)
-	op := NewSimpleOperation(opID, "create_directory", path)
+	// Create the operation using the registry
+	op, err := b.createOperation("create_directory", path)
+	if err != nil {
+		return nil, err
+	}
 
 	// Set the FsItem for this create operation
 	dirItem := NewDirectory(path).WithMode(fileMode)
-	op.SetItem(dirItem)
+	if err := b.registry.SetItemForOperation(op, dirItem); err != nil {
+		return nil, fmt.Errorf("failed to set item: %w", err)
+	}
 	op.SetDescriptionDetail("mode", fileMode.String())
 
 	// Add to batch first (which validates against projected state)
@@ -146,8 +159,10 @@ func (b *Batch) CreateFile(path string, content []byte, mode ...fs.FileMode) (Op
 	}
 
 	// Create the operation directly to avoid circular import
-	opID := b.generateID("create_file", path)
-	op := NewSimpleOperation(opID, "create_file", path)
+	op, err := b.createOperation("create_file", path)
+	if err != nil {
+		return nil, err
+	}
 
 	// Set the FsItem for this create operation
 	fileItem := NewFile(path).WithContent(content).WithMode(fileMode)
@@ -174,8 +189,10 @@ func (b *Batch) CreateFile(path string, content []byte, mode ...fs.FileMode) (Op
 // It validates the operation immediately and resolves dependencies automatically.
 func (b *Batch) Copy(src, dst string) (Operation, error) {
 	// Create the operation directly to avoid circular import
-	opID := b.generateID("copy", src+"_to_"+dst)
-	op := NewSimpleOperation(opID, "copy", src)
+	op, err := b.createOperation("copy", src)
+	if err != nil {
+		return nil, err
+	}
 	op.SetDescriptionDetail("destination", dst)
 	op.SetPaths(src, dst)
 
@@ -208,8 +225,10 @@ func (b *Batch) Copy(src, dst string) (Operation, error) {
 // It validates the operation immediately and resolves dependencies automatically.
 func (b *Batch) Move(src, dst string) (Operation, error) {
 	// Create the operation directly to avoid circular import
-	opID := b.generateID("move", src+"_to_"+dst)
-	op := NewSimpleOperation(opID, "move", src)
+	op, err := b.createOperation("move", src)
+	if err != nil {
+		return nil, err
+	}
 	op.SetDescriptionDetail("destination", dst)
 	op.SetPaths(src, dst)
 
@@ -242,8 +261,10 @@ func (b *Batch) Move(src, dst string) (Operation, error) {
 // It validates the operation immediately.
 func (b *Batch) Delete(path string) (Operation, error) {
 	// Create the operation directly to avoid circular import
-	opID := b.generateID("delete", path)
-	op := NewSimpleOperation(opID, "delete", path)
+	op, err := b.createOperation("delete", path)
+	if err != nil {
+		return nil, err
+	}
 
 	// We'll validate when adding to batch
 
@@ -341,8 +362,10 @@ func (b *Batch) CreateArchive(archivePath string, format ArchiveFormat, sources 
 // It validates the operation immediately and resolves dependencies automatically.
 func (b *Batch) Unarchive(archivePath, extractPath string) (Operation, error) {
 	// Create the operation
-	opID := b.generateID("unarchive", archivePath+"_to_"+extractPath)
-	op := NewSimpleOperation(opID, "unarchive", archivePath)
+	op, err := b.createOperation("unarchive", archivePath)
+	if err != nil {
+		return nil, err
+	}
 
 	// Set the UnarchiveItem for this operation
 	unarchiveItem := NewUnarchive(archivePath, extractPath)
@@ -371,8 +394,10 @@ func (b *Batch) Unarchive(archivePath, extractPath string) (Operation, error) {
 // It validates the operation immediately and resolves dependencies automatically.
 func (b *Batch) UnarchiveWithPatterns(archivePath, extractPath string, patterns ...string) (Operation, error) {
 	// Create the operation
-	opID := b.generateID("unarchive", archivePath+"_to_"+extractPath)
-	op := NewSimpleOperation(opID, "unarchive", archivePath)
+	op, err := b.createOperation("unarchive", archivePath)
+	if err != nil {
+		return nil, err
+	}
 
 	// Set the UnarchiveItem for this operation with patterns
 	unarchiveItem := NewUnarchive(archivePath, extractPath).WithPatterns(patterns...)
@@ -465,6 +490,22 @@ func (b *Batch) generateID(opType, path string) OperationID {
 	return OperationID(fmt.Sprintf("batch_%d_%s_%s", b.idCounter, opType, cleanPath))
 }
 
+// createOperation is a helper method to create operations using the registry
+func (b *Batch) createOperation(opType, path string) (*SimpleOperation, error) {
+	opID := b.generateID(opType, path)
+	opInterface, err := b.registry.CreateOperation(opID, opType, path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create operation: %w", err)
+	}
+	
+	op, ok := opInterface.(*SimpleOperation)
+	if !ok {
+		return nil, fmt.Errorf("registry returned unexpected operation type")
+	}
+	
+	return op, nil
+}
+
 // ensureParentDirectories analyzes a path and adds CreateDir operations for missing parent directories.
 // Returns the operation IDs of any auto-generated parent directory operations.
 func (b *Batch) ensureParentDirectories(path string) []OperationID {
@@ -495,10 +536,16 @@ func (b *Batch) ensureParentDirectories(path string) []OperationID {
 	dependencyIDs = append(dependencyIDs, parentDeps...)
 
 	// Create operation for the parent directory
-	parentOpID := b.generateID("create_dir_auto", parentDir)
-	parentOp := NewSimpleOperation(parentOpID, "create_directory", parentDir)
+	parentOp, err := b.createOperation("create_directory", parentDir)
+	if err != nil {
+		// If we can't create parent directory operation, skip it
+		return dependencyIDs
+	}
 	parentDirItem := NewDirectory(parentDir).WithMode(0755)
-	parentOp.SetItem(parentDirItem)
+	if err := b.registry.SetItemForOperation(parentOp, parentDirItem); err != nil {
+		// If we can't set item, skip it
+		return dependencyIDs
+	}
 	parentOp.SetDescriptionDetail("mode", "0755")
 
 	// Add dependencies from parent's parents

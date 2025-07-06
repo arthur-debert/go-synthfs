@@ -112,10 +112,11 @@ ARCHITECTURAL IMPROVEMENT PLAN
        CreateOperation(opType string, item targets.FsItem) (Operation, error)
    }
    ```
+   - DONE (signature adapted to avoid circular deps)
 
-2. Implement registry that batch can use
-3. Batch uses registry instead of direct creation
-4. Tests pass with new pattern ✓
+2. Implement registry that batch can use - DONE
+3. Batch uses registry instead of direct creation - DONE
+4. Tests pass with new pattern ✓ - DONE
 
 ## Phase 4: Create Operations Package (Release 4)
 **Goal**: Now we can extract operations without circular deps
