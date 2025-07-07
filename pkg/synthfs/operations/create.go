@@ -55,7 +55,7 @@ func (op *CreateFileOperation) Execute(ctx context.Context, fsys interface{}) er
 	
 	// Get content and mode from item details
 	content := op.description.Details["content"].([]byte)
-	mode := op.description.Details["mode"].(interface{})
+	mode := op.description.Details["mode"]
 	
 	// Write the file
 	if err := writeFile(fileItem.Path(), content, mode); err != nil {
