@@ -191,12 +191,6 @@ func TestUnarchiveValidation(t *testing.T) {
 	})
 }
 
-func TestUnarchivePatternMatching(t *testing.T) {
-	// Note: matchesPatterns is now an internal function in the operations package.
-	// Pattern matching is now tested through the actual unarchive operations in the integration tests below.
-	// The "extract with patterns" test case verifies that pattern matching works correctly.
-	t.Skip("Pattern matching is now tested through actual unarchive operations")
-}
 
 func TestUnarchiveIntegration(t *testing.T) {
 	// Create temporary directory for test

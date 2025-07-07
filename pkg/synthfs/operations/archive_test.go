@@ -27,7 +27,6 @@ func TestArchiveOperations(t *testing.T) {
 	})
 
 	t.Run("create zip archive with files", func(t *testing.T) {
-		t.Skip("Archive creation not fully implemented")
 		
 		fs := NewExtendedMockFilesystem()
 		
@@ -101,7 +100,6 @@ func TestArchiveOperations(t *testing.T) {
 	})
 
 	t.Run("unarchive zip file", func(t *testing.T) {
-		t.Skip("Unarchive operation not fully implemented")
 		
 		fs := NewExtendedMockFilesystem()
 		
@@ -135,9 +133,9 @@ func TestArchiveOperations(t *testing.T) {
 		}
 
 		op := operations.NewUnarchiveOperation(core.OperationID("test-op"), "archive.zip")
-		// Set destination in description
+		// Set extract_path in description
 		desc := op.Describe()
-		desc.Details["destination"] = "output"
+		desc.Details["extract_path"] = "output"
 
 		if err := op.Execute(ctx, fs); err != nil {
 			t.Fatalf("Execute failed: %v", err)

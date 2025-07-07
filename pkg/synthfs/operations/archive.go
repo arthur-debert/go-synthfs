@@ -89,64 +89,167 @@ func (op *CreateArchiveOperation) Execute(ctx context.Context, fsys interface{})
 
 // createZipArchive creates a ZIP archive.
 func (op *CreateArchiveOperation) createZipArchive(archivePath string, sources []string, fsys interface{}) error {
-	// This is a simplified implementation
-	// In a real implementation, we'd use the filesystem interface
-	file, err := os.Create(archivePath)
-	if err != nil {
-		return fmt.Errorf("failed to create archive file: %w", err)
-	}
-	defer func() { _ = file.Close() }()
+	// Create a buffer to hold the archive data
+	var buf bytes.Buffer
 
-	zipWriter := zip.NewWriter(file)
-	defer func() { _ = zipWriter.Close() }()
+	// Create zip writer
+	zipWriter := zip.NewWriter(&buf)
 
 	// Add sources to archive
 	for _, source := range sources {
-		// TODO: Implement actual file reading through fsys interface
-		// For now, this is a placeholder
-		_, err := zipWriter.Create(filepath.Base(source))
+		// Try to stat the source
+		var sourceInfo interface{}
+		if stat, ok := getStatMethod(fsys); ok {
+			info, err := stat(source)
+			if err != nil {
+				return fmt.Errorf("failed to stat source %s: %w", source, err)
+			}
+			sourceInfo = info
+		}
+
+		// Check if it's a directory
+		isDir := false
+		if fi, ok := sourceInfo.(interface{ IsDir() bool }); ok {
+			isDir = fi.IsDir()
+		}
+
+		if isDir {
+			// Skip directories for now - would need to walk them
+			continue
+		}
+
+		// Read file content
+		var content []byte
+		if open, ok := getOpenMethod(fsys); ok {
+			file, err := open(source)
+			if err != nil {
+				return fmt.Errorf("failed to open source %s: %w", source, err)
+			}
+			if reader, ok := file.(io.Reader); ok {
+				content, err = io.ReadAll(reader)
+				if err != nil {
+					return fmt.Errorf("failed to read source %s: %w", source, err)
+				}
+			}
+			if closer, ok := file.(io.Closer); ok {
+				_ = closer.Close()
+			}
+		}
+
+		// Add file to archive
+		writer, err := zipWriter.Create(source)
 		if err != nil {
-			return fmt.Errorf("failed to add %s to archive: %w", source, err)
+			return fmt.Errorf("failed to create zip entry for %s: %w", source, err)
+		}
+
+		if _, err := writer.Write(content); err != nil {
+			return fmt.Errorf("failed to write content for %s: %w", source, err)
 		}
 	}
 
-	return nil
+	// Close the zip writer
+	if err := zipWriter.Close(); err != nil {
+		return fmt.Errorf("failed to close zip writer: %w", err)
+	}
+
+	// Write the archive to filesystem
+	if writeFile, ok := getWriteFileMethod(fsys); ok {
+		return writeFile(archivePath, buf.Bytes(), 0644)
+	}
+
+	return fmt.Errorf("filesystem does not support WriteFile")
 }
 
 // createTarArchive creates a TAR or TAR.GZ archive.
 func (op *CreateArchiveOperation) createTarArchive(archivePath string, sources []string, fsys interface{}, compress bool) error {
-	// This is a simplified implementation
-	file, err := os.Create(archivePath)
-	if err != nil {
-		return fmt.Errorf("failed to create archive file: %w", err)
-	}
-	defer func() { _ = file.Close() }()
+	// Create a buffer to hold the archive data
+	var buf bytes.Buffer
 
 	var tarWriter *tar.Writer
 	if compress {
-		gzWriter := gzip.NewWriter(file)
+		gzWriter := gzip.NewWriter(&buf)
 		defer func() { _ = gzWriter.Close() }()
 		tarWriter = tar.NewWriter(gzWriter)
 	} else {
-		tarWriter = tar.NewWriter(file)
+		tarWriter = tar.NewWriter(&buf)
 	}
 	defer func() { _ = tarWriter.Close() }()
 
 	// Add sources to archive
 	for _, source := range sources {
-		// TODO: Implement actual file reading through fsys interface
-		// For now, this is a placeholder
-		header := &tar.Header{
-			Name: filepath.Base(source),
-			Mode: 0644,
-			Size: 0, // Would be actual file size
+		// Try to stat the source
+		var sourceInfo interface{}
+		if stat, ok := getStatMethod(fsys); ok {
+			info, err := stat(source)
+			if err != nil {
+				return fmt.Errorf("failed to stat source %s: %w", source, err)
+			}
+			sourceInfo = info
 		}
+
+		// Check if it's a directory
+		isDir := false
+		var mode os.FileMode = 0644
+		
+		if fi, ok := sourceInfo.(interface{ 
+			IsDir() bool
+			Size() int64
+			Mode() os.FileMode
+		}); ok {
+			isDir = fi.IsDir()
+			mode = fi.Mode()
+		}
+
+		if isDir {
+			// Skip directories for now - would need to walk them
+			continue
+		}
+
+		// Read file content
+		var content []byte
+		if open, ok := getOpenMethod(fsys); ok {
+			file, err := open(source)
+			if err != nil {
+				return fmt.Errorf("failed to open source %s: %w", source, err)
+			}
+			if reader, ok := file.(io.Reader); ok {
+				content, err = io.ReadAll(reader)
+				if err != nil {
+					return fmt.Errorf("failed to read source %s: %w", source, err)
+				}
+			}
+			if closer, ok := file.(io.Closer); ok {
+				_ = closer.Close()
+			}
+		}
+
+		// Create tar header
+		header := &tar.Header{
+			Name: source,
+			Mode: int64(mode.Perm()),
+			Size: int64(len(content)),
+		}
+		
 		if err := tarWriter.WriteHeader(header); err != nil {
 			return fmt.Errorf("failed to write header for %s: %w", source, err)
 		}
+
+		if _, err := tarWriter.Write(content); err != nil {
+			return fmt.Errorf("failed to write content for %s: %w", source, err)
+		}
 	}
 
-	return nil
+	// Close the tar writer  
+	if err := tarWriter.Close(); err != nil {
+		return fmt.Errorf("failed to close tar writer: %w", err)
+	}
+
+	// Write the archive to filesystem
+	if writeFile, ok := getWriteFileMethod(fsys); ok {
+		return writeFile(archivePath, buf.Bytes(), 0644)
+	}
+
+	return fmt.Errorf("filesystem does not support WriteFile")
 }
 
 // ExecuteV2 performs the archive creation with execution context support.

@@ -67,8 +67,48 @@ func TestDeleteOperation_ReverseOps(t *testing.T) {
 	})
 
 	t.Run("delete directory with content, sufficient budget", func(t *testing.T) {
-		// Skip this test as MockFilesystem doesn't implement ReadDir
-		t.Skip("MockFilesystem doesn't implement ReadDir yet")
+		fs := NewExtendedMockFilesystem()
+		
+		// Setup directory structure
+		if err := fs.MkdirAll("dir1", 0755); err != nil {
+			t.Fatalf("Failed to create dir1: %v", err)
+		}
+		if err := fs.WriteFile("dir1/file1.txt", []byte("content1"), 0644); err != nil {
+			t.Fatalf("Failed to write file1.txt: %v", err)
+		}
+		if err := fs.MkdirAll("dir1/subdir", 0755); err != nil {
+			t.Fatalf("Failed to create subdir: %v", err)
+		}
+		if err := fs.WriteFile("dir1/subdir/file2.txt", []byte("content2"), 0644); err != nil {
+			t.Fatalf("Failed to write file2.txt: %v", err)
+		}
+
+		op := operations.NewDeleteOperation(core.OperationID("test-del-dir"), "dir1")
+		budget := &core.BackupBudget{TotalMB: defaultBudgetMB, RemainingMB: defaultBudgetMB}
+
+		reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
+		if err != nil {
+			t.Fatalf("ReverseOps failed: %v", err)
+		}
+
+		// Should have one reverse op for each item in the directory
+		if len(reverseOps) == 0 {
+			t.Fatal("Expected reverse operations for directory deletion")
+		}
+
+		if backupData == nil {
+			t.Fatal("Expected backup data for directory deletion")
+		}
+
+		// Check that backup contains the directory structure
+		if bd, ok := backupData.(*core.BackupData); ok {
+			items, ok := bd.Metadata["items"].([]interface{})
+			if !ok || len(items) == 0 {
+				t.Error("Expected backup metadata to contain items")
+			}
+		} else {
+			t.Error("Expected backupData to be *core.BackupData")
+		}
 	})
 
 	t.Run("delete file", func(t *testing.T) {
