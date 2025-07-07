@@ -824,7 +824,8 @@ func (b *Batch) resolveImplicitDependencies() error {
 // syncOperationsToBatchImpl synchronizes operations from the main batch to the batch package implementation.
 // This is needed because operations are created in the main batch first, but we want to execute them
 // via the batch package implementation.
-func (b *Batch) syncOperationsToBatchImpl() error {
+// TODO: Currently unused until operation item synchronization is fixed - will be used when delegation is enabled
+func (b *Batch) syncOperationsToBatchImpl() error { //nolint:unused // Will be used when delegation is enabled
 	// For now, create a simple mapping by recreating equivalent operations in the batch package.
 	// This is a bridge during the migration period.
 	

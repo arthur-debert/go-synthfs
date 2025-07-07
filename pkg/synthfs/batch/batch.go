@@ -9,6 +9,7 @@ import (
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/execution"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/targets"
 )
 
 // logInfo is a simple logger for the batch package
@@ -101,9 +102,13 @@ func (b *BatchImpl) CreateDir(path string, mode ...fs.FileMode) (interface{}, er
 		return nil, err
 	}
 
-	// Set the item for this create operation
-	// Note: The actual directory item creation is handled by the main package
-	// This is just setting up the operation metadata
+	// Create and set the directory item for this operation
+	dirItem := targets.NewDirectory(path).WithMode(fileMode)
+	if err := b.registry.SetItemForOperation(op, dirItem); err != nil {
+		return nil, fmt.Errorf("failed to set item for CreateDir operation: %w", err)
+	}
+
+	// Set operation details
 	if err := b.setOperationDetails(op, map[string]interface{}{
 		"mode": fileMode.String(),
 	}); err != nil {
@@ -129,6 +134,12 @@ func (b *BatchImpl) CreateFile(path string, content []byte, mode ...fs.FileMode)
 	op, err := b.createOperation("create_file", path)
 	if err != nil {
 		return nil, err
+	}
+
+	// Create and set the file item for this operation
+	fileItem := targets.NewFile(path).WithContent(content).WithMode(fileMode)
+	if err := b.registry.SetItemForOperation(op, fileItem); err != nil {
+		return nil, fmt.Errorf("failed to set item for CreateFile operation: %w", err)
 	}
 
 	// Set operation details
@@ -226,6 +237,12 @@ func (b *BatchImpl) CreateSymlink(target, linkPath string) (interface{}, error) 
 	op, err := b.createOperation("create_symlink", linkPath)
 	if err != nil {
 		return nil, err
+	}
+
+	// Create and set the symlink item for this operation
+	symlinkItem := targets.NewSymlink(linkPath, target)
+	if err := b.registry.SetItemForOperation(op, symlinkItem); err != nil {
+		return nil, fmt.Errorf("failed to set item for CreateSymlink operation: %w", err)
 	}
 
 	// Set operation details
