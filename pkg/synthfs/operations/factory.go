@@ -29,10 +29,12 @@ func (f *Factory) CreateOperation(id core.OperationID, opType string, path strin
 		return NewMoveOperation(id, path), nil
 	case "delete":
 		return NewDeleteOperation(id, path), nil
-	// TODO: Add more operation types as they are migrated
-	case "create_symlink", "create_archive", "unarchive":
-		// These haven't been migrated yet
-		return nil, fmt.Errorf("operation type %s not yet migrated to operations package", opType)
+	case "create_symlink":
+		return NewCreateSymlinkOperation(id, path), nil
+	case "create_archive":
+		return NewCreateArchiveOperation(id, path), nil
+	case "unarchive":
+		return NewUnarchiveOperation(id, path), nil
 	default:
 		return nil, fmt.Errorf("unknown operation type: %s", opType)
 	}
