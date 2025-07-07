@@ -9,6 +9,13 @@ import (
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
+// logInfo is a simple logger for the batch package
+func logInfo(msg string, fields map[string]interface{}) {
+	// For now, just use fmt for logging
+	// TODO: Integrate with proper logging system
+	fmt.Printf("[BATCH] %s %+v\n", msg, fields)
+}
+
 // BatchImpl represents a collection of operations that can be validated and executed as a unit.
 // This implementation uses interface{} types to avoid circular dependencies.
 type BatchImpl struct {
@@ -313,26 +320,62 @@ func (b *BatchImpl) UnarchiveWithPatterns(archivePath, extractPath string, patte
 
 // Run runs all operations in the batch using default options.
 func (b *BatchImpl) Run() (interface{}, error) {
-	// TODO: Implement execution using executor and pipeline
-	return nil, fmt.Errorf("Run not yet implemented in batch package")
+	// Use default pipeline options
+	defaultOpts := map[string]interface{}{
+		"restorable":        false,
+		"max_backup_size_mb": 0,
+	}
+	return b.RunWithOptions(defaultOpts)
 }
 
 // RunWithOptions runs all operations in the batch with specified options.
 func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
-	// TODO: Implement execution with options
-	return nil, fmt.Errorf("RunWithOptions not yet implemented in batch package")
+	// Extract options
+	restorable := false
+	maxBackupMB := 0
+	
+	if optsMap, ok := opts.(map[string]interface{}); ok {
+		if r, ok := optsMap["restorable"].(bool); ok {
+			restorable = r
+		}
+		if mb, ok := optsMap["max_backup_size_mb"].(int); ok {
+			maxBackupMB = mb
+		}
+	}
+	
+	// Log the start of execution
+	logInfo("executing batch", map[string]interface{}{
+		"operation_count": len(b.operations),
+		"restorable": restorable,
+		"max_backup_mb": maxBackupMB,
+	})
+	
+	// TODO: Resolve implicit dependencies before execution
+	// This requires implementing dependency resolution logic
+	
+	// TODO: Create executor and pipeline from execution package
+	// This requires access to the execution package types
+	
+	// TODO: Add operations to pipeline and execute
+	// This requires implementing the execution flow
+	
+	// For now, return a basic result
+	result := NewResult(false, b.operations, nil, 0, fmt.Errorf("execution not fully implemented"))
+	return result, nil
 }
 
 // RunRestorable runs all operations with backup enabled using the default 10MB budget.
 func (b *BatchImpl) RunRestorable() (interface{}, error) {
-	// TODO: Implement restorable execution
-	return nil, fmt.Errorf("RunRestorable not yet implemented in batch package")
+	return b.RunRestorableWithBudget(10)
 }
 
 // RunRestorableWithBudget runs all operations with backup enabled using a custom budget.
 func (b *BatchImpl) RunRestorableWithBudget(maxBackupMB int) (interface{}, error) {
-	// TODO: Implement restorable execution with budget
-	return nil, fmt.Errorf("RunRestorableWithBudget not yet implemented in batch package")
+	opts := map[string]interface{}{
+		"restorable":        true,
+		"max_backup_size_mb": maxBackupMB,
+	}
+	return b.RunWithOptions(opts)
 }
 
 // Helper methods
