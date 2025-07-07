@@ -79,34 +79,34 @@ func (op *SimpleOperation) validateCreateArchive(ctx context.Context, fsys FileS
 	archiveItem, ok := op.item.(*ArchiveItem)
 	if !ok || archiveItem == nil {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "create_archive operation requires an ArchiveItem",
+			Reason:        "create_archive operation requires an ArchiveItem",
 		}
 	}
 
 	if archiveItem.Path() == "" {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "archive path cannot be empty",
+			Reason:        "archive path cannot be empty",
 		}
 	}
 
 	if len(archiveItem.Sources()) == 0 {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "archive must have at least one source",
+			Reason:        "archive must have at least one source",
 		}
 	}
 
 	// Check if archive already exists
 	if _, err := fs.Stat(fsys, archiveItem.Path()); err == nil {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "archive file already exists",
+			Reason:        "archive file already exists",
 		}
 	}
 
@@ -114,10 +114,10 @@ func (op *SimpleOperation) validateCreateArchive(ctx context.Context, fsys FileS
 	for _, source := range archiveItem.Sources() {
 		if _, err := fs.Stat(fsys, source); err != nil {
 			return &ValidationError{
-				OperationID: op.ID(),
-			OperationDesc: op.Describe(),
-				Reason:    fmt.Sprintf("source path %s does not exist", source),
-				Cause:     err,
+				OperationID:   op.ID(),
+				OperationDesc: op.Describe(),
+				Reason:        fmt.Sprintf("source path %s does not exist", source),
+				Cause:         err,
 			}
 		}
 	}
@@ -130,56 +130,56 @@ func (op *SimpleOperation) validateUnarchive(ctx context.Context, fsys FileSyste
 	// First check if we have the right item type
 	if op.item == nil {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "unarchive operation requires an UnarchiveItem",
+			Reason:        "unarchive operation requires an UnarchiveItem",
 		}
 	}
-	
+
 	unarchiveItem, ok := op.item.(*UnarchiveItem)
 	if !ok {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "expected UnarchiveItem but got different type",
+			Reason:        "expected UnarchiveItem but got different type",
 		}
 	}
 
 	// Validate archive path is not empty
 	if unarchiveItem.ArchivePath() == "" {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "archive path cannot be empty",
+			Reason:        "archive path cannot be empty",
 		}
 	}
 
 	// Validate extract path is not empty
 	if unarchiveItem.ExtractPath() == "" {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "extract path cannot be empty",
+			Reason:        "extract path cannot be empty",
 		}
 	}
 
 	// Validate archive format
 	if _, err := determineArchiveFormat(unarchiveItem.ArchivePath()); err != nil {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    fmt.Sprintf("unsupported archive format for file: %s", unarchiveItem.ArchivePath()),
-			Cause:     err,
+			Reason:        fmt.Sprintf("unsupported archive format for file: %s", unarchiveItem.ArchivePath()),
+			Cause:         err,
 		}
 	}
 
 	// Check if archive exists
 	if _, err := fs.Stat(fsys, unarchiveItem.ArchivePath()); err != nil {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    fmt.Sprintf("archive file %s does not exist", unarchiveItem.ArchivePath()),
-			Cause:     err,
+			Reason:        fmt.Sprintf("archive file %s does not exist", unarchiveItem.ArchivePath()),
+			Cause:         err,
 		}
 	}
 
@@ -192,9 +192,9 @@ func (op *SimpleOperation) validateUnarchive(ctx context.Context, fsys FileSyste
 			Msg("extract path does not exist yet")
 	} else if !stat.IsDir() {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    fmt.Sprintf("extract path %s exists but is not a directory", unarchiveItem.ExtractPath()),
+			Reason:        fmt.Sprintf("extract path %s exists but is not a directory", unarchiveItem.ExtractPath()),
 		}
 	}
 

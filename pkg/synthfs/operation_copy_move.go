@@ -100,17 +100,17 @@ func (op *SimpleOperation) executeMove(ctx context.Context, fsys FileSystem) err
 func (op *SimpleOperation) validateCopy(ctx context.Context, fsys FileSystem) error {
 	if op.srcPath == "" {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "copy source path cannot be empty",
+			Reason:        "copy source path cannot be empty",
 		}
 	}
 
 	if op.dstPath == "" {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "copy destination path cannot be empty",
+			Reason:        "copy destination path cannot be empty",
 		}
 	}
 
@@ -118,19 +118,19 @@ func (op *SimpleOperation) validateCopy(ctx context.Context, fsys FileSystem) er
 	srcInfo, err := fs.Stat(fsys, op.srcPath)
 	if err != nil {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    fmt.Sprintf("copy source does not exist: %s", op.srcPath),
-			Cause:     err,
+			Reason:        fmt.Sprintf("copy source does not exist: %s", op.srcPath),
+			Cause:         err,
 		}
 	}
 
 	// Check if destination already exists
 	if _, err := fs.Stat(fsys, op.dstPath); err == nil {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    fmt.Sprintf("destination path %s already exists", op.dstPath),
+			Reason:        fmt.Sprintf("destination path %s already exists", op.dstPath),
 		}
 	}
 
@@ -145,9 +145,9 @@ func (op *SimpleOperation) validateCopy(ctx context.Context, fsys FileSystem) er
 				Msg("destination parent directory does not exist yet")
 		} else if !stat.IsDir() {
 			return &ValidationError{
-				OperationID: op.ID(),
-			OperationDesc: op.Describe(),
-				Reason:    fmt.Sprintf("destination parent %s exists but is not a directory", dstDir),
+				OperationID:   op.ID(),
+				OperationDesc: op.Describe(),
+				Reason:        fmt.Sprintf("destination parent %s exists but is not a directory", dstDir),
 			}
 		}
 	}
@@ -160,9 +160,9 @@ func (op *SimpleOperation) validateCopy(ctx context.Context, fsys FileSystem) er
 		// Check if dstAbs starts with srcAbs followed by a separator
 		if strings.HasPrefix(dstAbs, srcAbs+string(filepath.Separator)) {
 			return &ValidationError{
-				OperationID: op.ID(),
-			OperationDesc: op.Describe(),
-				Reason:    "cannot copy directory into itself",
+				OperationID:   op.ID(),
+				OperationDesc: op.Describe(),
+				Reason:        "cannot copy directory into itself",
 			}
 		}
 	}
@@ -174,9 +174,9 @@ func (op *SimpleOperation) validateCopy(ctx context.Context, fsys FileSystem) er
 func (op *SimpleOperation) validateMove(ctx context.Context, fsys FileSystem) error {
 	if op.srcPath == "" || op.dstPath == "" {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "move operation requires both source and destination paths",
+			Reason:        "move operation requires both source and destination paths",
 		}
 	}
 
@@ -184,19 +184,19 @@ func (op *SimpleOperation) validateMove(ctx context.Context, fsys FileSystem) er
 	srcInfo, err := fs.Stat(fsys, op.srcPath)
 	if err != nil {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    fmt.Sprintf("move source does not exist: %s", op.srcPath),
-			Cause:     err,
+			Reason:        fmt.Sprintf("move source does not exist: %s", op.srcPath),
+			Cause:         err,
 		}
 	}
 
 	// Check if destination already exists
 	if _, err := fs.Stat(fsys, op.dstPath); err == nil {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    fmt.Sprintf("destination path %s already exists", op.dstPath),
+			Reason:        fmt.Sprintf("destination path %s already exists", op.dstPath),
 		}
 	}
 
@@ -211,9 +211,9 @@ func (op *SimpleOperation) validateMove(ctx context.Context, fsys FileSystem) er
 				Msg("destination parent directory does not exist yet")
 		} else if !stat.IsDir() {
 			return &ValidationError{
-				OperationID: op.ID(),
-			OperationDesc: op.Describe(),
-				Reason:    fmt.Sprintf("destination parent %s exists but is not a directory", dstDir),
+				OperationID:   op.ID(),
+				OperationDesc: op.Describe(),
+				Reason:        fmt.Sprintf("destination parent %s exists but is not a directory", dstDir),
 			}
 		}
 	}
@@ -226,9 +226,9 @@ func (op *SimpleOperation) validateMove(ctx context.Context, fsys FileSystem) er
 		// Check if dstAbs starts with srcAbs followed by a separator
 		if strings.HasPrefix(dstAbs, srcAbs+string(filepath.Separator)) {
 			return &ValidationError{
-				OperationID: op.ID(),
-			OperationDesc: op.Describe(),
-				Reason:    "cannot move directory into itself",
+				OperationID:   op.ID(),
+				OperationDesc: op.Describe(),
+				Reason:        "cannot move directory into itself",
 			}
 		}
 	}

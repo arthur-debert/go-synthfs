@@ -2,7 +2,7 @@ package synthfs
 
 import (
 	"context"
-	
+
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
 )
@@ -18,17 +18,17 @@ type OperationAdapter struct {
 func NewOperationAdapter(op Operation) *OperationAdapter {
 	// Create a base operation with the same metadata
 	baseOp := operations.NewBaseOperation(op.ID(), op.Describe().Type, op.Describe().Path)
-	
+
 	// Copy dependencies
 	for _, dep := range op.Dependencies() {
 		baseOp.AddDependency(dep)
 	}
-	
+
 	// Copy description details
 	for k, v := range op.Describe().Details {
 		baseOp.SetDescriptionDetail(k, v)
 	}
-	
+
 	return &OperationAdapter{
 		BaseOperation: baseOp,
 		mainOp:        op,

@@ -65,7 +65,7 @@ func (e *Executor) RunWithOptions(ctx context.Context, pipeline Pipeline, fs Fil
 	// Create pipeline wrapper
 	wrapper := &pipelineWrapper{pipeline: pipeline}
 	coreResult := e.executor.RunWithOptions(ctx, wrapper, fs, opts)
-	
+
 	// Convert core.Result back to main package Result
 	return e.convertResult(coreResult)
 }
@@ -79,7 +79,7 @@ func (e *Executor) convertResult(coreResult *core.Result) *Result {
 		Budget:   coreResult.Budget,
 		Rollback: coreResult.Rollback,
 	}
-	
+
 	// Convert operation results
 	for _, coreOpResult := range coreResult.Operations {
 		opResult := OperationResult{
@@ -90,24 +90,24 @@ func (e *Executor) convertResult(coreResult *core.Result) *Result {
 			BackupData:   coreOpResult.BackupData,
 			BackupSizeMB: coreOpResult.BackupSizeMB,
 		}
-		
+
 		// Convert operation from interface{} back to Operation
 		if op, ok := coreOpResult.Operation.(Operation); ok {
 			opResult.Operation = op
 		} else if wrapper, ok := coreOpResult.Operation.(*operationWrapper); ok {
 			opResult.Operation = wrapper.op
 		}
-		
+
 		result.Operations = append(result.Operations, opResult)
 	}
-	
+
 	// Convert restore operations
 	for _, coreRestoreOp := range coreResult.RestoreOps {
 		if op, ok := coreRestoreOp.(Operation); ok {
 			result.RestoreOps = append(result.RestoreOps, op)
 		}
 	}
-	
+
 	return result
 }
 
@@ -165,7 +165,7 @@ func (ow *operationWrapper) ExecuteV2(ctx interface{}, execCtx *core.ExecutionCo
 	}); ok {
 		return execV2Op.ExecuteV2(ctx, execCtx, fsys)
 	}
-	
+
 	// Fallback to original Execute method
 	if contextOp, ok := ctx.(context.Context); ok {
 		if fsysOp, ok := fsys.(FileSystem); ok {
@@ -182,7 +182,7 @@ func (ow *operationWrapper) ValidateV2(ctx interface{}, execCtx *core.ExecutionC
 	}); ok {
 		return validateV2Op.ValidateV2(ctx, execCtx, fsys)
 	}
-	
+
 	// Fallback to original Validate method
 	if contextOp, ok := ctx.(context.Context); ok {
 		if fsysOp, ok := fsys.(FileSystem); ok {
@@ -196,7 +196,7 @@ func (ow *operationWrapper) ReverseOps(ctx context.Context, fsys interface{}, bu
 	// Delegate to the original operation's ReverseOps
 	if fsysOp, ok := fsys.(FileSystem); ok {
 		reverseOps, backupData, err := ow.op.ReverseOps(ctx, fsysOp, budget)
-		
+
 		// Convert []Operation to []interface{} even if there's an error
 		// This preserves partial backup data in case of budget exhaustion
 		var result []interface{}

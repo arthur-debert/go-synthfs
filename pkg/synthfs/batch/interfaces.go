@@ -3,7 +3,7 @@ package batch
 import (
 	"context"
 	"io/fs"
-	
+
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
@@ -11,7 +11,7 @@ import (
 type Batch interface {
 	// Operation management
 	Operations() []interface{}
-	
+
 	// Operation creation methods
 	CreateDir(path string, mode ...fs.FileMode) (interface{}, error)
 	CreateFile(path string, content []byte, mode ...fs.FileMode) (interface{}, error)
@@ -22,12 +22,12 @@ type Batch interface {
 	CreateArchive(archivePath string, format interface{}, sources ...string) (interface{}, error)
 	Unarchive(archivePath, extractPath string) (interface{}, error)
 	UnarchiveWithPatterns(archivePath, extractPath string, patterns ...string) (interface{}, error)
-	
+
 	// Configuration
 	WithFileSystem(fs interface{}) Batch
 	WithContext(ctx context.Context) Batch
 	WithRegistry(registry core.OperationFactory) Batch
-	
+
 	// Execution
 	Run() (interface{}, error)
 	RunWithOptions(opts interface{}) (interface{}, error)

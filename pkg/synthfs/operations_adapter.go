@@ -2,7 +2,7 @@ package synthfs
 
 import (
 	"context"
-	
+
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
 )
@@ -71,12 +71,12 @@ func (a *OperationsPackageAdapter) GetItem() FsItem {
 	if item == nil {
 		return nil
 	}
-	
+
 	// Try to convert interface{} to FsItem
 	if fsItem, ok := item.(FsItem); ok {
 		return fsItem
 	}
-	
+
 	// If it's from the operations package, we might need to adapt it
 	// For now, return nil if we can't convert
 	return nil
@@ -88,12 +88,12 @@ func (a *OperationsPackageAdapter) GetChecksum(path string) *ChecksumRecord {
 	if cs == nil {
 		return nil
 	}
-	
+
 	// Try to convert interface{} to ChecksumRecord
 	if checksum, ok := cs.(*ChecksumRecord); ok {
 		return checksum
 	}
-	
+
 	// If it's a different type, try to adapt it
 	// For now, return nil if we can't convert
 	return nil
@@ -105,14 +105,14 @@ func (a *OperationsPackageAdapter) GetAllChecksums() map[string]*ChecksumRecord 
 	if checksums == nil {
 		return nil
 	}
-	
+
 	result := make(map[string]*ChecksumRecord)
 	for path, cs := range checksums {
 		if checksum, ok := cs.(*ChecksumRecord); ok {
 			result[path] = checksum
 		}
 	}
-	
+
 	return result
 }
 
@@ -122,7 +122,7 @@ func (a *OperationsPackageAdapter) ReverseOps(ctx context.Context, fsys FileSyst
 	if err != nil {
 		return nil, nil, err
 	}
-	
+
 	// Convert operations
 	var result []Operation
 	for _, op := range ops {
@@ -132,7 +132,7 @@ func (a *OperationsPackageAdapter) ReverseOps(ctx context.Context, fsys FileSyst
 			result = append(result, mainOp)
 		}
 	}
-	
+
 	// Convert backup data
 	var backupData *core.BackupData
 	if data != nil {
@@ -140,7 +140,7 @@ func (a *OperationsPackageAdapter) ReverseOps(ctx context.Context, fsys FileSyst
 			backupData = bd
 		}
 	}
-	
+
 	return result, backupData, nil
 }
 

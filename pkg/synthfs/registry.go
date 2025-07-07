@@ -8,14 +8,14 @@ import (
 )
 
 // OperationRegistry implements the core.OperationFactory interface
-type OperationRegistry struct{
-	operationsFactory    *operations.Factory
+type OperationRegistry struct {
+	operationsFactory *operations.Factory
 }
 
 // NewOperationRegistry creates a new operation registry
 func NewOperationRegistry() *OperationRegistry {
 	return &OperationRegistry{
-		operationsFactory:    operations.NewFactory(),
+		operationsFactory: operations.NewFactory(),
 	}
 }
 
@@ -37,12 +37,12 @@ func (r *OperationRegistry) SetItemForOperation(op interface{}, item interface{}
 		adapter.opsOperation.SetItem(item)
 		return nil
 	}
-	
+
 	// Handle operations package operation directly
 	if opsOp, ok := op.(operations.Operation); ok {
 		return r.operationsFactory.SetItemForOperation(opsOp, item)
 	}
-	
+
 	return fmt.Errorf("operation is not an OperationsPackageAdapter or operations.Operation")
 }
 

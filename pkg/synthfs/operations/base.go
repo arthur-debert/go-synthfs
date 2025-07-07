@@ -3,7 +3,7 @@ package operations
 import (
 	"context"
 	"fmt"
-	
+
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
@@ -13,10 +13,10 @@ type BaseOperation struct {
 	id           core.OperationID
 	dependencies []core.OperationID
 	description  core.OperationDesc
-	item         interface{}                     // Generic item interface
-	srcPath      string                         // For Copy/Move operations
-	dstPath      string                         // For Copy/Move operations
-	checksums    map[string]interface{}         // Generic checksum storage
+	item         interface{}            // Generic item interface
+	srcPath      string                 // For Copy/Move operations
+	dstPath      string                 // For Copy/Move operations
+	checksums    map[string]interface{} // Generic checksum storage
 }
 
 // NewBaseOperation creates a new base operation.
@@ -159,7 +159,7 @@ func (op *BaseOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionCont
 	if !ok {
 		return fmt.Errorf("invalid context type")
 	}
-	
+
 	// For now, delegate to the original method
 	return op.Validate(context, fsys)
 }

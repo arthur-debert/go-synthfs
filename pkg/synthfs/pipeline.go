@@ -27,7 +27,6 @@ type Pipeline interface {
 	Validate(ctx context.Context, fs FileSystem) error
 }
 
-
 // NewMemPipeline creates a new in-memory operation pipeline.
 func NewMemPipeline() Pipeline {
 	return &pipelineAdapter{

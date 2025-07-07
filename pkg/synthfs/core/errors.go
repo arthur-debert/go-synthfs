@@ -5,10 +5,10 @@ import "fmt"
 // ValidationError represents an error during operation validation.
 // This is moved from the main package to break circular dependencies.
 type ValidationError struct {
-	OperationID OperationID
+	OperationID   OperationID
 	OperationDesc OperationDesc
-	Reason    string
-	Cause     error
+	Reason        string
+	Cause         error
 }
 
 func (e *ValidationError) Error() string {

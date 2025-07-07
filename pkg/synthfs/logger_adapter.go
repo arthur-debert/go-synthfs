@@ -1,8 +1,8 @@
 package synthfs
 
 import (
-	"github.com/rs/zerolog"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/rs/zerolog"
 )
 
 // loggerAdapter adapts zerolog.Logger to core.Logger interface

@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	
+
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
@@ -31,9 +31,9 @@ func (op *CreateArchiveOperation) Execute(ctx context.Context, fsys interface{})
 	// Get sources - first try from item, then from details
 	var sources []string
 	var format interface{}
-	
+
 	if item := op.GetItem(); item != nil {
-		if archiveItem, ok := item.(interface{ 
+		if archiveItem, ok := item.(interface {
 			Sources() []string
 			Format() string
 		}); ok {
@@ -41,7 +41,7 @@ func (op *CreateArchiveOperation) Execute(ctx context.Context, fsys interface{})
 			format = archiveItem.Format()
 		}
 	}
-	
+
 	// Fallback to details
 	if len(sources) == 0 {
 		if detailSources, ok := op.description.Details["sources"].([]string); ok {
@@ -51,18 +51,18 @@ func (op *CreateArchiveOperation) Execute(ctx context.Context, fsys interface{})
 	if len(sources) == 0 {
 		return fmt.Errorf("create_archive operation requires sources")
 	}
-	
+
 	if format == nil {
 		format = op.description.Details["format"]
 	}
 	if format == nil {
 		return fmt.Errorf("create_archive operation requires format")
 	}
-	
+
 	// For now, we'll need to use the OS filesystem for archive creation
 	// This is a limitation we'll address in future iterations
 	archivePath := op.description.Path
-	
+
 	// Determine archive type based on format or file extension
 	formatStr := fmt.Sprintf("%v", format)
 	switch strings.ToLower(formatStr) {
@@ -95,10 +95,10 @@ func (op *CreateArchiveOperation) createZipArchive(archivePath string, sources [
 		return fmt.Errorf("failed to create archive file: %w", err)
 	}
 	defer func() { _ = file.Close() }()
-	
+
 	zipWriter := zip.NewWriter(file)
 	defer func() { _ = zipWriter.Close() }()
-	
+
 	// Add sources to archive
 	for _, source := range sources {
 		// TODO: Implement actual file reading through fsys interface
@@ -108,7 +108,7 @@ func (op *CreateArchiveOperation) createZipArchive(archivePath string, sources [
 			return fmt.Errorf("failed to add %s to archive: %w", source, err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -120,7 +120,7 @@ func (op *CreateArchiveOperation) createTarArchive(archivePath string, sources [
 		return fmt.Errorf("failed to create archive file: %w", err)
 	}
 	defer func() { _ = file.Close() }()
-	
+
 	var tarWriter *tar.Writer
 	if compress {
 		gzWriter := gzip.NewWriter(file)
@@ -130,7 +130,7 @@ func (op *CreateArchiveOperation) createTarArchive(archivePath string, sources [
 		tarWriter = tar.NewWriter(file)
 	}
 	defer func() { _ = tarWriter.Close() }()
-	
+
 	// Add sources to archive
 	for _, source := range sources {
 		// TODO: Implement actual file reading through fsys interface
@@ -144,7 +144,7 @@ func (op *CreateArchiveOperation) createTarArchive(archivePath string, sources [
 			return fmt.Errorf("failed to write header for %s: %w", source, err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -155,7 +155,7 @@ func (op *CreateArchiveOperation) ExecuteV2(ctx interface{}, execCtx *core.Execu
 	if !ok {
 		return fmt.Errorf("invalid context type")
 	}
-	
+
 	// Call the operation's Execute method with proper event handling
 	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
 }
@@ -166,7 +166,7 @@ func (op *CreateArchiveOperation) Validate(ctx context.Context, fsys interface{}
 	if err := op.BaseOperation.Validate(ctx, fsys); err != nil {
 		return err
 	}
-	
+
 	// Check sources from item first
 	var sources []string
 	if item := op.GetItem(); item != nil {
@@ -174,14 +174,14 @@ func (op *CreateArchiveOperation) Validate(ctx context.Context, fsys interface{}
 			sources = archiveItem.Sources()
 		}
 	}
-	
+
 	// If no sources from item, check description details
 	if len(sources) == 0 {
 		if detailSources, ok := op.description.Details["sources"].([]string); ok {
 			sources = detailSources
 		}
 	}
-	
+
 	if len(sources) == 0 {
 		return &core.ValidationError{
 			OperationID:   op.ID(),
@@ -189,7 +189,7 @@ func (op *CreateArchiveOperation) Validate(ctx context.Context, fsys interface{}
 			Reason:        "must specify at least one source",
 		}
 	}
-	
+
 	// Check if sources exist
 	if stat, ok := getStatMethod(fsys); ok {
 		for _, source := range sources {
@@ -203,7 +203,7 @@ func (op *CreateArchiveOperation) Validate(ctx context.Context, fsys interface{}
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -213,7 +213,7 @@ func (op *CreateArchiveOperation) Rollback(ctx context.Context, fsys interface{}
 	if !ok {
 		return fmt.Errorf("filesystem does not support Remove")
 	}
-	
+
 	// Remove the archive
 	_ = remove(op.description.Path) // Ignore error - might not exist
 	return nil
@@ -238,12 +238,12 @@ func (op *UnarchiveOperation) Execute(ctx context.Context, fsys interface{}) err
 	if !ok || extractPath == "" {
 		extractPath = "." // Default to current directory
 	}
-	
+
 	// Get patterns from details (optional)
 	patterns, _ := op.description.Details["patterns"].([]string)
-	
+
 	archivePath := op.description.Path
-	
+
 	// Determine archive type based on file extension
 	ext := strings.ToLower(filepath.Ext(archivePath))
 	switch ext {
@@ -265,37 +265,37 @@ func (op *UnarchiveOperation) Execute(ctx context.Context, fsys interface{}) err
 func (op *UnarchiveOperation) extractZipArchive(archivePath, extractPath string, patterns []string, fsys interface{}) error {
 	// This is a simplified implementation
 	// In a real implementation, we'd use the filesystem interface throughout
-	
+
 	reader, err := zip.OpenReader(archivePath)
 	if err != nil {
 		return fmt.Errorf("failed to open archive: %w", err)
 	}
 	defer func() { _ = reader.Close() }()
-	
+
 	// Get filesystem methods
 	mkdirAll, _ := getMkdirAllMethod(fsys)
 	writeFile, _ := getWriteFileMethod(fsys)
-	
+
 	for _, file := range reader.File {
 		// Check patterns if provided
 		if len(patterns) > 0 && !matchesPatterns(file.Name, patterns) {
 			continue
 		}
-		
+
 		path := filepath.Join(extractPath, file.Name)
-		
+
 		if file.FileInfo().IsDir() {
 			if mkdirAll != nil {
 				_ = mkdirAll(path, file.Mode())
 			}
 			continue
 		}
-		
+
 		// Create directory for file
 		if mkdirAll != nil {
 			_ = mkdirAll(filepath.Dir(path), 0755)
 		}
-		
+
 		// Extract file
 		if writeFile != nil {
 			rc, err := file.Open()
@@ -307,7 +307,7 @@ func (op *UnarchiveOperation) extractZipArchive(archivePath, extractPath string,
 			_ = writeFile(path, content, file.Mode())
 		}
 	}
-	
+
 	return nil
 }
 
@@ -319,7 +319,7 @@ func (op *UnarchiveOperation) extractTarArchive(archivePath, extractPath string,
 		return fmt.Errorf("failed to open archive: %w", err)
 	}
 	defer func() { _ = file.Close() }()
-	
+
 	var tarReader *tar.Reader
 	if compressed {
 		gzReader, err := gzip.NewReader(file)
@@ -331,11 +331,11 @@ func (op *UnarchiveOperation) extractTarArchive(archivePath, extractPath string,
 	} else {
 		tarReader = tar.NewReader(file)
 	}
-	
+
 	// Get filesystem methods
 	mkdirAll, _ := getMkdirAllMethod(fsys)
 	writeFile, _ := getWriteFileMethod(fsys)
-	
+
 	for {
 		header, err := tarReader.Next()
 		if err == io.EOF {
@@ -344,14 +344,14 @@ func (op *UnarchiveOperation) extractTarArchive(archivePath, extractPath string,
 		if err != nil {
 			return fmt.Errorf("failed to read tar header: %w", err)
 		}
-		
+
 		// Check patterns if provided
 		if len(patterns) > 0 && !matchesPatterns(header.Name, patterns) {
 			continue
 		}
-		
+
 		path := filepath.Join(extractPath, header.Name)
-		
+
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if mkdirAll != nil {
@@ -362,7 +362,7 @@ func (op *UnarchiveOperation) extractTarArchive(archivePath, extractPath string,
 			if mkdirAll != nil {
 				_ = mkdirAll(filepath.Dir(path), 0755)
 			}
-			
+
 			// Extract file
 			if writeFile != nil {
 				content, _ := io.ReadAll(tarReader)
@@ -370,7 +370,7 @@ func (op *UnarchiveOperation) extractTarArchive(archivePath, extractPath string,
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -379,7 +379,7 @@ func matchesPatterns(name string, patterns []string) bool {
 	if len(patterns) == 0 {
 		return true
 	}
-	
+
 	for _, pattern := range patterns {
 		matched, _ := filepath.Match(pattern, name)
 		if matched {
@@ -390,7 +390,7 @@ func matchesPatterns(name string, patterns []string) bool {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -401,7 +401,7 @@ func (op *UnarchiveOperation) ExecuteV2(ctx interface{}, execCtx *core.Execution
 	if !ok {
 		return fmt.Errorf("invalid context type")
 	}
-	
+
 	// Call the operation's Execute method with proper event handling
 	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
 }
@@ -412,7 +412,7 @@ func (op *UnarchiveOperation) Validate(ctx context.Context, fsys interface{}) er
 	if err := op.BaseOperation.Validate(ctx, fsys); err != nil {
 		return err
 	}
-	
+
 	// Check if archive exists
 	if stat, ok := getStatMethod(fsys); ok {
 		if _, err := stat(op.description.Path); err != nil {
@@ -424,7 +424,7 @@ func (op *UnarchiveOperation) Validate(ctx context.Context, fsys interface{}) er
 			}
 		}
 	}
-	
+
 	return nil
 }
 

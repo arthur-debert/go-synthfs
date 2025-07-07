@@ -58,16 +58,16 @@ type Executable interface {
 
 // Operation is the main interface that composes all operation capabilities
 type Operation interface {
-	core.OperationMetadata  // ID(), Describe()
-	core.DependencyAware    // Dependencies(), Conflicts()
-	Executable              // Execute(), Validate()
-	core.ExecutableV2       // ExecuteV2(), ValidateV2() - new methods
+	core.OperationMetadata // ID(), Describe()
+	core.DependencyAware   // Dependencies(), Conflicts()
+	Executable             // Execute(), Validate()
+	core.ExecutableV2      // ExecuteV2(), ValidateV2() - new methods
 	Rollback(ctx context.Context, fsys FileSystem) error
 	GetItem() FsItem
 	GetChecksum(path string) *ChecksumRecord
 	GetAllChecksums() map[string]*ChecksumRecord
 	ReverseOps(ctx context.Context, fsys FileSystem, budget *core.BackupBudget) ([]Operation, *core.BackupData, error)
-	
+
 	// Batch building methods
 	SetDescriptionDetail(key string, value interface{})
 	AddDependency(depID OperationID)

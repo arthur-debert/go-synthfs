@@ -12,7 +12,7 @@ func TestBatchChecksumming(t *testing.T) {
 
 	t.Run("Copy operation computes source checksum", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		
+
 		// Create source file
 		sourceContent := []byte("This is test content for checksumming")
 		err := testFS.WriteFile("source.txt", sourceContent, 0644)
@@ -55,7 +55,7 @@ func TestBatchChecksumming(t *testing.T) {
 
 	t.Run("Move operation computes source checksum", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		
+
 		// Create source file
 		sourceContent := []byte("This content will be moved with checksum validation")
 		err := testFS.WriteFile("old.txt", sourceContent, 0644)
@@ -98,7 +98,7 @@ func TestBatchChecksumming(t *testing.T) {
 
 	t.Run("Archive operation computes checksums for all sources", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		
+
 		// Create multiple source files
 		files := map[string][]byte{
 			"file1.txt": []byte("Content of file 1"),
@@ -156,7 +156,7 @@ func TestBatchChecksumming(t *testing.T) {
 
 	t.Run("Checksum computation handles directories gracefully", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		
+
 		// Create directory
 		err := testFS.MkdirAll("testdir", 0755)
 		if err != nil {
@@ -180,7 +180,7 @@ func TestBatchChecksumming(t *testing.T) {
 
 	t.Run("Different files produce different checksums", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		
+
 		// Create two files with different content
 		err := testFS.WriteFile("file1.txt", []byte("Content A"), 0644)
 		if err != nil {
@@ -198,7 +198,7 @@ func TestBatchChecksumming(t *testing.T) {
 		if err != nil {
 			t.Fatalf("First copy operation failed: %v", err)
 		}
-		
+
 		op2, err := batch.Copy("file2.txt", "copy2.txt")
 		if err != nil {
 			t.Fatalf("Second copy operation failed: %v", err)
@@ -219,7 +219,7 @@ func TestBatchChecksumming(t *testing.T) {
 
 	t.Run("Same file content produces same checksum", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		
+
 		// Create two files with identical content
 		content := []byte("Identical content")
 		err := testFS.WriteFile("identical1.txt", content, 0644)
@@ -238,7 +238,7 @@ func TestBatchChecksumming(t *testing.T) {
 		if err != nil {
 			t.Fatalf("First copy operation failed: %v", err)
 		}
-		
+
 		op2, err := batch.Copy("identical2.txt", "copy2.txt")
 		if err != nil {
 			t.Fatalf("Second copy operation failed: %v", err)
@@ -253,7 +253,7 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		if checksum1.MD5 != checksum2.MD5 {
-			t.Errorf("Identical content should have same checksum, got %s vs %s", 
+			t.Errorf("Identical content should have same checksum, got %s vs %s",
 				checksum1.MD5, checksum2.MD5)
 		}
 	})

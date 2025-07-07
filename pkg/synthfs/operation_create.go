@@ -103,27 +103,27 @@ func (op *SimpleOperation) executeCreateSymlink(ctx context.Context, fsys FileSy
 func (op *SimpleOperation) validateCreateFile(ctx context.Context, fsys FileSystem) error {
 	if op.item == nil {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "no file item provided for create_file operation",
+			Reason:        "no file item provided for create_file operation",
 		}
 	}
 
 	fileItem, ok := op.item.(*FileItem)
 	if !ok {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    fmt.Sprintf("expected FileItem for create_file operation, got %T", op.item),
+			Reason:        fmt.Sprintf("expected FileItem for create_file operation, got %T", op.item),
 		}
 	}
 
 	// Check if file already exists
 	if _, err := fs.ReadFile(fsys, fileItem.Path()); err == nil {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "file already exists",
+			Reason:        "file already exists",
 		}
 	}
 
@@ -135,9 +135,9 @@ func (op *SimpleOperation) validateCreateFile(ctx context.Context, fsys FileSyst
 			// This is not an error unless we want to enforce parent existence
 		} else if !stat.IsDir() {
 			return &ValidationError{
-				OperationID: op.ID(),
-			OperationDesc: op.Describe(),
-				Reason:    fmt.Sprintf("parent path %s exists but is not a directory", parentDir),
+				OperationID:   op.ID(),
+				OperationDesc: op.Describe(),
+				Reason:        fmt.Sprintf("parent path %s exists but is not a directory", parentDir),
 			}
 		}
 	}
@@ -149,18 +149,18 @@ func (op *SimpleOperation) validateCreateFile(ctx context.Context, fsys FileSyst
 func (op *SimpleOperation) validateCreateDirectory(ctx context.Context, fsys FileSystem) error {
 	if op.item == nil {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "no directory item provided for create_directory operation",
+			Reason:        "no directory item provided for create_directory operation",
 		}
 	}
 
 	dirItem, ok := op.item.(*DirectoryItem)
 	if !ok {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    fmt.Sprintf("expected DirectoryItem for create_directory operation, got %T", op.item),
+			Reason:        fmt.Sprintf("expected DirectoryItem for create_directory operation, got %T", op.item),
 		}
 	}
 
@@ -174,9 +174,9 @@ func (op *SimpleOperation) validateCreateDirectory(ctx context.Context, fsys Fil
 				Msg("directory already exists")
 		} else {
 			return &ValidationError{
-				OperationID: op.ID(),
-			OperationDesc: op.Describe(),
-				Reason:    "path exists but is not a directory",
+				OperationID:   op.ID(),
+				OperationDesc: op.Describe(),
+				Reason:        "path exists but is not a directory",
 			}
 		}
 	}
@@ -189,34 +189,34 @@ func (op *SimpleOperation) validateCreateSymlink(ctx context.Context, fsys FileS
 	symlinkItem, ok := op.item.(*SymlinkItem)
 	if !ok || symlinkItem == nil {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "create_symlink operation requires a SymlinkItem",
+			Reason:        "create_symlink operation requires a SymlinkItem",
 		}
 	}
 
 	if symlinkItem.Path() == "" {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "symlink path cannot be empty",
+			Reason:        "symlink path cannot be empty",
 		}
 	}
 
 	if symlinkItem.Target() == "" {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "symlink target cannot be empty",
+			Reason:        "symlink target cannot be empty",
 		}
 	}
 
 	// Check if symlink already exists
 	if _, err := fs.Stat(fsys, symlinkItem.Path()); err == nil {
 		return &ValidationError{
-			OperationID: op.ID(),
+			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
-			Reason:    "symlink already exists",
+			Reason:        "symlink already exists",
 		}
 	}
 

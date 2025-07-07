@@ -12,7 +12,7 @@ func (op *SimpleOperation) executeDelete(ctx context.Context, fsys FileSystem) e
 		Str("op_id", string(op.ID())).
 		Str("path", op.description.Path).
 		Msg("executing delete operation")
-	
+
 	// Try Remove first (works for files and empty directories)
 	err := fsys.Remove(op.description.Path)
 	if err != nil {
@@ -21,18 +21,18 @@ func (op *SimpleOperation) executeDelete(ctx context.Context, fsys FileSystem) e
 		if pathErr, ok := err.(*fs.PathError); ok && pathErr.Err == fs.ErrNotExist {
 			return fmt.Errorf("failed to delete %s: %w", op.description.Path, err)
 		}
-		
+
 		Logger().Debug().
 			Str("op_id", string(op.ID())).
 			Str("path", op.description.Path).
 			Err(err).
 			Msg("Remove failed, trying RemoveAll")
-		
+
 		// For other errors (like directory not empty), try RemoveAll
 		if err2 := fsys.RemoveAll(op.description.Path); err2 != nil {
 			return fmt.Errorf("failed to delete %s: %w", op.description.Path, err2)
 		}
-		
+
 		Logger().Debug().
 			Str("op_id", string(op.ID())).
 			Str("path", op.description.Path).
@@ -48,4 +48,3 @@ func (op *SimpleOperation) validateDelete(ctx context.Context, fsys FileSystem) 
 	// The actual deletion will handle the case where the file doesn't exist
 	return nil
 }
-

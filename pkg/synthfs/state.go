@@ -35,4 +35,3 @@ func (pst *PathStateTracker) UpdateState(op Operation) error {
 func (pst *PathStateTracker) IsDeleted(path string) bool {
 	return pst.tracker.IsDeleted(path)
 }
-

@@ -24,7 +24,7 @@ type Batch struct {
 	fs          FullFileSystem // Use FullFileSystem to have access to Stat method
 	ctx         context.Context
 	idCounter   int
-	pathTracker *PathStateTracker // Phase II: Track projected path state
+	pathTracker *PathStateTracker     // Phase II: Track projected path state
 	registry    core.OperationFactory // Phase 3: Operation registry for decoupling
 }
 
@@ -78,7 +78,7 @@ func (b *Batch) add(op Operation) error {
 		if validationErr, ok := err.(*ValidationError); ok {
 			if validationErr.Reason == "file already exists" {
 				if b.pathTracker.IsDeleted(op.Describe().Path) {
-					return fmt.Errorf("validation error for operation %s (%s): path was scheduled for deletion", 
+					return fmt.Errorf("validation error for operation %s (%s): path was scheduled for deletion",
 						op.ID(), op.Describe().Path)
 				}
 			}
@@ -559,13 +559,13 @@ func (b *Batch) createOperation(opType, path string) (Operation, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create operation: %w", err)
 	}
-	
+
 	// The registry returns either SimpleOperation or OperationsPackageAdapter
 	// Both implement the Operation interface
 	if op, ok := opInterface.(Operation); ok {
 		return op, nil
 	}
-	
+
 	return nil, fmt.Errorf("registry returned unexpected type: %T", opInterface)
 }
 
@@ -746,7 +746,7 @@ func (b *Batch) resolveImplicitDependencies() error {
 						// Reader must come before mover
 						moverOp := b.operations[moverIdx]
 						readerID := b.operations[readerIdx].ID()
-						
+
 						// Check if dependency already exists and add if not
 						if adapter, ok := moverOp.(*OperationsPackageAdapter); ok {
 							exists := false
@@ -798,7 +798,7 @@ func (b *Batch) resolveImplicitDependencies() error {
 						// Writer must come before symlink creator
 						symlinkOp := b.operations[symlinkIdx]
 						writerID := b.operations[writerIdx].ID()
-						
+
 						// Check if dependency already exists and add if not
 						if adapter, ok := symlinkOp.(*OperationsPackageAdapter); ok {
 							exists := false

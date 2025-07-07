@@ -128,14 +128,14 @@ func TestPhase3_CompleteWorkflow(t *testing.T) {
 	}
 
 	expectedTypes := map[string]int{
-		"delete":           3, // For CreateDir, CreateFile, Copy
-		"move":             1, // For Move (reverse move)
-		"create_file":      1, // For Delete (recreate file)
+		"delete":      3, // For CreateDir, CreateFile, Copy
+		"move":        1, // For Move (reverse move)
+		"create_file": 1, // For Delete (recreate file)
 	}
 
 	for expectedType, expectedCount := range expectedTypes {
 		if reverseOpTypes[expectedType] != expectedCount {
-			t.Errorf("Expected %d reverse operations of type '%s', got %d", 
+			t.Errorf("Expected %d reverse operations of type '%s', got %d",
 				expectedCount, expectedType, reverseOpTypes[expectedType])
 		}
 	}
@@ -380,8 +380,8 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 		fs := NewTestFileSystem()
 		originalDir := "my_restorable_dir"
 		originalFiles := map[string]string{
-			filepath.Join(originalDir, "file1.txt"):              "content of file1",
-			filepath.Join(originalDir, "sub", "file2.txt"):       "content of file2 in sub",
+			filepath.Join(originalDir, "file1.txt"):                "content of file1",
+			filepath.Join(originalDir, "sub", "file2.txt"):         "content of file2 in sub",
 			filepath.Join(originalDir, "sub", "deep", "file3.txt"): "content of file3 in sub/deep",
 		}
 
@@ -400,7 +400,6 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 		if err := fs.MkdirAll(emptySubDir, 0755); err != nil {
 			t.Fatalf("Setup: Failed to create empty_sub dir %s: %v", emptySubDir, err)
 		}
-
 
 		// 1. Delete the directory in a restorable batch
 		batchDelete := NewBatch().WithFileSystem(fs).WithContext(ctx)
@@ -450,7 +449,6 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 		if len(backedUpItems) != 7 {
 			t.Errorf("Expected 7 backed up items, got %d", len(backedUpItems))
 		}
-
 
 		// 2. Execute the RestoreOps
 		if len(resultDelete.RestoreOps) == 0 {
@@ -506,17 +504,25 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 		// Setup initial directory structure
 		for path, content := range originalFiles {
 			dir := filepath.Dir(path)
-			if err := fs.MkdirAll(dir, 0755); err != nil {t.Fatalf("Setup: Failed to create dir %s: %v", dir, err)}
-			if err := fs.WriteFile(path, []byte(content), 0644); err != nil {t.Fatalf("Setup: Failed to write file %s: %v", path, err)}
+			if err := fs.MkdirAll(dir, 0755); err != nil {
+				t.Fatalf("Setup: Failed to create dir %s: %v", dir, err)
+			}
+			if err := fs.WriteFile(path, []byte(content), 0644); err != nil {
+				t.Fatalf("Setup: Failed to write file %s: %v", path, err)
+			}
 		}
 
 		batchDelete := NewBatch().WithFileSystem(fs).WithContext(ctx)
 		_, err := batchDelete.Delete(originalDir)
-		if err != nil {t.Fatalf("Failed to add Delete op: %v", err)}
+		if err != nil {
+			t.Fatalf("Failed to add Delete op: %v", err)
+		}
 
 		// Budget of 0 MB. Any file content backup will exceed this.
 		deleteResult, err := batchDelete.RunWithOptions(PipelineOptions{Restorable: true, MaxBackupSizeMB: 0})
-		if err != nil {t.Fatalf("Run for delete batch failed: %v", err)}
+		if err != nil {
+			t.Fatalf("Run for delete batch failed: %v", err)
+		}
 
 		// The delete operation itself should succeed.
 		// The ReverseOps generation within it would have returned an error, which Executor logs.
@@ -532,12 +538,16 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 				break
 			}
 		}
-		if deleteOpRes == nil {t.Fatal("Delete operation result not found")}
+		if deleteOpRes == nil {
+			t.Fatal("Delete operation result not found")
+		}
 
 		// We expect a partial backup.
 		// The error from ReverseOps (due to budget) is logged by Executor but doesn't fail the main op.
 		// The number of RestoreOps might be less than total items.
-		if deleteOpRes.BackupData == nil {t.Fatal("BackupData is nil")}
+		if deleteOpRes.BackupData == nil {
+			t.Fatal("BackupData is nil")
+		}
 		if deleteOpRes.BackupData.SizeMB != 0 { // With 0 budget, no file content should be backed up.
 			items, _ := deleteOpRes.BackupData.Metadata["items"].([]BackedUpItem)
 			t.Errorf("Expected SizeMB 0 when budget is 0, got %f. Items: %+v", deleteOpRes.BackupData.SizeMB, items)
@@ -561,7 +571,9 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 		restorePipeline := NewMemPipeline()
 		if len(deleteResult.RestoreOps) > 0 {
 			err = restorePipeline.Add(deleteResult.RestoreOps...)
-			if err != nil {t.Fatalf("Failed to add RestoreOps to pipeline: %v", err)}
+			if err != nil {
+				t.Fatalf("Failed to add RestoreOps to pipeline: %v", err)
+			}
 		}
 
 		executor := NewExecutor()

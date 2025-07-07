@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	
+
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
@@ -26,27 +26,27 @@ func (op *CreateSymlinkOperation) Execute(ctx context.Context, fsys interface{})
 	if item == nil {
 		return fmt.Errorf("create_symlink operation requires an item")
 	}
-	
+
 	// Get target from description details
 	target, ok := op.description.Details["target"].(string)
 	if !ok || target == "" {
 		return fmt.Errorf("create_symlink operation requires a target")
 	}
-	
+
 	// The item should implement our ItemInterface
 	linkItem, ok := item.(ItemInterface)
 	if !ok {
 		return fmt.Errorf("item does not implement ItemInterface")
 	}
-	
+
 	// Get filesystem methods
 	symlink, hasSymlink := getSymlinkMethod(fsys)
 	mkdirAll, hasMkdirAll := getMkdirAllMethod(fsys)
-	
+
 	if !hasSymlink {
 		return fmt.Errorf("filesystem does not support Symlink")
 	}
-	
+
 	// Create parent directory if needed
 	if hasMkdirAll {
 		dir := filepath.Dir(linkItem.Path())
@@ -56,12 +56,12 @@ func (op *CreateSymlinkOperation) Execute(ctx context.Context, fsys interface{})
 			}
 		}
 	}
-	
+
 	// Create the symlink
 	if err := symlink(target, linkItem.Path()); err != nil {
 		return fmt.Errorf("failed to create symlink: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -72,7 +72,7 @@ func (op *CreateSymlinkOperation) ExecuteV2(ctx interface{}, execCtx *core.Execu
 	if !ok {
 		return fmt.Errorf("invalid context type")
 	}
-	
+
 	// Call the operation's Execute method with proper event handling
 	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
 }
@@ -83,7 +83,7 @@ func (op *CreateSymlinkOperation) Validate(ctx context.Context, fsys interface{}
 	if err := op.BaseOperation.Validate(ctx, fsys); err != nil {
 		return err
 	}
-	
+
 	item := op.GetItem()
 	if item == nil {
 		return &core.ValidationError{
@@ -92,7 +92,7 @@ func (op *CreateSymlinkOperation) Validate(ctx context.Context, fsys interface{}
 			Reason:        "no item provided for create_symlink operation",
 		}
 	}
-	
+
 	// Check target
 	target, ok := op.description.Details["target"].(string)
 	if !ok || target == "" {
@@ -102,7 +102,7 @@ func (op *CreateSymlinkOperation) Validate(ctx context.Context, fsys interface{}
 			Reason:        "symlink target cannot be empty",
 		}
 	}
-	
+
 	// Check if symlink already exists
 	if stat, ok := getStatMethod(fsys); ok {
 		if _, err := stat(op.description.Path); err == nil {
@@ -113,11 +113,11 @@ func (op *CreateSymlinkOperation) Validate(ctx context.Context, fsys interface{}
 			}
 		}
 	}
-	
+
 	// Note: We don't validate if the target exists because:
 	// 1. Symlinks can point to non-existent targets (dangling symlinks)
 	// 2. The target might be created by a later operation
-	
+
 	return nil
 }
 
@@ -127,7 +127,7 @@ func (op *CreateSymlinkOperation) Rollback(ctx context.Context, fsys interface{}
 	if !ok {
 		return fmt.Errorf("filesystem does not support Remove")
 	}
-	
+
 	// Remove the symlink
 	_ = remove(op.description.Path) // Ignore error - might not exist
 	return nil
@@ -140,7 +140,7 @@ func (op *CreateSymlinkOperation) ReverseOps(ctx context.Context, fsys interface
 		core.OperationID(fmt.Sprintf("reverse_%s", op.ID())),
 		op.description.Path,
 	)
-	
+
 	return []interface{}{reverseOp}, nil, nil
 }
 
@@ -149,7 +149,7 @@ func getSymlinkMethod(fsys interface{}) (func(string, string) error, bool) {
 	type symlinkFS interface {
 		Symlink(oldname, newname string) error
 	}
-	
+
 	if fs, ok := fsys.(symlinkFS); ok {
 		return fs.Symlink, true
 	}

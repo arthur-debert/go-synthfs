@@ -3,7 +3,7 @@ package operations
 import (
 	"context"
 	"fmt"
-	
+
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
@@ -25,16 +25,16 @@ func (op *DeleteOperation) Execute(ctx context.Context, fsys interface{}) error 
 	if path == "" {
 		return fmt.Errorf("delete operation requires a path")
 	}
-	
+
 	// Get filesystem methods
 	stat, hasStat := getStatMethod(fsys)
 	remove, hasRemove := getRemoveMethod(fsys)
 	removeAll, hasRemoveAll := getRemoveAllMethod(fsys)
-	
+
 	if !hasRemove {
 		return fmt.Errorf("filesystem does not support Remove")
 	}
-	
+
 	// Check if it's a directory
 	if hasStat {
 		info, err := stat(path)
@@ -42,7 +42,7 @@ func (op *DeleteOperation) Execute(ctx context.Context, fsys interface{}) error 
 			// Already doesn't exist - that's okay
 			return nil
 		}
-		
+
 		// Check if it's a directory
 		if isDir, ok := info.(interface{ IsDir() bool }); ok && isDir.IsDir() {
 			// Use RemoveAll for directories if available
@@ -51,13 +51,13 @@ func (op *DeleteOperation) Execute(ctx context.Context, fsys interface{}) error 
 			}
 		}
 	}
-	
+
 	// Use regular Remove
 	if err := remove(path); err != nil {
 		// If it doesn't exist, that's fine
 		return nil
 	}
-	
+
 	return nil
 }
 
@@ -68,7 +68,7 @@ func (op *DeleteOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionCon
 	if !ok {
 		return fmt.Errorf("invalid context type")
 	}
-	
+
 	// Call the operation's Execute method with proper event handling
 	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
 }
@@ -79,9 +79,9 @@ func (op *DeleteOperation) Validate(ctx context.Context, fsys interface{}) error
 	if err := op.BaseOperation.Validate(ctx, fsys); err != nil {
 		return err
 	}
-	
+
 	path := op.description.Path
-	
+
 	// Check if path exists
 	if stat, ok := getStatMethod(fsys); ok {
 		if _, err := stat(path); err != nil {
@@ -89,7 +89,7 @@ func (op *DeleteOperation) Validate(ctx context.Context, fsys interface{}) error
 			return nil
 		}
 	}
-	
+
 	return nil
 }
 
@@ -109,7 +109,7 @@ func getRemoveAllMethod(fsys interface{}) (func(string) error, bool) {
 	type removeAllFS interface {
 		RemoveAll(path string) error
 	}
-	
+
 	if fs, ok := fsys.(removeAllFS); ok {
 		return fs.RemoveAll, true
 	}

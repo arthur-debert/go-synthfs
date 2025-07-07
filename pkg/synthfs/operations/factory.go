@@ -2,7 +2,7 @@ package operations
 
 import (
 	"fmt"
-	
+
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
@@ -46,7 +46,7 @@ func (f *Factory) SetItemForOperation(op Operation, item interface{}) error {
 	if op == nil {
 		return fmt.Errorf("operation is nil")
 	}
-	
+
 	op.SetItem(item)
 	return nil
 }

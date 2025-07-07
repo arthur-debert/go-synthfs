@@ -135,7 +135,7 @@ func (op *SimpleOperation) reverseDelete(ctx context.Context, fsys FileSystem, b
 
 		// Start the walk
 		walkErr := walkAndBackup(path, ".")
-		
+
 		// Create backup data for the entire directory tree (even if partial)
 		totalBackedUpSizeMB := float64(totalBackedUpSize) / (1024 * 1024)
 		backupData = &BackupData{
@@ -151,7 +151,7 @@ func (op *SimpleOperation) reverseDelete(ctx context.Context, fsys FileSystem, b
 				"reverse_type": "recreate_directory_tree",
 			},
 		}
-		
+
 		// Generate reverse operations from backed up items
 		// Even if there was an error, we still generate ops for what we backed up
 		for i, item := range backedUpItems {
@@ -173,7 +173,7 @@ func (op *SimpleOperation) reverseDelete(ctx context.Context, fsys FileSystem, b
 				reverseOps = append(reverseOps, revOp)
 			}
 		}
-		
+
 		// If there was an error during walk, return it along with partial backup data
 		if walkErr != nil {
 			return reverseOps, backupData, walkErr

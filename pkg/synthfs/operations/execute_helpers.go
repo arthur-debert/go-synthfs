@@ -3,14 +3,14 @@ package operations
 import (
 	"context"
 	"time"
-	
+
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
 // executeWithEvents is a helper that wraps operation execution with event handling
-func executeWithEvents(op Operation, ctx context.Context, execCtx *core.ExecutionContext, fsys interface{}, 
+func executeWithEvents(op Operation, ctx context.Context, execCtx *core.ExecutionContext, fsys interface{},
 	executeFunc func(context.Context, interface{}) error) error {
-	
+
 	// Emit operation started event
 	if execCtx.EventBus != nil {
 		startEvent := core.NewOperationStartedEvent(
@@ -21,19 +21,19 @@ func executeWithEvents(op Operation, ctx context.Context, execCtx *core.Executio
 		)
 		execCtx.EventBus.PublishAsync(ctx, startEvent)
 	}
-	
+
 	// Execute the operation and measure duration
 	startTime := time.Now()
-	
+
 	execCtx.Logger.Trace().
 		Str("op_id", string(op.ID())).
 		Str("op_type", op.Describe().Type).
 		Str("path", op.Describe().Path).
 		Msg("executing operation")
-	
+
 	err := executeFunc(ctx, fsys)
 	duration := time.Since(startTime)
-	
+
 	// Emit completion or failure event
 	if execCtx.EventBus != nil {
 		if err != nil {
@@ -57,7 +57,7 @@ func executeWithEvents(op Operation, ctx context.Context, execCtx *core.Executio
 			execCtx.EventBus.PublishAsync(ctx, completeEvent)
 		}
 	}
-	
+
 	if err != nil {
 		execCtx.Logger.Trace().
 			Str("op_id", string(op.ID())).
@@ -74,6 +74,6 @@ func executeWithEvents(op Operation, ctx context.Context, execCtx *core.Executio
 			Dur("duration", duration).
 			Msg("operation completed")
 	}
-	
+
 	return err
 }

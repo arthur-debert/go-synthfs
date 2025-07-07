@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
 )
 
 func TestSimpleOperation_GetItem(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	
+
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
@@ -27,32 +27,32 @@ func (op *CreateDirectoryOperation) Execute(ctx context.Context, fsys interface{
 	if item == nil {
 		return fmt.Errorf("create_directory operation requires an item")
 	}
-	
+
 	// The item should implement our ItemInterface
 	dirItem, ok := item.(ItemInterface)
 	if !ok {
 		return fmt.Errorf("item does not implement ItemInterface")
 	}
-	
+
 	// Get filesystem methods through interface assertions
 	mkdirAll, ok := getMkdirAllMethod(fsys)
 	if !ok {
 		return fmt.Errorf("filesystem does not support MkdirAll")
 	}
-	
+
 	// Get mode from item or use default
 	var mode interface{} = fs.FileMode(0755) // Default for directories
-	
+
 	// Try to get mode from item
 	if modeGetter, ok := item.(interface{ Mode() fs.FileMode }); ok {
 		mode = modeGetter.Mode()
 	}
-	
+
 	// Create the directory with all parent directories
 	if err := mkdirAll(dirItem.Path(), mode); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -63,7 +63,7 @@ func (op *CreateDirectoryOperation) ExecuteV2(ctx interface{}, execCtx *core.Exe
 	if !ok {
 		return fmt.Errorf("invalid context type")
 	}
-	
+
 	// Call the operation's Execute method with proper event handling
 	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
 }
@@ -74,7 +74,7 @@ func (op *CreateDirectoryOperation) Validate(ctx context.Context, fsys interface
 	if err := op.BaseOperation.Validate(ctx, fsys); err != nil {
 		return err
 	}
-	
+
 	item := op.GetItem()
 	if item == nil {
 		return &core.ValidationError{
@@ -83,7 +83,7 @@ func (op *CreateDirectoryOperation) Validate(ctx context.Context, fsys interface
 			Reason:        "no item provided for create_directory operation",
 		}
 	}
-	
+
 	// Check if path already exists
 	stat, ok := getStatMethod(fsys)
 	if ok {
@@ -100,7 +100,7 @@ func (op *CreateDirectoryOperation) Validate(ctx context.Context, fsys interface
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -110,13 +110,13 @@ func (op *CreateDirectoryOperation) Rollback(ctx context.Context, fsys interface
 	if !ok {
 		return fmt.Errorf("filesystem does not support Remove")
 	}
-	
+
 	// Remove the directory
 	if err := remove(op.description.Path); err != nil {
 		// If it doesn't exist, that's fine
 		return nil
 	}
-	
+
 	return nil
 }
 
@@ -126,29 +126,29 @@ func getStatMethod(fsys interface{}) (func(string) (interface{}, error), bool) {
 	type statFSFileInfo interface {
 		Stat(name string) (os.FileInfo, error)
 	}
-	
+
 	if fs, ok := fsys.(statFSFileInfo); ok {
 		return func(name string) (interface{}, error) {
 			return fs.Stat(name)
 		}, true
 	}
-	
+
 	// Try fs.FileInfo version
 	type statFSInfo interface {
 		Stat(name string) (fs.FileInfo, error)
 	}
-	
+
 	if fs, ok := fsys.(statFSInfo); ok {
 		return func(name string) (interface{}, error) {
 			return fs.Stat(name)
 		}, true
 	}
-	
+
 	// Try interface{} version
 	type statFS interface {
 		Stat(name string) (interface{}, error)
 	}
-	
+
 	if fs, ok := fsys.(statFS); ok {
 		return fs.Stat, true
 	}
@@ -160,7 +160,7 @@ func getRemoveMethod(fsys interface{}) (func(string) error, bool) {
 	type removeFS interface {
 		Remove(name string) error
 	}
-	
+
 	if fs, ok := fsys.(removeFS); ok {
 		return fs.Remove, true
 	}
