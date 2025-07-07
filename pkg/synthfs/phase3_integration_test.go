@@ -441,13 +441,21 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 			t.Errorf("Expected BackupType 'directory_tree', got '%s'", deleteOpResult.BackupData.BackupType)
 		}
 
-		backedUpItems, ok := deleteOpResult.BackupData.Metadata["items"].([]BackedUpItem)
-		if !ok {
-			t.Fatal("Metadata items not found or not of type []BackedUpItem")
+		// Handle both old format ([]BackedUpItem) and new format ([]interface{})
+		var itemCount int
+		if backedUpItems, ok := deleteOpResult.BackupData.Metadata["items"].([]BackedUpItem); ok {
+			// Old format from SimpleOperation
+			itemCount = len(backedUpItems)
+		} else if items, ok := deleteOpResult.BackupData.Metadata["items"].([]interface{}); ok {
+			// New format from operations package
+			itemCount = len(items)
+		} else {
+			t.Fatal("Metadata items not found or not in expected format")
 		}
+		
 		// Expected items: originalDir (.), file1, sub, sub/file2, sub/deep, sub/deep/file3, empty_sub (7 items)
-		if len(backedUpItems) != 7 {
-			t.Errorf("Expected 7 backed up items, got %d", len(backedUpItems))
+		if itemCount != 7 {
+			t.Errorf("Expected 7 backed up items, got %d", itemCount)
 		}
 
 		// 2. Execute the RestoreOps
@@ -549,7 +557,12 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 			t.Fatal("BackupData is nil")
 		}
 		if deleteOpRes.BackupData.SizeMB != 0 { // With 0 budget, no file content should be backed up.
-			items, _ := deleteOpRes.BackupData.Metadata["items"].([]BackedUpItem)
+			var items interface{}
+			if backedUpItems, ok := deleteOpRes.BackupData.Metadata["items"].([]BackedUpItem); ok {
+				items = backedUpItems
+			} else {
+				items = deleteOpRes.BackupData.Metadata["items"]
+			}
 			t.Errorf("Expected SizeMB 0 when budget is 0, got %f. Items: %+v", deleteOpRes.BackupData.SizeMB, items)
 		}
 

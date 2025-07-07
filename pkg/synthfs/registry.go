@@ -21,13 +21,7 @@ func NewOperationRegistry() *OperationRegistry {
 
 // CreateOperation creates an operation based on type and path
 func (r *OperationRegistry) CreateOperation(id core.OperationID, opType string, path string) (interface{}, error) {
-	// Temporary: Use SimpleOperation for delete to maintain compatibility with tests
-	// TODO: Update tests to handle operations package metadata format
-	if opType == "delete" {
-		return NewSimpleOperation(id, opType, path), nil
-	}
-	
-	// Use operations package for all other types
+	// Always use the operations package
 	opsOp, err := r.operationsFactory.CreateOperation(id, opType, path)
 	if err != nil {
 		return nil, err

@@ -225,9 +225,6 @@ func (ow *operationWrapper) GetSrcPath() string {
 		src, _ := adapter.opsOperation.GetPaths()
 		return src
 	}
-	if simpleOp, ok := ow.op.(*SimpleOperation); ok {
-		return simpleOp.GetSrcPath()
-	}
 	return ""
 }
 
@@ -235,9 +232,6 @@ func (ow *operationWrapper) GetDstPath() string {
 	if adapter, ok := ow.op.(*OperationsPackageAdapter); ok {
 		_, dst := adapter.opsOperation.GetPaths()
 		return dst
-	}
-	if simpleOp, ok := ow.op.(*SimpleOperation); ok {
-		return simpleOp.GetDstPath()
 	}
 	return ""
 }

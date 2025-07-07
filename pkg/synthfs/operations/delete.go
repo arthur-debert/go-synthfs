@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
+	"path/filepath"
 	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
@@ -158,32 +160,127 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 		Metadata:     make(map[string]interface{}),
 	}
 	
-	// For directories, the test expects BackupType to be "directory_tree"
+	// For directories, walk the tree and backup all items
 	if isDir {
 		backupData.BackupType = "directory_tree"
+		
+		// Get ReadDir method
+		type readDirFS interface {
+			ReadDir(name string) ([]fs.DirEntry, error)
+		}
+		
+		rdFS, hasReadDir := fsys.(readDirFS)
+		if !hasReadDir {
+			return nil, nil, fmt.Errorf("filesystem does not support ReadDir for directory backup")
+		}
+		
 		// Walk directory tree to backup all items
-		var items []interface{}
+		items := []interface{}{}
+		totalBackedUpSize := int64(0)
 		
-		// Add the directory itself
-		dirMode := uint32(0755) // default
-		if modeGetter, ok := info.(interface{ Mode() uint32 }); ok {
-			dirMode = modeGetter.Mode()
+		// Recursive function to walk and backup directory tree
+		var walkAndBackup func(absPath, relPath string) error
+		walkAndBackup = func(absPath, relPath string) error {
+			// First, add directory entry itself
+			dirInfo, err := stat(absPath)
+			if err != nil {
+				return fmt.Errorf("cannot stat directory %s: %w", absPath, err)
+			}
+			
+			dirMode := fs.FileMode(0755) // default
+			if modeGetter, ok := dirInfo.(interface{ Mode() fs.FileMode }); ok {
+				dirMode = modeGetter.Mode()
+			}
+			
+			modTime := time.Now()
+			if timeGetter, ok := dirInfo.(interface{ ModTime() time.Time }); ok {
+				modTime = timeGetter.ModTime()
+			}
+			
+			// Create directory item
+			dirItem := map[string]interface{}{
+				"RelativePath": relPath,
+				"ItemType":     "directory",
+				"Mode":         dirMode,
+				"Content":      []byte{},
+				"Size":         int64(0),
+				"ModTime":      modTime,
+			}
+			items = append(items, dirItem)
+			
+			// Read directory entries
+			entries, err := rdFS.ReadDir(absPath)
+			if err != nil {
+				return fmt.Errorf("cannot read directory %s: %w", absPath, err)
+			}
+			
+			// Process all entries
+			for _, entry := range entries {
+				entryPath := filepath.Join(absPath, entry.Name())
+				entryRelPath := filepath.Join(relPath, entry.Name())
+				
+				if entry.IsDir() {
+					// Recurse into subdirectory
+					if err := walkAndBackup(entryPath, entryRelPath); err != nil {
+						return err
+					}
+				} else {
+					// Regular file - backup content
+					entryInfo, err := entry.Info()
+					if err != nil {
+						continue // Skip files we can't stat
+					}
+					
+					fileSizeBytes := entryInfo.Size()
+					fileSizeMB := float64(fileSizeBytes) / (1024 * 1024)
+					
+					// Check budget before reading file
+					if backupBudget != nil {
+						if err := backupBudget.ConsumeBackup(fileSizeMB); err != nil {
+							// Budget exceeded - skip this file
+							continue
+						}
+					}
+					
+					// Read file content
+					var content []byte
+					if open, hasOpen := getOpenMethod(fsys); hasOpen {
+						if file, err := open(entryPath); err == nil {
+							if reader, ok := file.(io.Reader); ok {
+								content, _ = io.ReadAll(reader)
+							}
+							if closer, ok := file.(io.Closer); ok {
+								_ = closer.Close()
+							}
+						}
+					}
+					
+					if content == nil && backupBudget != nil {
+						// Restore budget if we couldn't read the file
+						backupBudget.RestoreBackup(fileSizeMB)
+						continue
+					}
+					
+					fileItem := map[string]interface{}{
+						"RelativePath": entryRelPath,
+						"ItemType":     "file",
+						"Mode":         entryInfo.Mode(),
+						"Content":      content,
+						"Size":         fileSizeBytes,
+						"ModTime":      entryInfo.ModTime(),
+					}
+					items = append(items, fileItem)
+					totalBackedUpSize += fileSizeBytes
+				}
+			}
+			return nil
 		}
 		
-		// Create a minimal backup structure
-		// Since we're in the process of deleting, we can't walk the directory
-		// In a real implementation, this would happen before deletion
-		// For now, just create the directory entry itself
-		dirItem := map[string]interface{}{
-			"RelativePath": ".",
-			"ItemType":     "directory",
-			"Mode":         dirMode,
-			"Content":      []byte{},
-			"Size":         int64(0),
-			"ModTime":      time.Now(),
-		}
-		items = append(items, dirItem)
+		// Start the walk
+		_ = walkAndBackup(path, ".")
 		
+		// Update backup data
+		backupData.SizeMB = float64(totalBackedUpSize) / (1024 * 1024)
 		backupData.Metadata["items"] = items
 		backupData.Metadata["reverse_type"] = "recreate_directory_tree"
 	} else {
@@ -203,17 +300,62 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 		}
 	}
 	
-	// Now create the reverse operation with the backed up data
-	var reverseOp interface{}
+	// Create reverse operations based on backed up data
+	var reverseOps []interface{}
+	
 	if isDir {
-		// Create directory operation
-		dirOp := NewCreateDirectoryOperation(
-			core.OperationID(fmt.Sprintf("reverse_%s", op.ID())),
-			path,
-		)
-		// Set a minimal item to satisfy validation
-		dirOp.SetItem(&minimalItem{path: path, itemType: "directory"})
-		reverseOp = dirOp
+		// For directories, create operations to restore the entire tree
+		if items, ok := backupData.Metadata["items"].([]interface{}); ok {
+			// Create operations in the right order - directories first, then files
+			for i, item := range items {
+				if itemMap, ok := item.(map[string]interface{}); ok {
+					itemType, _ := itemMap["ItemType"].(string)
+					relPath, _ := itemMap["RelativePath"].(string)
+					
+					if itemType == "directory" {
+						// Create directory operation
+						itemPath := path
+						if relPath != "." {
+							itemPath = filepath.Join(path, relPath)
+						}
+						
+						dirOp := NewCreateDirectoryOperation(
+							core.OperationID(fmt.Sprintf("reverse_%s_item_%d", op.ID(), i)),
+							itemPath,
+						)
+						mode, _ := itemMap["Mode"].(fs.FileMode)
+						dirOp.SetItem(&minimalItem{path: itemPath, itemType: "directory", mode: mode})
+						reverseOps = append(reverseOps, dirOp)
+					}
+				}
+			}
+			
+			// Then create file operations
+			for i, item := range items {
+				if itemMap, ok := item.(map[string]interface{}); ok {
+					itemType, _ := itemMap["ItemType"].(string)
+					relPath, _ := itemMap["RelativePath"].(string)
+					
+					if itemType == "file" {
+						itemPath := filepath.Join(path, relPath)
+						content, _ := itemMap["Content"].([]byte)
+						
+						fileOp := NewCreateFileOperation(
+							core.OperationID(fmt.Sprintf("reverse_%s_item_%d", op.ID(), i)),
+							itemPath,
+						)
+						mode, _ := itemMap["Mode"].(fs.FileMode)
+						fileOp.SetItem(&minimalItem{
+							path:     itemPath,
+							itemType: "file",
+							content:  content,
+							mode:     mode,
+						})
+						reverseOps = append(reverseOps, fileOp)
+					}
+				}
+			}
+		}
 	} else {
 		// Create file operation with backed up content
 		fileOp := NewCreateFileOperation(
@@ -226,10 +368,10 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 			itemType: "file",
 			content:  backupData.BackupContent,
 		})
-		reverseOp = fileOp
+		reverseOps = append(reverseOps, fileOp)
 	}
 	
-	return []interface{}{reverseOp}, backupData, nil
+	return reverseOps, backupData, nil
 }
 
 // Helper function to get RemoveAll method from filesystem
@@ -250,6 +392,7 @@ type minimalItem struct {
 	path     string
 	itemType string
 	content  []byte
+	mode     fs.FileMode
 }
 
 func (m *minimalItem) Path() string {
@@ -258,4 +401,18 @@ func (m *minimalItem) Path() string {
 
 func (m *minimalItem) Type() string {
 	return m.itemType
+}
+
+func (m *minimalItem) Content() []byte {
+	return m.content
+}
+
+func (m *minimalItem) Mode() fs.FileMode {
+	if m.mode == 0 {
+		if m.itemType == "directory" {
+			return 0755
+		}
+		return 0644
+	}
+	return m.mode
 }
