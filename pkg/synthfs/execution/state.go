@@ -146,7 +146,7 @@ func (pst *PathStateTracker) UpdateState(op OperationInterface) error {
 			return err
 		}
 		if !srcState.WillExist {
-			return fmt.Errorf("validation conflict for %s: copy source %s does not exist", opID, srcPath)
+			return fmt.Errorf("copy source %s does not exist", srcPath)
 		}
 
 		// Update destination

@@ -92,23 +92,31 @@ func (b *Batch) add(op Operation) error {
 	}
 
 	// Auto-resolve dependencies (ensure parent directories exist)
-	// This will need to be updated to use the PathStateTracker as well.
 	var opPath string
-	if simpleOp, ok := op.(*SimpleOperation); ok {
-		if simpleOp.dstPath != "" {
-			opPath = simpleOp.dstPath
+	// Check if it's an adapter wrapping an operations package operation
+	if adapter, ok := op.(*OperationsPackageAdapter); ok {
+		_, dst := adapter.opsOperation.GetPaths()
+		if dst != "" {
+			opPath = dst
 		} else {
-			opPath = simpleOp.description.Path
+			opPath = op.Describe().Path
 		}
 	} else {
-		opPath = op.Describe().Path
+		// Legacy SimpleOperation handling
+		if simpleOp, ok := op.(*SimpleOperation); ok {
+			if simpleOp.dstPath != "" {
+				opPath = simpleOp.dstPath
+			} else {
+				opPath = simpleOp.description.Path
+			}
+		} else {
+			opPath = op.Describe().Path
+		}
 	}
 
 	if parentDeps := b.ensureParentDirectories(opPath); len(parentDeps) > 0 {
-		if simpleOp, ok := op.(*SimpleOperation); ok {
-			for _, depID := range parentDeps {
-				simpleOp.AddDependency(depID)
-			}
+		for _, depID := range parentDeps {
+			op.AddDependency(depID)
 		}
 	}
 
@@ -167,9 +175,17 @@ func (b *Batch) CreateFile(path string, content []byte, mode ...fs.FileMode) (Op
 
 	// Set the FsItem for this create operation
 	fileItem := NewFile(path).WithContent(content).WithMode(fileMode)
-	op.SetItem(fileItem)
-	op.SetDescriptionDetail("content_length", len(content))
-	op.SetDescriptionDetail("mode", fileMode.String())
+	if err := b.registry.SetItemForOperation(op, fileItem); err != nil {
+		return nil, fmt.Errorf("failed to set item: %w", err)
+	}
+	// Set description details on the adapter
+	if adapter, ok := op.(*OperationsPackageAdapter); ok {
+		adapter.SetDescriptionDetail("content_length", len(content))
+		adapter.SetDescriptionDetail("mode", fileMode.String())
+	} else if simpleOp, ok := op.(*SimpleOperation); ok {
+		simpleOp.SetDescriptionDetail("content_length", len(content))
+		simpleOp.SetDescriptionDetail("mode", fileMode.String())
+	}
 
 	// Add to batch first (which validates against projected state)
 	if err := b.add(op); err != nil {
@@ -194,8 +210,14 @@ func (b *Batch) Copy(src, dst string) (Operation, error) {
 	if err != nil {
 		return nil, err
 	}
-	op.SetDescriptionDetail("destination", dst)
-	op.SetPaths(src, dst)
+	// Set description details and paths based on operation type
+	if adapter, ok := op.(*OperationsPackageAdapter); ok {
+		adapter.SetDescriptionDetail("destination", dst)
+		adapter.SetPaths(src, dst)
+	} else if simpleOp, ok := op.(*SimpleOperation); ok {
+		simpleOp.SetDescriptionDetail("destination", dst)
+		simpleOp.SetPaths(src, dst)
+	}
 
 	// Add to batch first (which validates the operation)
 	if err := b.add(op); err != nil {
@@ -204,8 +226,13 @@ func (b *Batch) Copy(src, dst string) (Operation, error) {
 
 	// Phase I, Milestone 3: Compute checksum for source file (after validation)
 	if checksum, err := b.computeFileChecksum(src); err == nil && checksum != nil {
-		op.SetChecksum(src, checksum)
-		op.SetDescriptionDetail("source_checksum", checksum.MD5)
+		if adapter, ok := op.(*OperationsPackageAdapter); ok {
+			adapter.SetChecksum(src, checksum)
+			adapter.SetDescriptionDetail("source_checksum", checksum.MD5)
+		} else if simpleOp, ok := op.(*SimpleOperation); ok {
+			simpleOp.SetChecksum(src, checksum)
+			simpleOp.SetDescriptionDetail("source_checksum", checksum.MD5)
+		}
 		Logger().Debug().
 			Str("op_id", string(op.ID())).
 			Str("src", src).
@@ -230,8 +257,14 @@ func (b *Batch) Move(src, dst string) (Operation, error) {
 	if err != nil {
 		return nil, err
 	}
-	op.SetDescriptionDetail("destination", dst)
-	op.SetPaths(src, dst)
+	// Set description details and paths based on operation type
+	if adapter, ok := op.(*OperationsPackageAdapter); ok {
+		adapter.SetDescriptionDetail("destination", dst)
+		adapter.SetPaths(src, dst)
+	} else if simpleOp, ok := op.(*SimpleOperation); ok {
+		simpleOp.SetDescriptionDetail("destination", dst)
+		simpleOp.SetPaths(src, dst)
+	}
 
 	// Add to batch first (which validates the operation)
 	if err := b.add(op); err != nil {
@@ -240,8 +273,13 @@ func (b *Batch) Move(src, dst string) (Operation, error) {
 
 	// Phase I, Milestone 3: Compute checksum for source file (after validation)
 	if checksum, err := b.computeFileChecksum(src); err == nil && checksum != nil {
-		op.SetChecksum(src, checksum)
-		op.SetDescriptionDetail("source_checksum", checksum.MD5)
+		if adapter, ok := op.(*OperationsPackageAdapter); ok {
+			adapter.SetChecksum(src, checksum)
+			adapter.SetDescriptionDetail("source_checksum", checksum.MD5)
+		} else if simpleOp, ok := op.(*SimpleOperation); ok {
+			simpleOp.SetChecksum(src, checksum)
+			simpleOp.SetDescriptionDetail("source_checksum", checksum.MD5)
+		}
 		Logger().Debug().
 			Str("op_id", string(op.ID())).
 			Str("src", src).
@@ -285,18 +323,22 @@ func (b *Batch) Delete(path string) (Operation, error) {
 // CreateSymlink adds a symbolic link creation operation to the batch.
 // It validates the operation immediately and resolves dependencies automatically.
 func (b *Batch) CreateSymlink(target, linkPath string) (Operation, error) {
-	// Create the operation
-	opID := b.generateID("create_symlink", linkPath)
-	op := NewSimpleOperation(opID, "create_symlink", linkPath)
+	// Create the operation using the registry
+	op, err := b.createOperation("create_symlink", linkPath)
+	if err != nil {
+		return nil, err
+	}
 
 	// Set the SymlinkItem for this create operation
 	symlinkItem := NewSymlink(linkPath, target)
-	op.SetItem(symlinkItem)
-	op.SetDescriptionDetail("target", target)
-
-	// Validate immediately
-	if err := op.Validate(b.ctx, b.fs); err != nil {
-		return nil, fmt.Errorf("validation failed for CreateSymlink(%s, %s): %w", target, linkPath, err)
+	if err := b.registry.SetItemForOperation(op, symlinkItem); err != nil {
+		return nil, fmt.Errorf("failed to set item: %w", err)
+	}
+	// Set description detail based on operation type
+	if adapter, ok := op.(*OperationsPackageAdapter); ok {
+		adapter.SetDescriptionDetail("target", target)
+	} else if simpleOp, ok := op.(*SimpleOperation); ok {
+		simpleOp.SetDescriptionDetail("target", target)
 	}
 
 	if err := b.add(op); err != nil {
@@ -320,19 +362,24 @@ func (b *Batch) CreateArchive(archivePath string, format ArchiveFormat, sources 
 		return nil, fmt.Errorf("validation failed for CreateArchive(%s): must specify at least one source", archivePath)
 	}
 
-	// Create the operation
-	opID := b.generateID("create_archive", archivePath)
-	op := NewSimpleOperation(opID, "create_archive", archivePath)
+	// Create the operation using the registry
+	op, err := b.createOperation("create_archive", archivePath)
+	if err != nil {
+		return nil, err
+	}
 
 	// Set the ArchiveItem for this create operation
 	archiveItem := NewArchive(archivePath, format, sources)
-	op.SetItem(archiveItem)
-	op.SetDescriptionDetail("format", targets.ArchiveFormat(format).String())
-	op.SetDescriptionDetail("source_count", len(sources))
-
-	// Validate immediately
-	if err := op.Validate(b.ctx, b.fs); err != nil {
-		return nil, fmt.Errorf("validation failed for CreateArchive(%s): %w", archivePath, err)
+	if err := b.registry.SetItemForOperation(op, archiveItem); err != nil {
+		return nil, fmt.Errorf("failed to set item: %w", err)
+	}
+	// Set description details based on operation type
+	if adapter, ok := op.(*OperationsPackageAdapter); ok {
+		adapter.SetDescriptionDetail("format", targets.ArchiveFormat(format).String())
+		adapter.SetDescriptionDetail("source_count", len(sources))
+	} else if simpleOp, ok := op.(*SimpleOperation); ok {
+		simpleOp.SetDescriptionDetail("format", targets.ArchiveFormat(format).String())
+		simpleOp.SetDescriptionDetail("source_count", len(sources))
 	}
 
 	// Phase I, Milestone 3: Compute checksums for all source files
@@ -340,10 +387,18 @@ func (b *Batch) CreateArchive(archivePath string, format ArchiveFormat, sources 
 		if checksum, err := b.computeFileChecksum(source); err != nil {
 			return nil, fmt.Errorf("validation failed for CreateArchive(%s): failed to compute checksum for source %s: %w", archivePath, source, err)
 		} else if checksum != nil {
-			op.SetChecksum(source, checksum)
+			if adapter, ok := op.(*OperationsPackageAdapter); ok {
+				adapter.SetChecksum(source, checksum)
+			} else if simpleOp, ok := op.(*SimpleOperation); ok {
+				simpleOp.SetChecksum(source, checksum)
+			}
 		}
 	}
-	op.SetDescriptionDetail("sources_checksummed", len(sources))
+	if adapter, ok := op.(*OperationsPackageAdapter); ok {
+		adapter.SetDescriptionDetail("sources_checksummed", len(sources))
+	} else if simpleOp, ok := op.(*SimpleOperation); ok {
+		simpleOp.SetDescriptionDetail("sources_checksummed", len(sources))
+	}
 
 	if err := b.add(op); err != nil {
 		return nil, fmt.Errorf("failed to add CreateArchive(%s): %w", archivePath, err)
@@ -370,12 +425,14 @@ func (b *Batch) Unarchive(archivePath, extractPath string) (Operation, error) {
 
 	// Set the UnarchiveItem for this operation
 	unarchiveItem := NewUnarchive(archivePath, extractPath)
-	op.SetItem(unarchiveItem)
-	op.SetDescriptionDetail("extract_path", extractPath)
-
-	// Validate immediately
-	if err := op.Validate(b.ctx, b.fs); err != nil {
-		return nil, fmt.Errorf("validation failed for Unarchive(%s, %s): %w", archivePath, extractPath, err)
+	if err := b.registry.SetItemForOperation(op, unarchiveItem); err != nil {
+		return nil, fmt.Errorf("failed to set item: %w", err)
+	}
+	// Set description detail based on operation type
+	if adapter, ok := op.(*OperationsPackageAdapter); ok {
+		adapter.SetDescriptionDetail("extract_path", extractPath)
+	} else if simpleOp, ok := op.(*SimpleOperation); ok {
+		simpleOp.SetDescriptionDetail("extract_path", extractPath)
 	}
 
 	if err := b.add(op); err != nil {
@@ -402,14 +459,18 @@ func (b *Batch) UnarchiveWithPatterns(archivePath, extractPath string, patterns 
 
 	// Set the UnarchiveItem for this operation with patterns
 	unarchiveItem := NewUnarchive(archivePath, extractPath).WithPatterns(patterns...)
-	op.SetItem(unarchiveItem)
-	op.SetDescriptionDetail("extract_path", extractPath)
-	op.SetDescriptionDetail("patterns", patterns)
-	op.SetDescriptionDetail("pattern_count", len(patterns))
-
-	// Validate immediately
-	if err := op.Validate(b.ctx, b.fs); err != nil {
-		return nil, fmt.Errorf("validation failed for UnarchiveWithPatterns(%s, %s): %w", archivePath, extractPath, err)
+	if err := b.registry.SetItemForOperation(op, unarchiveItem); err != nil {
+		return nil, fmt.Errorf("failed to set item: %w", err)
+	}
+	// Set description details based on operation type
+	if adapter, ok := op.(*OperationsPackageAdapter); ok {
+		adapter.SetDescriptionDetail("extract_path", extractPath)
+		adapter.SetDescriptionDetail("patterns", patterns)
+		adapter.SetDescriptionDetail("pattern_count", len(patterns))
+	} else if simpleOp, ok := op.(*SimpleOperation); ok {
+		simpleOp.SetDescriptionDetail("extract_path", extractPath)
+		simpleOp.SetDescriptionDetail("patterns", patterns)
+		simpleOp.SetDescriptionDetail("pattern_count", len(patterns))
 	}
 
 	if err := b.add(op); err != nil {
@@ -492,19 +553,20 @@ func (b *Batch) generateID(opType, path string) OperationID {
 }
 
 // createOperation is a helper method to create operations using the registry
-func (b *Batch) createOperation(opType, path string) (*SimpleOperation, error) {
+func (b *Batch) createOperation(opType, path string) (Operation, error) {
 	opID := b.generateID(opType, path)
 	opInterface, err := b.registry.CreateOperation(opID, opType, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create operation: %w", err)
 	}
 	
-	op, ok := opInterface.(*SimpleOperation)
-	if !ok {
-		return nil, fmt.Errorf("registry returned unexpected operation type")
+	// The registry returns either SimpleOperation or OperationsPackageAdapter
+	// Both implement the Operation interface
+	if op, ok := opInterface.(Operation); ok {
+		return op, nil
 	}
 	
-	return op, nil
+	return nil, fmt.Errorf("registry returned unexpected type: %T", opInterface)
 }
 
 // ensureParentDirectories analyzes a path and adds CreateDir operations for missing parent directories.
@@ -547,11 +609,20 @@ func (b *Batch) ensureParentDirectories(path string) []OperationID {
 		// If we can't set item, skip it
 		return dependencyIDs
 	}
-	parentOp.SetDescriptionDetail("mode", "0755")
+	// Set description detail based on operation type
+	if adapter, ok := parentOp.(*OperationsPackageAdapter); ok {
+		adapter.SetDescriptionDetail("mode", "0755")
+	} else if simpleOp, ok := parentOp.(*SimpleOperation); ok {
+		simpleOp.SetDescriptionDetail("mode", "0755")
+	}
 
 	// Add dependencies from parent's parents
 	for _, depID := range parentDeps {
-		parentOp.AddDependency(depID)
+		if adapter, ok := parentOp.(*OperationsPackageAdapter); ok {
+			adapter.AddDependency(depID)
+		} else if simpleOp, ok := parentOp.(*SimpleOperation); ok {
+			simpleOp.AddDependency(depID)
+		}
 	}
 
 	// Validate the auto-generated parent operation and add it to the batch
@@ -598,29 +669,35 @@ func (b *Batch) resolveImplicitDependencies() error {
 
 		case "copy":
 			// Copy reads source and writes destination
-			if simpleOp, ok := op.(*SimpleOperation); ok {
-				srcPath := simpleOp.GetSrcPath()
-				dstPath := simpleOp.GetDstPath()
-				if srcPath != "" {
-					fileReaders[srcPath] = append(fileReaders[srcPath], i)
-				}
-				if dstPath != "" {
-					fileWriters[dstPath] = append(fileWriters[dstPath], i)
-				}
+			var srcPath, dstPath string
+			if adapter, ok := op.(*OperationsPackageAdapter); ok {
+				srcPath, dstPath = adapter.opsOperation.GetPaths()
+			} else if simpleOp, ok := op.(*SimpleOperation); ok {
+				srcPath = simpleOp.GetSrcPath()
+				dstPath = simpleOp.GetDstPath()
+			}
+			if srcPath != "" {
+				fileReaders[srcPath] = append(fileReaders[srcPath], i)
+			}
+			if dstPath != "" {
+				fileWriters[dstPath] = append(fileWriters[dstPath], i)
 			}
 
 		case "move":
 			// Move reads source and writes destination, then deletes source
-			if simpleOp, ok := op.(*SimpleOperation); ok {
-				srcPath := simpleOp.GetSrcPath()
-				dstPath := simpleOp.GetDstPath()
-				if srcPath != "" {
-					fileReaders[srcPath] = append(fileReaders[srcPath], i)
-					fileMovers[srcPath] = append(fileMovers[srcPath], i)
-				}
-				if dstPath != "" {
-					fileWriters[dstPath] = append(fileWriters[dstPath], i)
-				}
+			var srcPath, dstPath string
+			if adapter, ok := op.(*OperationsPackageAdapter); ok {
+				srcPath, dstPath = adapter.opsOperation.GetPaths()
+			} else if simpleOp, ok := op.(*SimpleOperation); ok {
+				srcPath = simpleOp.GetSrcPath()
+				dstPath = simpleOp.GetDstPath()
+			}
+			if srcPath != "" {
+				fileReaders[srcPath] = append(fileReaders[srcPath], i)
+				fileMovers[srcPath] = append(fileMovers[srcPath], i)
+			}
+			if dstPath != "" {
+				fileWriters[dstPath] = append(fileWriters[dstPath], i)
 			}
 
 		case "delete":
@@ -667,9 +744,28 @@ func (b *Batch) resolveImplicitDependencies() error {
 				for _, readerIdx := range readers {
 					if readerIdx != moverIdx {
 						// Reader must come before mover
-						if simpleOp, ok := b.operations[moverIdx].(*SimpleOperation); ok {
-							readerID := b.operations[readerIdx].ID()
-							// Check if dependency already exists
+						moverOp := b.operations[moverIdx]
+						readerID := b.operations[readerIdx].ID()
+						
+						// Check if dependency already exists and add if not
+						if adapter, ok := moverOp.(*OperationsPackageAdapter); ok {
+							exists := false
+							for _, dep := range adapter.Dependencies() {
+								if dep == readerID {
+									exists = true
+									break
+								}
+							}
+							if !exists {
+								adapter.AddDependency(readerID)
+								dependenciesAdded++
+								Logger().Info().
+									Str("operation", string(adapter.ID())).
+									Str("depends_on", string(readerID)).
+									Str("reason", fmt.Sprintf("mover depends on reader of %s", filePath)).
+									Msg("added implicit dependency")
+							}
+						} else if simpleOp, ok := moverOp.(*SimpleOperation); ok {
 							exists := false
 							for _, dep := range simpleOp.Dependencies() {
 								if dep == readerID {
@@ -700,9 +796,28 @@ func (b *Batch) resolveImplicitDependencies() error {
 				for _, writerIdx := range writers {
 					if writerIdx != symlinkIdx {
 						// Writer must come before symlink creator
-						if simpleOp, ok := b.operations[symlinkIdx].(*SimpleOperation); ok {
-							writerID := b.operations[writerIdx].ID()
-							// Check if dependency already exists
+						symlinkOp := b.operations[symlinkIdx]
+						writerID := b.operations[writerIdx].ID()
+						
+						// Check if dependency already exists and add if not
+						if adapter, ok := symlinkOp.(*OperationsPackageAdapter); ok {
+							exists := false
+							for _, dep := range adapter.Dependencies() {
+								if dep == writerID {
+									exists = true
+									break
+								}
+							}
+							if !exists {
+								adapter.AddDependency(writerID)
+								dependenciesAdded++
+								Logger().Info().
+									Str("operation", string(adapter.ID())).
+									Str("depends_on", string(writerID)).
+									Str("reason", fmt.Sprintf("symlink depends on target creation %s", targetPath)).
+									Msg("added implicit dependency")
+							}
+						} else if simpleOp, ok := symlinkOp.(*SimpleOperation); ok {
 							exists := false
 							for _, dep := range simpleOp.Dependencies() {
 								if dep == writerID {

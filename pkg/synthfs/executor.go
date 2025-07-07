@@ -221,6 +221,10 @@ func (ow *operationWrapper) GetItem() interface{} {
 }
 
 func (ow *operationWrapper) GetSrcPath() string {
+	if adapter, ok := ow.op.(*OperationsPackageAdapter); ok {
+		src, _ := adapter.opsOperation.GetPaths()
+		return src
+	}
 	if simpleOp, ok := ow.op.(*SimpleOperation); ok {
 		return simpleOp.GetSrcPath()
 	}
@@ -228,6 +232,10 @@ func (ow *operationWrapper) GetSrcPath() string {
 }
 
 func (ow *operationWrapper) GetDstPath() string {
+	if adapter, ok := ow.op.(*OperationsPackageAdapter); ok {
+		_, dst := adapter.opsOperation.GetPaths()
+		return dst
+	}
 	if simpleOp, ok := ow.op.(*SimpleOperation); ok {
 		return simpleOp.GetDstPath()
 	}

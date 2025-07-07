@@ -9,62 +9,41 @@ import (
 
 // OperationRegistry implements the core.OperationFactory interface
 type OperationRegistry struct{
-	useOperationsPackage bool
 	operationsFactory    *operations.Factory
 }
 
 // NewOperationRegistry creates a new operation registry
 func NewOperationRegistry() *OperationRegistry {
 	return &OperationRegistry{
-		useOperationsPackage: false, // Start with false for backward compatibility
 		operationsFactory:    operations.NewFactory(),
 	}
 }
 
 // CreateOperation creates an operation based on type and path
 func (r *OperationRegistry) CreateOperation(id core.OperationID, opType string, path string) (interface{}, error) {
-	if r.useOperationsPackage {
-		// Use the new operations package
-		opsOp, err := r.operationsFactory.CreateOperation(id, opType, path)
-		if err != nil {
-			return nil, err
-		}
-		// Wrap in adapter to maintain compatibility with main package Operation interface
-		return NewOperationsPackageAdapter(opsOp), nil
+	// Always use the operations package
+	opsOp, err := r.operationsFactory.CreateOperation(id, opType, path)
+	if err != nil {
+		return nil, err
 	}
-	
-	// Fall back to old implementation for backward compatibility
-	op := NewSimpleOperation(id, opType, path)
-	return op, nil
+	// Wrap in adapter to implement main package Operation interface
+	return NewOperationsPackageAdapter(opsOp), nil
 }
 
 // SetItemForOperation sets the item for an operation
 func (r *OperationRegistry) SetItemForOperation(op interface{}, item interface{}) error {
-	// Check if it's an adapter wrapping an operations.Operation
+	// Check if it's an adapter
 	if adapter, ok := op.(*OperationsPackageAdapter); ok {
-		// Set on the underlying operation
 		adapter.opsOperation.SetItem(item)
 		return nil
 	}
 	
-	// Try operations package operation directly
+	// Handle operations package operation directly
 	if opsOp, ok := op.(operations.Operation); ok {
 		return r.operationsFactory.SetItemForOperation(opsOp, item)
 	}
 	
-	// Fall back to SimpleOperation
-	operation, ok := op.(*SimpleOperation)
-	if !ok {
-		return fmt.Errorf("operation is not a SimpleOperation or operations.Operation")
-	}
-	
-	fsItem, ok := item.(FsItem)
-	if !ok {
-		return fmt.Errorf("item is not an FsItem")
-	}
-	
-	operation.SetItem(fsItem)
-	return nil
+	return fmt.Errorf("operation is not an OperationsPackageAdapter or operations.Operation")
 }
 
 // Global registry instance
@@ -73,11 +52,6 @@ var defaultRegistry = NewOperationRegistry()
 // GetDefaultRegistry returns the default operation registry
 func GetDefaultRegistry() core.OperationFactory {
 	return defaultRegistry
-}
-
-// EnableOperationsPackage enables the use of the operations package for creating operations
-func (r *OperationRegistry) EnableOperationsPackage() {
-	r.useOperationsPackage = true
 }
 
 // RegisterFactory implements the OperationRegistrar interface

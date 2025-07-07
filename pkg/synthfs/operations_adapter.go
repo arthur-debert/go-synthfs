@@ -158,3 +158,9 @@ func (a *OperationsPackageAdapter) AddDependency(depID core.OperationID) {
 func (a *OperationsPackageAdapter) SetPaths(src, dst string) {
 	a.opsOperation.SetPaths(src, dst)
 }
+
+// SetChecksum sets a checksum for the given path.
+func (a *OperationsPackageAdapter) SetChecksum(path string, checksum *ChecksumRecord) {
+	// The operations package uses interface{}, so we can pass ChecksumRecord directly
+	a.opsOperation.SetChecksum(path, checksum)
+}

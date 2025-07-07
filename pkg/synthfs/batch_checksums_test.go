@@ -269,7 +269,7 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		// Should be a source existence error, not a checksum error
-		if !strings.Contains(err.Error(), "copy source does not exist") {
+		if !strings.Contains(err.Error(), "copy source") || !strings.Contains(err.Error(), "does not exist") {
 			t.Errorf("Expected source existence error, got: %v", err)
 		}
 	})

@@ -142,6 +142,9 @@ func (op *BaseOperation) ReverseOps(ctx context.Context, fsys interface{}, budge
 	return nil, nil, fmt.Errorf("ReverseOps not implemented for operation type: %s", op.description.Type)
 }
 
+// Additional methods to satisfy the main package Operation interface
+// Note: GetItem, GetChecksum, and GetAllChecksums are already defined above
+
 // ExecuteV2 performs the operation using ExecutionContext.
 func (op *BaseOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	// Convert interfaces back to concrete types

@@ -6,10 +6,9 @@ import (
 
 // TestRegistryOperationsPackage tests that the registry can create operations from the operations package
 func TestRegistryOperationsPackage(t *testing.T) {
-	t.Run("Registry creates operations package operations when enabled", func(t *testing.T) {
-		// Create registry and enable operations package
+	t.Run("Registry creates operations package operations by default", func(t *testing.T) {
+		// Create registry (operations package is enabled by default)
 		registry := NewOperationRegistry()
-		registry.EnableOperationsPackage()
 		
 		// Test each operation type
 		opTypes := []string{
@@ -42,36 +41,15 @@ func TestRegistryOperationsPackage(t *testing.T) {
 		}
 	})
 	
-	t.Run("Registry creates SimpleOperation when operations package disabled", func(t *testing.T) {
-		// Create registry without enabling operations package
-		registry := NewOperationRegistry()
-		
-		op, err := registry.CreateOperation("test-op", "create_file", "/test.txt")
-		if err != nil {
-			t.Fatalf("Failed to create operation: %v", err)
-		}
-		
-		// Verify it's SimpleOperation
-		if _, ok := op.(*SimpleOperation); !ok {
-			t.Errorf("Expected SimpleOperation, got %T", op)
-		}
-	})
+	// Remove test for disabled operations package since it's always enabled now
 	
-	t.Run("SetItemForOperation works with both operation types", func(t *testing.T) {
+	t.Run("SetItemForOperation works with operations package adapter", func(t *testing.T) {
 		registry := NewOperationRegistry()
 		
-		// Test with SimpleOperation
-		simpleOp, _ := registry.CreateOperation("simple-op", "create_file", "/test1.txt")
-		fileItem := NewFile("/test1.txt")
-		err := registry.SetItemForOperation(simpleOp, fileItem)
-		if err != nil {
-			t.Errorf("Failed to set item on SimpleOperation: %v", err)
-		}
-		
-		// Test with operations package operation
-		registry.EnableOperationsPackage()
-		opsOp, _ := registry.CreateOperation("ops-op", "create_file", "/test2.txt")
-		err = registry.SetItemForOperation(opsOp, fileItem)
+		// Test with operations package operation (wrapped in adapter)
+		opsOp, _ := registry.CreateOperation("ops-op", "create_file", "/test.txt")
+		fileItem := NewFile("/test.txt")
+		err := registry.SetItemForOperation(opsOp, fileItem)
 		if err != nil {
 			t.Errorf("Failed to set item on operations package operation: %v", err)
 		}

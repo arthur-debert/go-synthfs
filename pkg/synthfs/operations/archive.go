@@ -28,14 +28,33 @@ func NewCreateArchiveOperation(id core.OperationID, archivePath string) *CreateA
 
 // Execute creates the archive.
 func (op *CreateArchiveOperation) Execute(ctx context.Context, fsys interface{}) error {
-	// Get sources from details
-	sources, ok := op.description.Details["sources"].([]string)
-	if !ok || len(sources) == 0 {
+	// Get sources - first try from item, then from details
+	var sources []string
+	var format interface{}
+	
+	if item := op.GetItem(); item != nil {
+		if archiveItem, ok := item.(interface{ 
+			Sources() []string
+			Format() string
+		}); ok {
+			sources = archiveItem.Sources()
+			format = archiveItem.Format()
+		}
+	}
+	
+	// Fallback to details
+	if len(sources) == 0 {
+		if detailSources, ok := op.description.Details["sources"].([]string); ok {
+			sources = detailSources
+		}
+	}
+	if len(sources) == 0 {
 		return fmt.Errorf("create_archive operation requires sources")
 	}
 	
-	// Get format from details
-	format := op.description.Details["format"]
+	if format == nil {
+		format = op.description.Details["format"]
+	}
 	if format == nil {
 		return fmt.Errorf("create_archive operation requires format")
 	}
@@ -136,9 +155,22 @@ func (op *CreateArchiveOperation) Validate(ctx context.Context, fsys interface{}
 		return err
 	}
 	
-	// Check sources
-	sources, ok := op.description.Details["sources"].([]string)
-	if !ok || len(sources) == 0 {
+	// Check sources from item first
+	var sources []string
+	if item := op.GetItem(); item != nil {
+		if archiveItem, ok := item.(interface{ Sources() []string }); ok {
+			sources = archiveItem.Sources()
+		}
+	}
+	
+	// If no sources from item, check description details
+	if len(sources) == 0 {
+		if detailSources, ok := op.description.Details["sources"].([]string); ok {
+			sources = detailSources
+		}
+	}
+	
+	if len(sources) == 0 {
 		return &core.ValidationError{
 			OperationID:   op.ID(),
 			OperationDesc: op.Describe(),
