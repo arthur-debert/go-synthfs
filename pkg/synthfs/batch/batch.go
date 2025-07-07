@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"strings"
+	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
@@ -14,6 +15,23 @@ func logInfo(msg string, fields map[string]interface{}) {
 	// For now, just use fmt for logging
 	// TODO: Integrate with proper logging system
 	fmt.Printf("[BATCH] %s %+v\n", msg, fields)
+}
+
+// convertToInterfaces converts typed slices to []interface{}
+func convertToInterfaces(slice interface{}) []interface{} {
+	if slice == nil {
+		return nil
+	}
+	
+	// Handle different slice types
+	switch s := slice.(type) {
+	case []interface{}:
+		return s
+	default:
+		// For now, return empty slice
+		// TODO: Implement proper conversion
+		return []interface{}{}
+	}
 }
 
 // BatchImpl represents a collection of operations that can be validated and executed as a unit.
@@ -330,6 +348,8 @@ func (b *BatchImpl) Run() (interface{}, error) {
 
 // RunWithOptions runs all operations in the batch with specified options.
 func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
+	startTime := time.Now()
+	
 	// Extract options
 	restorable := false
 	maxBackupMB := 0
@@ -350,18 +370,35 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 		"max_backup_mb": maxBackupMB,
 	})
 	
-	// TODO: Resolve implicit dependencies before execution
-	// This requires implementing dependency resolution logic
+	duration := time.Since(startTime)
 	
-	// TODO: Create executor and pipeline from execution package
-	// This requires access to the execution package types
+	// For now, implement basic execution logic
+	// TODO: Integrate with proper execution pipeline
+	var executionError error
+	success := true
 	
-	// TODO: Add operations to pipeline and execute
-	// This requires implementing the execution flow
+	if len(b.operations) > 0 {
+		// For non-empty batches, return not implemented error
+		executionError = fmt.Errorf("batch execution with operations not yet fully implemented")
+		success = false
+	}
 	
-	// For now, return a basic result
-	result := NewResult(false, b.operations, nil, 0, fmt.Errorf("execution not fully implemented"))
-	return result, nil
+	logInfo("batch execution completed", map[string]interface{}{
+		"success": success,
+		"duration": duration,
+		"operations_executed": 0,
+	})
+	
+	// Convert to batch result interface
+	batchResult := NewResult(
+		success,
+		b.operations,
+		[]interface{}{},
+		duration,
+		executionError,
+	)
+	
+	return batchResult, nil
 }
 
 // RunRestorable runs all operations with backup enabled using the default 10MB budget.
