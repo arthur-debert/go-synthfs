@@ -5,7 +5,9 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
@@ -30,13 +32,40 @@ func (m *MockFilesystem) WriteFile(name string, data []byte, perm interface{}) e
 }
 
 func (m *MockFilesystem) MkdirAll(path string, perm interface{}) error {
-	m.dirs[path] = true
+	// Create all parent directories too
+	parts := strings.Split(path, "/")
+	for i := 1; i <= len(parts); i++ {
+		dir := strings.Join(parts[:i], "/")
+		if dir != "" {
+			m.dirs[dir] = true
+		}
+	}
 	return nil
 }
 
 func (m *MockFilesystem) Remove(name string) error {
 	delete(m.files, name)
 	delete(m.dirs, name)
+	return nil
+}
+
+func (m *MockFilesystem) RemoveAll(path string) error {
+	// Remove the path and all its children
+	delete(m.dirs, path)
+	delete(m.files, path)
+	
+	// Remove all children
+	prefix := path + "/"
+	for p := range m.files {
+		if strings.HasPrefix(p, prefix) {
+			delete(m.files, p)
+		}
+	}
+	for p := range m.dirs {
+		if strings.HasPrefix(p, prefix) {
+			delete(m.dirs, p)
+		}
+	}
 	return nil
 }
 
@@ -57,6 +86,38 @@ func (m *MockFilesystem) Open(name string) (interface{}, error) {
 	return nil, fs.ErrNotExist
 }
 
+func (m *MockFilesystem) Rename(oldpath, newpath string) error {
+	// Check if source exists
+	if content, ok := m.files[oldpath]; ok {
+		// It's a file
+		m.files[newpath] = content
+		delete(m.files, oldpath)
+		return nil
+	}
+	if _, ok := m.dirs[oldpath]; ok {
+		// It's a directory
+		m.dirs[newpath] = true
+		delete(m.dirs, oldpath)
+		// Also rename all children
+		for p, content := range m.files {
+			if strings.HasPrefix(p, oldpath+"/") {
+				newP := newpath + p[len(oldpath):]
+				m.files[newP] = content
+				delete(m.files, p)
+			}
+		}
+		for p := range m.dirs {
+			if strings.HasPrefix(p, oldpath+"/") {
+				newP := newpath + p[len(oldpath):]
+				m.dirs[newP] = true
+				delete(m.dirs, p)
+			}
+		}
+		return nil
+	}
+	return fs.ErrNotExist
+}
+
 type mockFileInfo struct {
 	name  string
 	size  int64
@@ -68,6 +129,7 @@ func (m *mockFileInfo) Size() int64        { return m.size }
 func (m *mockFileInfo) Mode() fs.FileMode  { return 0644 }
 func (m *mockFileInfo) IsDir() bool        { return m.isDir }
 func (m *mockFileInfo) Sys() interface{}   { return nil }
+func (m *mockFileInfo) ModTime() time.Time { return time.Now() }
 
 type mockFile struct {
 	io.Reader
@@ -86,6 +148,7 @@ func (i *TestFileItem) Path() string      { return i.path }
 func (i *TestFileItem) Type() string      { return "file" }
 func (i *TestFileItem) Content() []byte   { return i.content }
 func (i *TestFileItem) Mode() fs.FileMode { return i.mode }
+func (i *TestFileItem) IsDir() bool       { return false }
 
 // TestDirItem is a mock directory item for testing
 type TestDirItem struct {
@@ -96,6 +159,20 @@ type TestDirItem struct {
 func (i *TestDirItem) Path() string      { return i.path }
 func (i *TestDirItem) Type() string      { return "directory" }
 func (i *TestDirItem) Mode() fs.FileMode { return i.mode }
+func (i *TestDirItem) IsDir() bool       { return true }
+
+// TestSymlinkItem is a mock symlink item for testing
+type TestSymlinkItem struct {
+	path   string
+	target string
+	mode   fs.FileMode
+}
+
+func (i *TestSymlinkItem) Path() string      { return i.path }
+func (i *TestSymlinkItem) Type() string      { return "symlink" }
+func (i *TestSymlinkItem) Mode() fs.FileMode { return i.mode }
+func (i *TestSymlinkItem) IsDir() bool       { return false }
+func (i *TestSymlinkItem) Target() string    { return i.target }
 
 func TestOperations_GetItem(t *testing.T) {
 	t.Run("GetItem returns nil when no item set", func(t *testing.T) {

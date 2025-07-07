@@ -104,6 +104,39 @@ func (op *CreateFileOperation) Validate(ctx context.Context, fsys interface{}) e
 		}
 	}
 
+	// Check if item is a directory when we expect a file
+	if typeGetter, ok := item.(interface{ Type() string }); ok {
+		if typeGetter.Type() == "directory" {
+			return &core.ValidationError{
+				OperationID:   op.ID(),
+				OperationDesc: op.Describe(),
+				Reason:        "expected file item but got directory",
+			}
+		}
+	}
+
+	// Check if item implements IsDir
+	if dirChecker, ok := item.(interface{ IsDir() bool }); ok {
+		if dirChecker.IsDir() {
+			return &core.ValidationError{
+				OperationID:   op.ID(),
+				OperationDesc: op.Describe(),
+				Reason:        "cannot create file: item IsDir() returns true",
+			}
+		}
+	}
+
+	// Check if file already exists
+	if stat, ok := getStatMethod(fsys); ok {
+		if _, err := stat(op.description.Path); err == nil {
+			return &core.ValidationError{
+				OperationID:   op.ID(),
+				OperationDesc: op.Describe(),
+				Reason:        "file already exists",
+			}
+		}
+	}
+
 	// Check if filesystem supports required operations
 	if _, ok := getWriteFileMethod(fsys); !ok {
 		return &core.ValidationError{
@@ -183,6 +216,17 @@ func getMkdirAllMethod(fsys interface{}) (func(string, interface{}) error, bool)
 	}
 
 	return nil, false
+}
+
+// Rollback removes the created file
+func (op *CreateFileOperation) Rollback(ctx context.Context, fsys interface{}) error {
+	remove, ok := getRemoveMethod(fsys)
+	if !ok {
+		return fmt.Errorf("filesystem does not support Remove")
+	}
+	
+	// Remove the created file
+	return remove(op.description.Path)
 }
 
 // ReverseOps for CreateFileOperation - returns a delete operation

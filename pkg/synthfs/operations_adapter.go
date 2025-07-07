@@ -119,9 +119,6 @@ func (a *OperationsPackageAdapter) GetAllChecksums() map[string]*ChecksumRecord 
 // ReverseOps generates operations to reverse this operation.
 func (a *OperationsPackageAdapter) ReverseOps(ctx context.Context, fsys FileSystem, budget *core.BackupBudget) ([]Operation, *core.BackupData, error) {
 	ops, data, err := a.opsOperation.ReverseOps(ctx, fsys, budget)
-	if err != nil {
-		return nil, nil, err
-	}
 
 	// Convert operations
 	var result []Operation
@@ -141,7 +138,8 @@ func (a *OperationsPackageAdapter) ReverseOps(ctx context.Context, fsys FileSyst
 		}
 	}
 
-	return result, backupData, nil
+	// Return the backup data even if there was an error
+	return result, backupData, err
 }
 
 // SetDescriptionDetail sets a detail in the operation's description.

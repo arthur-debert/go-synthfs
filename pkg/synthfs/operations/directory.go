@@ -84,6 +84,28 @@ func (op *CreateDirectoryOperation) Validate(ctx context.Context, fsys interface
 		}
 	}
 
+	// Check if item is a file when we expect a directory
+	if typeGetter, ok := item.(interface{ Type() string }); ok {
+		if typeGetter.Type() != "directory" {
+			return &core.ValidationError{
+				OperationID:   op.ID(),
+				OperationDesc: op.Describe(),
+				Reason:        "expected directory item but got " + typeGetter.Type(),
+			}
+		}
+	}
+
+	// Check if item implements IsDir
+	if dirChecker, ok := item.(interface{ IsDir() bool }); ok {
+		if !dirChecker.IsDir() {
+			return &core.ValidationError{
+				OperationID:   op.ID(),
+				OperationDesc: op.Describe(),
+				Reason:        "cannot create directory: item IsDir() returns false",
+			}
+		}
+	}
+
 	// Check if path already exists
 	stat, ok := getStatMethod(fsys)
 	if ok {

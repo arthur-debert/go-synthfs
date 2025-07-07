@@ -242,12 +242,29 @@ func (op *MoveOperation) Validate(ctx context.Context, fsys interface{}) error {
 func (op *MoveOperation) Rollback(ctx context.Context, fsys interface{}) error {
 	src, dst := op.GetPaths()
 	if src == "" || dst == "" {
-		return nil
+		return fmt.Errorf("move operation missing source or destination path")
 	}
 
 	// Try to move it back
 	if rename, ok := getRenameMethod(fsys); ok {
-		_ = rename(dst, src) // Ignore error
+		return rename(dst, src)
+	}
+
+	// Fallback to copy and delete
+	// First copy back
+	copyOp := NewCopyOperation(op.ID(), dst)
+	copyOp.SetPaths(dst, src)
+	if err := copyOp.Execute(ctx, fsys); err != nil {
+		return fmt.Errorf("rollback failed during copy: %w", err)
+	}
+
+	// Then delete the destination
+	if remove, ok := getRemoveMethod(fsys); ok {
+		if err := remove(dst); err != nil {
+			// Try to clean up the copy
+			_ = remove(src)
+			return fmt.Errorf("rollback failed during delete: %w", err)
+		}
 	}
 
 	return nil

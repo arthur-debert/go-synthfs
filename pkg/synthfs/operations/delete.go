@@ -99,7 +99,7 @@ func (op *DeleteOperation) Validate(ctx context.Context, fsys interface{}) error
 
 // Rollback for delete would require backup data, which isn't implemented yet.
 func (op *DeleteOperation) Rollback(ctx context.Context, fsys interface{}) error {
-	return fmt.Errorf("rollback of delete operations not yet implemented")
+	return fmt.Errorf("rollback not implemented for delete operations")
 }
 
 // ReverseOps generates operations to restore deleted files (requires backup).
@@ -177,6 +177,7 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 		// Walk directory tree to backup all items
 		items := []interface{}{}
 		totalBackedUpSize := int64(0)
+		skippedFiles := 0
 		
 		// Recursive function to walk and backup directory tree
 		var walkAndBackup func(absPath, relPath string) error
@@ -238,6 +239,7 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 					if backupBudget != nil {
 						if err := backupBudget.ConsumeBackup(fileSizeMB); err != nil {
 							// Budget exceeded - skip this file
+							skippedFiles++
 							continue
 						}
 					}
@@ -258,6 +260,7 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 					if content == nil && backupBudget != nil {
 						// Restore budget if we couldn't read the file
 						backupBudget.RestoreBackup(fileSizeMB)
+						skippedFiles++
 						continue
 					}
 					
@@ -283,6 +286,7 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 		backupData.SizeMB = float64(totalBackedUpSize) / (1024 * 1024)
 		backupData.Metadata["items"] = items
 		backupData.Metadata["reverse_type"] = "recreate_directory_tree"
+		backupData.Metadata["skipped_files"] = skippedFiles
 	} else {
 		backupData.BackupType = "file"
 		// Try to read file content for backup
@@ -369,6 +373,11 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 			content:  backupData.BackupContent,
 		})
 		reverseOps = append(reverseOps, fileOp)
+	}
+	
+	// Check if we skipped files due to budget
+	if skippedFiles, ok := backupData.Metadata["skipped_files"].(int); ok && skippedFiles > 0 {
+		return reverseOps, backupData, fmt.Errorf("budget exceeded: skipped %d files", skippedFiles)
 	}
 	
 	return reverseOps, backupData, nil
