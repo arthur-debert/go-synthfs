@@ -146,7 +146,7 @@ func (op *CopyOperation) Validate(ctx context.Context, fsys interface{}) error {
 			return &core.ValidationError{
 				OperationID:   op.ID(),
 				OperationDesc: op.Describe(),
-				Reason:        "source does not exist",
+				Reason:        "copy source does not exist",
 				Cause:         err,
 			}
 		}

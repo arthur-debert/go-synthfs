@@ -29,9 +29,15 @@ func TestRegistryOperationsPackage(t *testing.T) {
 				continue
 			}
 
-			// Verify it's wrapped in adapter
-			if _, ok := op.(*OperationsPackageAdapter); !ok {
-				t.Errorf("Expected OperationsPackageAdapter for %s, got %T", opType, op)
+			// Verify it's wrapped in adapter (except for delete which temporarily uses SimpleOperation)
+			if opType == "delete" {
+				if _, ok := op.(*SimpleOperation); !ok {
+					t.Errorf("Expected SimpleOperation for %s (temporary), got %T", opType, op)
+				}
+			} else {
+				if _, ok := op.(*OperationsPackageAdapter); !ok {
+					t.Errorf("Expected OperationsPackageAdapter for %s, got %T", opType, op)
+				}
 			}
 
 			// Verify it implements Operation interface
