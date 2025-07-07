@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/execution"
 )
 
 // logInfo is a simple logger for the batch package
@@ -17,22 +18,6 @@ func logInfo(msg string, fields map[string]interface{}) {
 	fmt.Printf("[BATCH] %s %+v\n", msg, fields)
 }
 
-// convertToInterfaces converts typed slices to []interface{}
-func convertToInterfaces(slice interface{}) []interface{} {
-	if slice == nil {
-		return nil
-	}
-	
-	// Handle different slice types
-	switch s := slice.(type) {
-	case []interface{}:
-		return s
-	default:
-		// For now, return empty slice
-		// TODO: Implement proper conversion
-		return []interface{}{}
-	}
-}
 
 // BatchImpl represents a collection of operations that can be validated and executed as a unit.
 // This implementation uses interface{} types to avoid circular dependencies.
@@ -350,50 +335,77 @@ func (b *BatchImpl) Run() (interface{}, error) {
 func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 	startTime := time.Now()
 	
-	// Extract options
-	restorable := false
-	maxBackupMB := 0
+	// Extract options and convert to core.PipelineOptions
+	pipelineOpts := core.PipelineOptions{
+		Restorable:      false,
+		MaxBackupSizeMB: 10,
+	}
 	
 	if optsMap, ok := opts.(map[string]interface{}); ok {
 		if r, ok := optsMap["restorable"].(bool); ok {
-			restorable = r
+			pipelineOpts.Restorable = r
 		}
 		if mb, ok := optsMap["max_backup_size_mb"].(int); ok {
-			maxBackupMB = mb
+			pipelineOpts.MaxBackupSizeMB = mb
 		}
 	}
 	
 	// Log the start of execution
 	logInfo("executing batch", map[string]interface{}{
 		"operation_count": len(b.operations),
-		"restorable": restorable,
-		"max_backup_mb": maxBackupMB,
+		"restorable": pipelineOpts.Restorable,
+		"max_backup_mb": pipelineOpts.MaxBackupSizeMB,
 	})
+	
+	// If no operations, return successful empty result
+	if len(b.operations) == 0 {
+		duration := time.Since(startTime)
+		logInfo("batch execution completed", map[string]interface{}{
+			"success": true,
+			"duration": duration,
+			"operations_executed": 0,
+		})
+		
+		batchResult := NewResult(true, b.operations, []interface{}{}, duration, nil)
+		return batchResult, nil
+	}
+	
+	// Create executor and pipeline using execution package
+	logger := &simpleLogger{}
+	executor := execution.NewExecutor(logger)
+	
+	// Create pipeline adapter
+	pipeline := &pipelineAdapter{operations: b.operations}
+	
+	// Execute using the execution package
+	coreResult := executor.RunWithOptions(b.ctx, pipeline, b.fs, pipelineOpts)
 	
 	duration := time.Since(startTime)
 	
-	// For now, implement basic execution logic
-	// TODO: Integrate with proper execution pipeline
+	// Convert core.Result back to our interface{} result
 	var executionError error
-	success := true
+	if !coreResult.Success && len(coreResult.Errors) > 0 {
+		executionError = coreResult.Errors[0] // Take first error
+	}
 	
-	if len(b.operations) > 0 {
-		// For non-empty batches, return not implemented error
-		executionError = fmt.Errorf("batch execution with operations not yet fully implemented")
-		success = false
+	// Extract restore operations 
+	var restoreOps []interface{}
+	if coreResult.RestoreOps != nil {
+		restoreOps = coreResult.RestoreOps
 	}
 	
 	logInfo("batch execution completed", map[string]interface{}{
-		"success": success,
+		"success": coreResult.Success,
 		"duration": duration,
-		"operations_executed": 0,
+		"operations_executed": len(coreResult.Operations),
+		"restore_operations": len(restoreOps),
 	})
 	
 	// Convert to batch result interface
 	batchResult := NewResult(
-		success,
+		coreResult.Success,
 		b.operations,
-		[]interface{}{},
+		restoreOps,
 		duration,
 		executionError,
 	)
@@ -515,3 +527,140 @@ func (b *BatchImpl) ensureParentDirectories(path string) []core.OperationID {
 	return dependencyIDs
 }
 */
+
+// operationAdapter wraps interface{} operations to implement execution.OperationInterface
+type operationAdapter struct {
+	op interface{}
+}
+
+// newOperationAdapter creates a new operation adapter
+func newOperationAdapter(op interface{}) *operationAdapter {
+	return &operationAdapter{op: op}
+}
+
+func (oa *operationAdapter) ID() core.OperationID {
+	if op, ok := oa.op.(interface{ ID() core.OperationID }); ok {
+		return op.ID()
+	}
+	return core.OperationID("")
+}
+
+func (oa *operationAdapter) Describe() core.OperationDesc {
+	if op, ok := oa.op.(interface{ Describe() core.OperationDesc }); ok {
+		return op.Describe()
+	}
+	return core.OperationDesc{}
+}
+
+func (oa *operationAdapter) Dependencies() []core.OperationID {
+	if op, ok := oa.op.(interface{ Dependencies() []core.OperationID }); ok {
+		return op.Dependencies()
+	}
+	return []core.OperationID{}
+}
+
+func (oa *operationAdapter) Conflicts() []core.OperationID {
+	if op, ok := oa.op.(interface{ Conflicts() []core.OperationID }); ok {
+		return op.Conflicts()
+	}
+	return []core.OperationID{}
+}
+
+func (oa *operationAdapter) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Try ExecuteV2 first
+	if op, ok := oa.op.(interface{ ExecuteV2(interface{}, *core.ExecutionContext, interface{}) error }); ok {
+		return op.ExecuteV2(ctx, execCtx, fsys)
+	}
+	
+	// Fallback to Execute if available
+	if op, ok := oa.op.(interface{ Execute(context.Context, interface{}) error }); ok {
+		if ctxTyped, ok := ctx.(context.Context); ok {
+			return op.Execute(ctxTyped, fsys)
+		}
+	}
+	
+	return fmt.Errorf("operation does not implement ExecuteV2 or Execute methods")
+}
+
+func (oa *operationAdapter) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Try ValidateV2 first
+	if op, ok := oa.op.(interface{ ValidateV2(interface{}, *core.ExecutionContext, interface{}) error }); ok {
+		return op.ValidateV2(ctx, execCtx, fsys)
+	}
+	
+	// Fallback to Validate if available
+	if op, ok := oa.op.(interface{ Validate(context.Context, interface{}) error }); ok {
+		if ctxTyped, ok := ctx.(context.Context); ok {
+			return op.Validate(ctxTyped, fsys)
+		}
+	}
+	
+	return nil // No validation available
+}
+
+func (oa *operationAdapter) ReverseOps(ctx context.Context, fsys interface{}, budget *core.BackupBudget) ([]interface{}, *core.BackupData, error) {
+	if op, ok := oa.op.(interface{ ReverseOps(context.Context, interface{}, *core.BackupBudget) ([]interface{}, *core.BackupData, error) }); ok {
+		return op.ReverseOps(ctx, fsys, budget)
+	}
+	return nil, nil, nil
+}
+
+func (oa *operationAdapter) Rollback(ctx context.Context, fsys interface{}) error {
+	if op, ok := oa.op.(interface{ Rollback(context.Context, interface{}) error }); ok {
+		return op.Rollback(ctx, fsys)
+	}
+	return nil
+}
+
+func (oa *operationAdapter) GetItem() interface{} {
+	if op, ok := oa.op.(interface{ GetItem() interface{} }); ok {
+		return op.GetItem()
+	}
+	return nil
+}
+
+// pipelineAdapter adapts our operations to execution.PipelineInterface
+type pipelineAdapter struct {
+	operations []interface{}
+}
+
+func (pa *pipelineAdapter) Operations() []execution.OperationInterface {
+	var result []execution.OperationInterface
+	for _, op := range pa.operations {
+		result = append(result, newOperationAdapter(op))
+	}
+	return result
+}
+
+func (pa *pipelineAdapter) Resolve() error {
+	// TODO: Implement dependency resolution
+	// For now, return no error
+	return nil
+}
+
+func (pa *pipelineAdapter) Validate(ctx context.Context, fs interface{}) error {
+	// TODO: Implement pipeline validation
+	// For now, return no error
+	return nil
+}
+
+// simpleLogger implements core.Logger for use with execution package
+type simpleLogger struct{}
+
+func (l *simpleLogger) Trace() core.LogEvent { return &simpleLogEvent{} }
+func (l *simpleLogger) Debug() core.LogEvent { return &simpleLogEvent{} }
+func (l *simpleLogger) Info() core.LogEvent  { return &simpleLogEvent{} }
+func (l *simpleLogger) Warn() core.LogEvent  { return &simpleLogEvent{} }
+func (l *simpleLogger) Error() core.LogEvent { return &simpleLogEvent{} }
+
+// simpleLogEvent implements core.LogEvent
+type simpleLogEvent struct{}
+
+func (e *simpleLogEvent) Str(key, val string) core.LogEvent             { return e }
+func (e *simpleLogEvent) Int(key string, val int) core.LogEvent         { return e }
+func (e *simpleLogEvent) Bool(key string, val bool) core.LogEvent       { return e }
+func (e *simpleLogEvent) Dur(key string, val interface{}) core.LogEvent { return e }
+func (e *simpleLogEvent) Interface(key string, val interface{}) core.LogEvent { return e }
+func (e *simpleLogEvent) Err(err error) core.LogEvent                   { return e }
+func (e *simpleLogEvent) Float64(key string, val float64) core.LogEvent { return e }
+func (e *simpleLogEvent) Msg(msg string)                                {}
