@@ -27,3 +27,43 @@ type OperationFactory interface {
 	CreateOperation(id OperationID, opType string, path string) (interface{}, error)
 	SetItemForOperation(op interface{}, item interface{}) error
 }
+
+// OperationInterface defines the core operation interface for the batch package
+type OperationInterface interface {
+	OperationMetadata
+	DependencyAware
+	ExecutableV2
+	// Additional methods needed by batch
+	Validate(ctx interface{}, fsys interface{}) error
+	SetDescriptionDetail(key string, value interface{})
+	AddDependency(depID OperationID)
+	SetPaths(src, dst string)
+	GetItem() interface{}
+}
+
+// FilesystemInterface defines the core filesystem interface for the batch package
+type FilesystemInterface interface {
+	// Read operations
+	Stat(name string) (interface{}, error)
+	Open(name string) (interface{}, error)
+	// Write operations (for FullFileSystem)
+	WriteFile(name string, data []byte, perm interface{}) error
+	MkdirAll(path string, perm interface{}) error
+	Remove(name string) error
+	RemoveAll(name string) error
+	Rename(oldpath, newpath string) error
+	Symlink(oldname, newname string) error
+}
+
+// BatchInterface defines the interface for batch orchestration
+type BatchInterface interface {
+	Operations() []interface{}
+	CreateDir(path string, mode ...interface{}) (interface{}, error)
+	CreateFile(path string, content []byte, mode ...interface{}) (interface{}, error)
+	Copy(src, dst string) (interface{}, error)
+	Move(src, dst string) (interface{}, error)
+	Delete(path string) (interface{}, error)
+	CreateSymlink(target, linkPath string) (interface{}, error)
+	WithFileSystem(fs interface{}) interface{}
+	WithContext(ctx interface{}) interface{}
+}

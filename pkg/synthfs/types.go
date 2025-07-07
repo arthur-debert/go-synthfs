@@ -68,6 +68,11 @@ type Operation interface {
 	GetChecksum(path string) *ChecksumRecord
 	GetAllChecksums() map[string]*ChecksumRecord
 	ReverseOps(ctx context.Context, fsys FileSystem, budget *core.BackupBudget) ([]Operation, *core.BackupData, error)
+	
+	// Batch building methods
+	SetDescriptionDetail(key string, value interface{})
+	AddDependency(depID OperationID)
+	SetPaths(src, dst string)
 }
 
 // ValidationError represents an error during operation validation.
