@@ -145,8 +145,8 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 	// Check budget if available
 	if backupBudget != nil {
 		if err := backupBudget.ConsumeBackup(estimatedSizeMB); err != nil {
-			// Budget exceeded - return nil backup data
-			return nil, nil, nil
+			// Budget exceeded - return error
+			return nil, nil, fmt.Errorf("budget exceeded: cannot backup file '%s' (%.2fMB): %w", path, estimatedSizeMB, err)
 		}
 	}
 	

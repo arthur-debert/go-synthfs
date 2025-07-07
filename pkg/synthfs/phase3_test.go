@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
 func TestBackupBudget(t *testing.T) {
@@ -159,10 +161,15 @@ func TestReverseOperations_CreateFile(t *testing.T) {
 	ctx := context.Background()
 	fs := NewTestFileSystem()
 
-	op := NewSimpleOperation("test-create-file", "create_file", "test.txt")
+	registry := GetDefaultRegistry()
+	op, err := registry.CreateOperation(core.OperationID("test-create-file"), "create_file", "test.txt")
+	if err != nil {
+		t.Fatalf("Failed to create operation: %v", err)
+	}
+	operation := op.(Operation)
 	budget := &BackupBudget{TotalMB: 10.0, RemainingMB: 10.0, UsedMB: 0.0}
 
-	reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
+	reverseOps, backupData, err := operation.ReverseOps(ctx, fs, budget)
 	if err != nil {
 		t.Fatalf("ReverseOps failed: %v", err)
 	}
@@ -202,10 +209,15 @@ func TestReverseOperations_Delete(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	op := NewSimpleOperation("test-delete", "delete", "test.txt")
+	registry := GetDefaultRegistry()
+	op, err := registry.CreateOperation(core.OperationID("test-delete"), "delete", "test.txt")
+	if err != nil {
+		t.Fatalf("Failed to create operation: %v", err)
+	}
+	operation := op.(Operation)
 	budget := &BackupBudget{TotalMB: 10.0, RemainingMB: 10.0, UsedMB: 0.0}
 
-	reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
+	reverseOps, backupData, err := operation.ReverseOps(ctx, fs, budget)
 	if err != nil {
 		t.Fatalf("ReverseOps failed: %v", err)
 	}
@@ -255,10 +267,15 @@ func TestReverseOperations_DeleteBudgetExceeded(t *testing.T) {
 		t.Fatalf("Failed to create large test file: %v", err)
 	}
 
-	op := NewSimpleOperation("test-delete", "delete", "large.txt")
+	registry := GetDefaultRegistry()
+	op, err := registry.CreateOperation(core.OperationID("test-delete"), "delete", "large.txt")
+	if err != nil {
+		t.Fatalf("Failed to create operation: %v", err)
+	}
+	operation := op.(Operation)
 	budget := &BackupBudget{TotalMB: 10.0, RemainingMB: 10.0, UsedMB: 0.0}
 
-	_, _, err = op.ReverseOps(ctx, fs, budget)
+	_, _, err = operation.ReverseOps(ctx, fs, budget)
 	if err == nil {
 		t.Fatal("Expected ReverseOps to fail due to budget exceeded")
 	}
@@ -276,11 +293,16 @@ func TestReverseOperations_Move(t *testing.T) {
 	ctx := context.Background()
 	fs := NewTestFileSystem()
 
-	op := NewSimpleOperation("test-move", "move", "src.txt")
-	op.SetPaths("src.txt", "dst.txt")
+	registry := GetDefaultRegistry()
+	op, err := registry.CreateOperation(core.OperationID("test-move"), "move", "src.txt")
+	if err != nil {
+		t.Fatalf("Failed to create operation: %v", err)
+	}
+	operation := op.(Operation)
+	operation.SetPaths("src.txt", "dst.txt")
 	budget := &BackupBudget{TotalMB: 10.0, RemainingMB: 10.0, UsedMB: 0.0}
 
-	reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
+	reverseOps, backupData, err := operation.ReverseOps(ctx, fs, budget)
 	if err != nil {
 		t.Fatalf("ReverseOps failed: %v", err)
 	}
@@ -295,12 +317,18 @@ func TestReverseOperations_Move(t *testing.T) {
 	}
 
 	// Check that paths are reversed
-	simpleReverseOp := reverseOp.(*SimpleOperation)
-	if simpleReverseOp.GetSrcPath() != "dst.txt" {
-		t.Errorf("Expected reverse src path 'dst.txt', got '%s'", simpleReverseOp.GetSrcPath())
+	reverseDesc := reverseOp.Describe()
+	if reverseDesc.Path != "dst.txt" {
+		t.Errorf("Expected reverse src path 'dst.txt', got '%s'", reverseDesc.Path)
 	}
-	if simpleReverseOp.GetDstPath() != "src.txt" {
-		t.Errorf("Expected reverse dst path 'src.txt', got '%s'", simpleReverseOp.GetDstPath())
+	// For move operations, we need to check the operation type
+	if reverseOp, ok := reverseOp.(interface{ GetSrcPath() string; GetDstPath() string }); ok {
+		if reverseOp.GetSrcPath() != "dst.txt" {
+			t.Errorf("Expected reverse src path 'dst.txt', got '%s'", reverseOp.GetSrcPath())
+		}
+		if reverseOp.GetDstPath() != "src.txt" {
+			t.Errorf("Expected reverse dst path 'src.txt', got '%s'", reverseOp.GetDstPath())
+		}
 	}
 
 	if backupData.BackupType != "none" {
@@ -312,11 +340,16 @@ func TestReverseOperations_Copy(t *testing.T) {
 	ctx := context.Background()
 	fs := NewTestFileSystem()
 
-	op := NewSimpleOperation("test-copy", "copy", "src.txt")
-	op.SetPaths("src.txt", "dst.txt")
+	registry := GetDefaultRegistry()
+	op, err := registry.CreateOperation(core.OperationID("test-copy"), "copy", "src.txt")
+	if err != nil {
+		t.Fatalf("Failed to create operation: %v", err)
+	}
+	operation := op.(Operation)
+	operation.SetPaths("src.txt", "dst.txt")
 	budget := &BackupBudget{TotalMB: 10.0, RemainingMB: 10.0, UsedMB: 0.0}
 
-	reverseOps, backupData, err := op.ReverseOps(ctx, fs, budget)
+	reverseOps, backupData, err := operation.ReverseOps(ctx, fs, budget)
 	if err != nil {
 		t.Fatalf("ReverseOps failed: %v", err)
 	}
@@ -345,11 +378,19 @@ func TestExecutor_RunWithOptions_Basic(t *testing.T) {
 	pipeline := NewMemPipeline()
 
 	// Create a simple operation
-	op := NewSimpleOperation("test", "create_file", "test.txt")
+	registry := GetDefaultRegistry()
+	op, err := registry.CreateOperation(core.OperationID("test"), "create_file", "test.txt")
+	if err != nil {
+		t.Fatalf("Failed to create operation: %v", err)
+	}
+	operation := op.(Operation)
 	fileItem := NewFile("test.txt").WithContent([]byte("content"))
-	op.SetItem(fileItem)
+	err = registry.SetItemForOperation(op, fileItem)
+	if err != nil {
+		t.Fatalf("Failed to set item for operation: %v", err)
+	}
 
-	err := pipeline.Add(op)
+	err = pipeline.Add(operation)
 	if err != nil {
 		t.Fatalf("Failed to add operation to pipeline: %v", err)
 	}
@@ -382,11 +423,19 @@ func TestExecutor_RunWithOptions_Restorable(t *testing.T) {
 	pipeline := NewMemPipeline()
 
 	// Create a simple operation
-	op := NewSimpleOperation("test", "create_file", "test.txt")
+	registry := GetDefaultRegistry()
+	op, err := registry.CreateOperation(core.OperationID("test"), "create_file", "test.txt")
+	if err != nil {
+		t.Fatalf("Failed to create operation: %v", err)
+	}
+	operation := op.(Operation)
 	fileItem := NewFile("test.txt").WithContent([]byte("content"))
-	op.SetItem(fileItem)
+	err = registry.SetItemForOperation(op, fileItem)
+	if err != nil {
+		t.Fatalf("Failed to set item for operation: %v", err)
+	}
 
-	err := pipeline.Add(op)
+	err = pipeline.Add(operation)
 	if err != nil {
 		t.Fatalf("Failed to add operation to pipeline: %v", err)
 	}

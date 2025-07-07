@@ -2,6 +2,7 @@ package synthfs
 
 import (
 	"context"
+	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
@@ -135,6 +136,15 @@ func (a *OperationsPackageAdapter) ReverseOps(ctx context.Context, fsys FileSyst
 	if data != nil {
 		if bd, ok := data.(*core.BackupData); ok {
 			backupData = bd
+		}
+	} else if err == nil && len(result) > 0 {
+		// If no backup data but operation succeeded, create a "none" type backup data
+		// This maintains compatibility with synthfs package expectations
+		backupData = &core.BackupData{
+			OperationID: a.opsOperation.ID(),
+			BackupType:  "none",
+			BackupTime:  time.Now(),
+			SizeMB:      0,
 		}
 	}
 
