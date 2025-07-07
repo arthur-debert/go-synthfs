@@ -56,6 +56,12 @@ func (t PathStateType) String() string {
 	}
 }
 
+// Default values
+const (
+	// DefaultMaxBackupMB is the default maximum backup size in MB
+	DefaultMaxBackupMB = 10
+)
+
 // ArchiveFormat defines the type of archive
 type ArchiveFormat int
 

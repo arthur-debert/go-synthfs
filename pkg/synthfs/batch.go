@@ -44,7 +44,8 @@ func NewBatch() *Batch {
 // WithFileSystem sets the filesystem for the batch operations.
 func (b *Batch) WithFileSystem(fs FullFileSystem) *Batch {
 	b.fs = fs
-	b.pathTracker.fs = fs // Keep pathTracker's filesystem in sync
+	// Recreate pathTracker with new filesystem
+	b.pathTracker = NewPathStateTracker(fs)
 	return b
 }
 
