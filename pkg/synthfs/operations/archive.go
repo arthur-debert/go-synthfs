@@ -35,7 +35,7 @@ func (op *CreateArchiveOperation) Execute(ctx context.Context, fsys interface{})
 	if item := op.GetItem(); item != nil {
 		if archiveItem, ok := item.(interface {
 			Sources() []string
-			Format() string
+			Format() interface{}
 		}); ok {
 			sources = archiveItem.Sources()
 			format = archiveItem.Format()

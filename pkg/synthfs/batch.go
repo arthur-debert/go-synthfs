@@ -376,9 +376,11 @@ func (b *Batch) CreateArchive(archivePath string, format ArchiveFormat, sources 
 	// Set description details based on operation type
 	if adapter, ok := op.(*OperationsPackageAdapter); ok {
 		adapter.SetDescriptionDetail("format", targets.ArchiveFormat(format).String())
+		adapter.SetDescriptionDetail("sources", sources)
 		adapter.SetDescriptionDetail("source_count", len(sources))
 	} else if simpleOp, ok := op.(*SimpleOperation); ok {
 		simpleOp.SetDescriptionDetail("format", targets.ArchiveFormat(format).String())
+		simpleOp.SetDescriptionDetail("sources", sources)
 		simpleOp.SetDescriptionDetail("source_count", len(sources))
 	}
 

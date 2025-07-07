@@ -55,9 +55,14 @@ func (op *CopyOperation) Execute(ctx context.Context, fsys interface{}) error {
 		}
 	}
 
-	// Check if source is a file
-	if isRegular, ok := info.(interface{ Mode() interface{} }); ok {
-		// Open source file
+	// Check if source is a directory
+	isDir := false
+	if dirChecker, ok := info.(interface{ IsDir() bool }); ok {
+		isDir = dirChecker.IsDir()
+	}
+
+	if !isDir {
+		// It's a file - copy it
 		srcFile, err := open(src)
 		if err != nil {
 			return fmt.Errorf("failed to open source file: %w", err)
@@ -79,8 +84,14 @@ func (op *CopyOperation) Execute(ctx context.Context, fsys interface{}) error {
 			return fmt.Errorf("source file does not implement io.Reader")
 		}
 
+		// Get file mode
+		var mode interface{} = fs.FileMode(0644) // default
+		if modeGetter, ok := info.(interface{ Mode() fs.FileMode }); ok {
+			mode = modeGetter.Mode()
+		}
+
 		// Write to destination
-		if err := writeFile(dst, content, isRegular.Mode()); err != nil {
+		if err := writeFile(dst, content, mode); err != nil {
 			return fmt.Errorf("failed to write destination file: %w", err)
 		}
 
