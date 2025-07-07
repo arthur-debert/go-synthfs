@@ -40,7 +40,14 @@ func (r *OperationRegistry) CreateOperation(id core.OperationID, opType string, 
 
 // SetItemForOperation sets the item for an operation
 func (r *OperationRegistry) SetItemForOperation(op interface{}, item interface{}) error {
-	// Try operations package operation first
+	// Check if it's an adapter wrapping an operations.Operation
+	if adapter, ok := op.(*OperationsPackageAdapter); ok {
+		// Set on the underlying operation
+		adapter.opsOperation.SetItem(item)
+		return nil
+	}
+	
+	// Try operations package operation directly
 	if opsOp, ok := op.(operations.Operation); ok {
 		return r.operationsFactory.SetItemForOperation(opsOp, item)
 	}
