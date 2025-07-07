@@ -125,7 +125,7 @@ func (pst *PathStateTracker) UpdateState(op OperationInterface) error {
 		// Get source and destination paths from details
 		srcPath, _ := desc.Details["src"].(string)
 		dstPath, _ := desc.Details["dst"].(string)
-		
+
 		if srcPath == "" || dstPath == "" {
 			// Try to get from operation method if available
 			if pathGetter, ok := op.(interface{ GetSrcPath() string }); ok {
@@ -135,7 +135,7 @@ func (pst *PathStateTracker) UpdateState(op OperationInterface) error {
 				dstPath = pathGetter.GetDstPath()
 			}
 		}
-		
+
 		if srcPath == "" || dstPath == "" {
 			return fmt.Errorf("copy operation %s missing source or destination path", opID)
 		}
@@ -156,7 +156,7 @@ func (pst *PathStateTracker) UpdateState(op OperationInterface) error {
 		// Get source and destination paths from details
 		srcPath, _ := desc.Details["src"].(string)
 		dstPath, _ := desc.Details["dst"].(string)
-		
+
 		if srcPath == "" || dstPath == "" {
 			// Try to get from operation method if available
 			if pathGetter, ok := op.(interface{ GetSrcPath() string }); ok {
@@ -166,7 +166,7 @@ func (pst *PathStateTracker) UpdateState(op OperationInterface) error {
 				dstPath = pathGetter.GetDstPath()
 			}
 		}
-		
+
 		if srcPath == "" || dstPath == "" {
 			return fmt.Errorf("move operation %s missing source or destination path", opID)
 		}

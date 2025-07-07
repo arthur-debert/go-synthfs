@@ -10,21 +10,28 @@ import (
 
 // Executor processes a pipeline of operations
 type Executor struct {
-	logger core.Logger
+	logger   core.Logger
+	eventBus core.EventBus
 }
 
 // NewExecutor creates a new Executor
 func NewExecutor(logger core.Logger) *Executor {
 	return &Executor{
-		logger: logger,
+		logger:   logger,
+		eventBus: core.NewMemoryEventBus(logger),
 	}
+}
+
+// EventBus returns the executor's event bus for subscription
+func (e *Executor) EventBus() core.EventBus {
+	return e.eventBus
 }
 
 // DefaultPipelineOptions returns sensible defaults for pipeline execution
 func DefaultPipelineOptions() core.PipelineOptions {
 	return core.PipelineOptions{
-		Restorable:      false,                      // No backup overhead by default
-		MaxBackupSizeMB: core.DefaultMaxBackupMB,   // Default budget
+		Restorable:      false,                   // No backup overhead by default
+		MaxBackupSizeMB: core.DefaultMaxBackupMB, // Default budget
 	}
 }
 
@@ -86,8 +93,9 @@ func (e *Executor) RunWithOptions(ctx context.Context, pipeline PipelineInterfac
 
 	// Create execution context
 	execCtx := &core.ExecutionContext{
-		Logger: e.logger,
-		Budget: budget,
+		Logger:   e.logger,
+		Budget:   budget,
+		EventBus: e.eventBus,
 	}
 
 	// Resolve dependencies first

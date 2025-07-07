@@ -3,6 +3,7 @@ package synthfs
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
@@ -172,9 +173,71 @@ func (op *SimpleOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionCon
 		return fmt.Errorf("invalid filesystem type")
 	}
 	
-	// For now, delegate to the original method
-	// In the future, we'll use execCtx.Logger and execCtx.Budget
-	return op.Execute(context, filesystem)
+	// Emit operation started event
+	if execCtx.EventBus != nil {
+		startEvent := core.NewOperationStartedEvent(
+			op.id,
+			op.description.Type,
+			op.description.Path,
+			op.description.Details,
+		)
+		execCtx.EventBus.PublishAsync(context, startEvent)
+	}
+	
+	// Execute the operation and measure duration
+	startTime := time.Now()
+	
+	execCtx.Logger.Trace().
+		Str("op_id", string(op.id)).
+		Str("op_type", op.description.Type).
+		Str("path", op.description.Path).
+		Msg("executing operation")
+	
+	err := op.Execute(context, filesystem)
+	duration := time.Since(startTime)
+	
+	// Emit completion or failure event
+	if execCtx.EventBus != nil {
+		if err != nil {
+			failEvent := core.NewOperationFailedEvent(
+				op.id,
+				op.description.Type,
+				op.description.Path,
+				op.description.Details,
+				err,
+				duration,
+			)
+			execCtx.EventBus.PublishAsync(context, failEvent)
+		} else {
+			completeEvent := core.NewOperationCompletedEvent(
+				op.id,
+				op.description.Type,
+				op.description.Path,
+				op.description.Details,
+				duration,
+			)
+			execCtx.EventBus.PublishAsync(context, completeEvent)
+		}
+	}
+	
+	if err != nil {
+		execCtx.Logger.Trace().
+			Str("op_id", string(op.id)).
+			Str("op_type", op.description.Type).
+			Str("path", op.description.Path).
+			Dur("duration", duration).
+			Err(err).
+			Msg("operation failed")
+	} else {
+		execCtx.Logger.Trace().
+			Str("op_id", string(op.id)).
+			Str("op_type", op.description.Type).
+			Str("path", op.description.Path).
+			Dur("duration", duration).
+			Msg("operation completed")
+	}
+	
+	return err
 }
 
 // Execute performs the actual filesystem operation.

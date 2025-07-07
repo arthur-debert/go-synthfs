@@ -23,7 +23,8 @@ type LogEvent interface {
 
 // ExecutionContext provides all the dependencies needed for operation execution
 type ExecutionContext struct {
-	Logger Logger
-	Budget *BackupBudget
+	Logger   Logger
+	Budget   *BackupBudget
+	EventBus EventBus
 	// Note: FileSystem will be passed separately to avoid import cycles
 }

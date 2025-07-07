@@ -366,7 +366,7 @@ func (mp *memPipeline) validateDependencies() error {
 					Str("missing_dependency", string(depID)).
 					Interface("all_dependencies", deps).
 					Msg("dependency reference validation failed - missing dependency")
-				
+
 				return fmt.Errorf("operation %s has missing dependency: %s", op.ID(), depID)
 			} else {
 				mp.logger.Debug().

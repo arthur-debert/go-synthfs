@@ -29,7 +29,7 @@ type Result struct {
 	Duration   time.Duration
 	Errors     []error                     // Aggregated errors from operations that failed
 	Rollback   func(context.Context) error // Rollback function for failed transactions
-	
+
 	// Enhanced restoration functionality
 	Budget     *BackupBudget // Backup budget information (only if restorable=true)
 	RestoreOps []interface{} // Generated reverse operations for restoration

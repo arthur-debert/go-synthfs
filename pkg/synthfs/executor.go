@@ -50,6 +50,11 @@ func NewExecutor() *Executor {
 	}
 }
 
+// EventBus returns the executor's event bus for subscription
+func (e *Executor) EventBus() core.EventBus {
+	return e.executor.EventBus()
+}
+
 // Run runs all operations in the pipeline with default options.
 func (e *Executor) Run(ctx context.Context, pipeline Pipeline, fs FileSystem) *Result {
 	return e.RunWithOptions(ctx, pipeline, fs, DefaultPipelineOptions())
