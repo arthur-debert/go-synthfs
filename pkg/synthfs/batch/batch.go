@@ -1,0 +1,437 @@
+package batch
+
+import (
+	"context"
+	"fmt"
+	"io/fs"
+	"strings"
+	
+	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+)
+
+// BatchImpl represents a collection of operations that can be validated and executed as a unit.
+// This implementation uses interface{} types to avoid circular dependencies.
+type BatchImpl struct {
+	operations  []interface{}
+	fs          interface{} // Filesystem interface
+	ctx         context.Context
+	idCounter   int
+	// TODO: Add pathTracker when implementing path state tracking
+	// pathTracker interface{} // Path state tracker interface
+	registry    core.OperationFactory
+}
+
+// NewBatch creates a new operation batch.
+func NewBatch(fs interface{}, registry core.OperationFactory) Batch {
+	return &BatchImpl{
+		operations:  []interface{}{},
+		fs:          fs,
+		ctx:         context.Background(),
+		idCounter:   0,
+		registry:    registry,
+	}
+}
+
+// Operations returns all operations currently in the batch.
+func (b *BatchImpl) Operations() []interface{} {
+	// Return a copy to prevent external modification
+	opsCopy := make([]interface{}, len(b.operations))
+	copy(opsCopy, b.operations)
+	return opsCopy
+}
+
+// WithFileSystem sets the filesystem for the batch operations.
+func (b *BatchImpl) WithFileSystem(fs interface{}) Batch {
+	b.fs = fs
+	// TODO: Recreate pathTracker with new filesystem
+	return b
+}
+
+// WithContext sets the context for the batch operations.
+func (b *BatchImpl) WithContext(ctx context.Context) Batch {
+	b.ctx = ctx
+	return b
+}
+
+// WithRegistry sets a custom operation registry for the batch.
+func (b *BatchImpl) WithRegistry(registry core.OperationFactory) Batch {
+	b.registry = registry
+	return b
+}
+
+// add adds an operation to the batch and validates it
+func (b *BatchImpl) add(op interface{}) error {
+	// Get validation method through interface assertion
+	type validator interface {
+		Validate(ctx context.Context, fsys interface{}) error
+	}
+	
+	if v, ok := op.(validator); ok {
+		if err := v.Validate(b.ctx, b.fs); err != nil {
+			return err
+		}
+	}
+	
+	// TODO: Validate against projected state using pathTracker
+	
+	b.operations = append(b.operations, op)
+	return nil
+}
+
+// CreateDir adds a directory creation operation to the batch.
+func (b *BatchImpl) CreateDir(path string, mode ...fs.FileMode) (interface{}, error) {
+	fileMode := fs.FileMode(0755) // Default directory mode
+	if len(mode) > 0 {
+		fileMode = mode[0]
+	}
+	
+	// Create the operation using the registry
+	op, err := b.createOperation("create_directory", path)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Set the item for this create operation
+	// Note: The actual directory item creation is handled by the main package
+	// This is just setting up the operation metadata
+	if err := b.setOperationDetails(op, map[string]interface{}{
+		"mode": fileMode.String(),
+	}); err != nil {
+		return nil, err
+	}
+	
+	// Add to batch (which validates)
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("validation failed for CreateDir(%s): %w", path, err)
+	}
+	
+	return op, nil
+}
+
+// CreateFile adds a file creation operation to the batch.
+func (b *BatchImpl) CreateFile(path string, content []byte, mode ...fs.FileMode) (interface{}, error) {
+	fileMode := fs.FileMode(0644) // Default file mode
+	if len(mode) > 0 {
+		fileMode = mode[0]
+	}
+	
+	// Create the operation
+	op, err := b.createOperation("create_file", path)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Set operation details
+	if err := b.setOperationDetails(op, map[string]interface{}{
+		"content_length": len(content),
+		"mode":          fileMode.String(),
+		"content":       content,
+	}); err != nil {
+		return nil, err
+	}
+	
+	// Add to batch
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("validation failed for CreateFile(%s): %w", path, err)
+	}
+	
+	return op, nil
+}
+
+// Copy adds a copy operation to the batch.
+func (b *BatchImpl) Copy(src, dst string) (interface{}, error) {
+	// Create the operation
+	op, err := b.createOperation("copy", src)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Set operation details
+	if err := b.setOperationDetails(op, map[string]interface{}{
+		"destination": dst,
+	}); err != nil {
+		return nil, err
+	}
+	
+	// Set paths
+	if err := b.setOperationPaths(op, src, dst); err != nil {
+		return nil, err
+	}
+	
+	// Add to batch
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("validation failed for Copy(%s, %s): %w", src, dst, err)
+	}
+	
+	return op, nil
+}
+
+// Move adds a move operation to the batch.
+func (b *BatchImpl) Move(src, dst string) (interface{}, error) {
+	// Create the operation
+	op, err := b.createOperation("move", src)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Set operation details
+	if err := b.setOperationDetails(op, map[string]interface{}{
+		"destination": dst,
+	}); err != nil {
+		return nil, err
+	}
+	
+	// Set paths
+	if err := b.setOperationPaths(op, src, dst); err != nil {
+		return nil, err
+	}
+	
+	// Add to batch
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("validation failed for Move(%s, %s): %w", src, dst, err)
+	}
+	
+	return op, nil
+}
+
+// Delete adds a delete operation to the batch.
+func (b *BatchImpl) Delete(path string) (interface{}, error) {
+	// Create the operation
+	op, err := b.createOperation("delete", path)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Add to batch
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("failed to add Delete(%s): %w", path, err)
+	}
+	
+	return op, nil
+}
+
+// CreateSymlink adds a symbolic link creation operation to the batch.
+func (b *BatchImpl) CreateSymlink(target, linkPath string) (interface{}, error) {
+	// Create the operation
+	op, err := b.createOperation("create_symlink", linkPath)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Set operation details
+	if err := b.setOperationDetails(op, map[string]interface{}{
+		"target": target,
+	}); err != nil {
+		return nil, err
+	}
+	
+	// Add to batch
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("failed to add CreateSymlink(%s, %s): %w", target, linkPath, err)
+	}
+	
+	return op, nil
+}
+
+// CreateArchive adds an archive creation operation to the batch.
+func (b *BatchImpl) CreateArchive(archivePath string, format interface{}, sources ...string) (interface{}, error) {
+	// Validate inputs
+	if len(sources) == 0 {
+		return nil, fmt.Errorf("validation failed for CreateArchive(%s): must specify at least one source", archivePath)
+	}
+	
+	// Create the operation
+	op, err := b.createOperation("create_archive", archivePath)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Set operation details
+	if err := b.setOperationDetails(op, map[string]interface{}{
+		"format":       format,
+		"source_count": len(sources),
+		"sources":      sources,
+	}); err != nil {
+		return nil, err
+	}
+	
+	// Add to batch
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("failed to add CreateArchive(%s): %w", archivePath, err)
+	}
+	
+	return op, nil
+}
+
+// Unarchive adds an unarchive operation to the batch.
+func (b *BatchImpl) Unarchive(archivePath, extractPath string) (interface{}, error) {
+	// Create the operation
+	op, err := b.createOperation("unarchive", archivePath)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Set operation details
+	if err := b.setOperationDetails(op, map[string]interface{}{
+		"extract_path": extractPath,
+	}); err != nil {
+		return nil, err
+	}
+	
+	// Add to batch
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("failed to add Unarchive(%s, %s): %w", archivePath, extractPath, err)
+	}
+	
+	return op, nil
+}
+
+// UnarchiveWithPatterns adds an unarchive operation with pattern filtering to the batch.
+func (b *BatchImpl) UnarchiveWithPatterns(archivePath, extractPath string, patterns ...string) (interface{}, error) {
+	// Create the operation
+	op, err := b.createOperation("unarchive", archivePath)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Set operation details
+	if err := b.setOperationDetails(op, map[string]interface{}{
+		"extract_path":  extractPath,
+		"patterns":      patterns,
+		"pattern_count": len(patterns),
+	}); err != nil {
+		return nil, err
+	}
+	
+	// Add to batch
+	if err := b.add(op); err != nil {
+		return nil, fmt.Errorf("failed to add UnarchiveWithPatterns(%s, %s): %w", archivePath, extractPath, err)
+	}
+	
+	return op, nil
+}
+
+// Run runs all operations in the batch using default options.
+func (b *BatchImpl) Run() (interface{}, error) {
+	// TODO: Implement execution using executor and pipeline
+	return nil, fmt.Errorf("Run not yet implemented in batch package")
+}
+
+// RunWithOptions runs all operations in the batch with specified options.
+func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
+	// TODO: Implement execution with options
+	return nil, fmt.Errorf("RunWithOptions not yet implemented in batch package")
+}
+
+// RunRestorable runs all operations with backup enabled using the default 10MB budget.
+func (b *BatchImpl) RunRestorable() (interface{}, error) {
+	// TODO: Implement restorable execution
+	return nil, fmt.Errorf("RunRestorable not yet implemented in batch package")
+}
+
+// RunRestorableWithBudget runs all operations with backup enabled using a custom budget.
+func (b *BatchImpl) RunRestorableWithBudget(maxBackupMB int) (interface{}, error) {
+	// TODO: Implement restorable execution with budget
+	return nil, fmt.Errorf("RunRestorableWithBudget not yet implemented in batch package")
+}
+
+// Helper methods
+
+// generateID creates a unique operation ID based on type and path.
+func (b *BatchImpl) generateID(opType, path string) core.OperationID {
+	b.idCounter++
+	cleanPath := strings.ReplaceAll(path, "/", "_")
+	cleanPath = strings.ReplaceAll(cleanPath, "\\", "_")
+	return core.OperationID(fmt.Sprintf("batch_%d_%s_%s", b.idCounter, opType, cleanPath))
+}
+
+// createOperation is a helper method to create operations using the registry
+func (b *BatchImpl) createOperation(opType, path string) (interface{}, error) {
+	opID := b.generateID(opType, path)
+	return b.registry.CreateOperation(opID, opType, path)
+}
+
+// setOperationDetails sets details on an operation through interface assertion
+func (b *BatchImpl) setOperationDetails(op interface{}, details map[string]interface{}) error {
+	type detailSetter interface {
+		SetDescriptionDetail(key string, value interface{})
+	}
+	
+	setter, ok := op.(detailSetter)
+	if !ok {
+		return fmt.Errorf("operation does not support setting details")
+	}
+	
+	for key, value := range details {
+		setter.SetDescriptionDetail(key, value)
+	}
+	
+	return nil
+}
+
+// setOperationPaths sets paths on an operation through interface assertion
+func (b *BatchImpl) setOperationPaths(op interface{}, src, dst string) error {
+	type pathSetter interface {
+		SetPaths(src, dst string)
+	}
+	
+	setter, ok := op.(pathSetter)
+	if !ok {
+		return fmt.Errorf("operation does not support setting paths")
+	}
+	
+	setter.SetPaths(src, dst)
+	return nil
+}
+
+// TODO: Implement ensureParentDirectories when adding auto parent directory creation
+// ensureParentDirectories analyzes a path and adds CreateDir operations for missing parent directories.
+/*
+func (b *BatchImpl) ensureParentDirectories(path string) []core.OperationID {
+	// Clean and normalize the path
+	cleanPath := filepath.Clean(path)
+	parentDir := filepath.Dir(cleanPath)
+	
+	var dependencyIDs []core.OperationID
+	
+	// If parent is root or current directory, no parent needed
+	if parentDir == "." || parentDir == "/" || parentDir == cleanPath {
+		return dependencyIDs
+	}
+	
+	// TODO: Check if parent directory exists or is projected to exist
+	// For now, we'll create parent directories as needed
+	
+	// Recursively ensure parent's parents exist
+	parentDeps := b.ensureParentDirectories(parentDir)
+	dependencyIDs = append(dependencyIDs, parentDeps...)
+	
+	// Create operation for the parent directory
+	parentOp, err := b.createOperation("create_directory", parentDir)
+	if err != nil {
+		return dependencyIDs
+	}
+	
+	// Set directory mode
+	_ = b.setOperationDetails(parentOp, map[string]interface{}{
+		"mode": "0755",
+	})
+	
+	// Add dependencies from parent's parents
+	if depAdder, ok := parentOp.(interface{ AddDependency(core.OperationID) }); ok {
+		for _, depID := range parentDeps {
+			depAdder.AddDependency(depID)
+		}
+	}
+	
+	// Add to batch
+	if err := b.add(parentOp); err == nil {
+		// Get operation ID
+		if idGetter, ok := parentOp.(interface{ ID() core.OperationID }); ok {
+			dependencyIDs = append(dependencyIDs, idGetter.ID())
+		}
+	}
+	
+	return dependencyIDs
+}
+*/
