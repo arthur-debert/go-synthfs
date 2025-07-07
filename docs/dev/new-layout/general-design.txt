@@ -197,23 +197,38 @@ Implementation Notes:
 - Added comprehensive test coverage for event functionality
 - Fixed function comparison issues by using subscription ID system
 
-## Phase 8: Create Batch Package (Release 8) - DONE
+## Phase 8: Create Batch Package (Release 8) - IN PROGRESS
 **Goal**: Extract batch orchestration
-**Shippable**: Yes - batch is now just orchestration
+**Shippable**: Yes - using interface redesign approach
 
 1. Create `pkg/synthfs/batch` package - DONE
-2. Move batch logic - DONE
-3. Batch only knows interfaces from core - DONE
-4. Uses registry for operation creation - DONE
-5. Clean separation achieved! Tests pass ✓ - DONE
+2. Move batch logic - IN PROGRESS (interface redesign underway)
+3. Batch only knows interfaces from core - IN PROGRESS
+4. Uses registry for operation creation - ALREADY DONE
+5. Clean separation achieved! Tests pass ✓ - IN PROGRESS
 
 Implementation Notes:
-- Created batch package with clean interfaces for operations, filesystems, and path tracking
-- Batch package only depends on core and targets packages, achieving architectural separation
-- Operations use registry pattern for creation, avoiding circular dependencies
-- Added comprehensive test coverage with mock implementations
-- All existing tests continue to pass, ensuring backward compatibility
-- Extended Operation interface with batch building methods (SetDescriptionDetail, AddDependency, SetPaths)
+- Initial attempt failed due to circular dependencies
+- Now implementing interface redesign:
+  - Moved ValidationError to core package ✓
+  - Created operations package with interface{} design ✓
+  - Created batch package structure ✓
+  - Migration strategy documented in interface-redesign.md
+- The Operation interface now uses interface{} instead of concrete types
+- This breaks circular dependencies and enables true package extraction
+
+What WAS Successfully Extracted:
+- executor.go → execution package ✓ (main has wrapper)
+- pipeline.go → execution package ✓ (main has wrapper)
+- state.go → execution package ✓ (main has wrapper)
+- targets → targets package ✓ (fully extracted)
+- filesystem → filesystem package ✓ (fully extracted)
+- validation → validation package ✓ (fully extracted)
+- core types → core package ✓ (fully extracted)
+
+What Could NOT Be Extracted:
+- batch.go - Too tightly coupled with main package types
+- operation_*.go files - Depend on main package types and interfaces
 
 TO BE DECIDED: 
 phase 9 onwards are not approved, let's work on the previous ones.

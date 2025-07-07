@@ -40,9 +40,10 @@ func TestValidationError_Error(t *testing.T) {
 
 	t.Run("Error without cause", func(t *testing.T) {
 		err := &ValidationError{
-			Operation: op,
-			Reason:    "test reason",
-			Cause:     nil,
+			OperationID:   op.ID(),
+			OperationDesc: op.Describe(),
+			Reason:        "test reason",
+			Cause:         nil,
 		}
 
 		expected := "validation error for operation test-op (test/path): test reason"
@@ -54,9 +55,10 @@ func TestValidationError_Error(t *testing.T) {
 	t.Run("Error with cause", func(t *testing.T) {
 		cause := errors.New("underlying error")
 		err := &ValidationError{
-			Operation: op,
-			Reason:    "test reason",
-			Cause:     cause,
+			OperationID:   op.ID(),
+			OperationDesc: op.Describe(),
+			Reason:        "test reason",
+			Cause:         cause,
 		}
 
 		expected := "validation error for operation test-op (test/path): test reason: underlying error"
@@ -71,9 +73,10 @@ func TestValidationError_Unwrap(t *testing.T) {
 
 	t.Run("Unwrap returns nil when no cause", func(t *testing.T) {
 		err := &ValidationError{
-			Operation: op,
-			Reason:    "test reason",
-			Cause:     nil,
+			OperationID:   op.ID(),
+			OperationDesc: op.Describe(),
+			Reason:        "test reason",
+			Cause:         nil,
 		}
 
 		unwrapped := err.Unwrap()
@@ -85,9 +88,10 @@ func TestValidationError_Unwrap(t *testing.T) {
 	t.Run("Unwrap returns cause", func(t *testing.T) {
 		cause := errors.New("underlying error")
 		err := &ValidationError{
-			Operation: op,
-			Reason:    "test reason",
-			Cause:     cause,
+			OperationID:   op.ID(),
+			OperationDesc: op.Describe(),
+			Reason:        "test reason",
+			Cause:         cause,
 		}
 
 		unwrapped := err.Unwrap()

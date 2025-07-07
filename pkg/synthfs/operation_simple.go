@@ -287,9 +287,10 @@ func (op *SimpleOperation) Validate(ctx context.Context, fsys FileSystem) error 
 	// Basic validation: reject empty paths
 	if op.description.Path == "" {
 		return &ValidationError{
-			Operation: op,
-			Reason:    "path cannot be empty",
-			Cause:     nil,
+			OperationID:   op.ID(),
+			OperationDesc: op.Describe(),
+			Reason:        "path cannot be empty",
+			Cause:         nil,
 		}
 	}
 
@@ -312,8 +313,9 @@ func (op *SimpleOperation) Validate(ctx context.Context, fsys FileSystem) error 
 		return op.validateDelete(ctx, fsys)
 	default:
 		return &ValidationError{
-			Operation: op,
-			Reason:    fmt.Sprintf("unknown operation type: %s", op.description.Type),
+			OperationID:   op.ID(),
+			OperationDesc: op.Describe(),
+			Reason:        fmt.Sprintf("unknown operation type: %s", op.description.Type),
 		}
 	}
 }
