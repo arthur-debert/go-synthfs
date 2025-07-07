@@ -234,14 +234,40 @@ func NewUnarchiveOperation(id core.OperationID, archivePath string) *UnarchiveOp
 
 // Execute extracts the archive.
 func (op *UnarchiveOperation) Execute(ctx context.Context, fsys interface{}) error {
-	// Get extract path from details
-	extractPath, ok := op.description.Details["extract_path"].(string)
-	if !ok || extractPath == "" {
-		extractPath = "." // Default to current directory
+	// Get extract path - first check item, then details
+	var extractPath string
+	if op.item != nil {
+		if extractor, ok := op.item.(interface{ ExtractPath() string }); ok {
+			extractPath = extractor.ExtractPath()
+		}
+	}
+	
+	// If not found in item, check details
+	if extractPath == "" {
+		if path, ok := op.description.Details["extract_path"].(string); ok {
+			extractPath = path
+		}
+	}
+	
+	// Default to current directory if still empty
+	if extractPath == "" {
+		extractPath = "."
 	}
 
-	// Get patterns from details (optional)
-	patterns, _ := op.description.Details["patterns"].([]string)
+	// Get patterns - first check item, then details
+	var patterns []string
+	if op.item != nil {
+		if patterned, ok := op.item.(interface{ Patterns() []string }); ok {
+			patterns = patterned.Patterns()
+		}
+	}
+	
+	// If not found in item, check details
+	if len(patterns) == 0 {
+		if p, ok := op.description.Details["patterns"].([]string); ok {
+			patterns = p
+		}
+	}
 
 	archivePath := op.description.Path
 
@@ -455,6 +481,62 @@ func (op *UnarchiveOperation) Validate(ctx context.Context, fsys interface{}) er
 	// First do base validation
 	if err := op.BaseOperation.Validate(ctx, fsys); err != nil {
 		return err
+	}
+
+	// Check if we have an item
+	if op.item == nil {
+		return &core.ValidationError{
+			OperationID:   op.ID(),
+			OperationDesc: op.Describe(),
+			Reason:        "unarchive operation requires an UnarchiveItem",
+		}
+	}
+
+	// Check if item implements the expected interfaces
+	archiver, hasArchivePath := op.item.(interface{ ArchivePath() string })
+	extractor, hasExtractPath := op.item.(interface{ ExtractPath() string })
+	
+	if !hasArchivePath || !hasExtractPath {
+		return &core.ValidationError{
+			OperationID:   op.ID(),
+			OperationDesc: op.Describe(),
+			Reason:        "expected UnarchiveItem but got different type",
+		}
+	}
+
+	// Get archive path and extract path from the item
+	archivePath := archiver.ArchivePath()
+	extractPath := extractor.ExtractPath()
+
+	// Validate archive path is not empty
+	if archivePath == "" {
+		return &core.ValidationError{
+			OperationID:   op.ID(),
+			OperationDesc: op.Describe(),
+			Reason:        "archive path cannot be empty",
+		}
+	}
+
+	// Validate extract path is not empty
+	if extractPath == "" {
+		return &core.ValidationError{
+			OperationID:   op.ID(),
+			OperationDesc: op.Describe(),
+			Reason:        "extract path cannot be empty",
+		}
+	}
+
+	// Validate archive format
+	ext := strings.ToLower(filepath.Ext(archivePath))
+	switch ext {
+	case ".zip", ".tar", ".gz", ".tar.gz", ".tgz":
+		// Supported formats
+	default:
+		return &core.ValidationError{
+			OperationID:   op.ID(),
+			OperationDesc: op.Describe(),
+			Reason:        fmt.Sprintf("unsupported archive format for file: %s", archivePath),
+		}
 	}
 
 	// Check if archive exists
