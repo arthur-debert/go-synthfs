@@ -1,0 +1,129 @@
+package operations
+
+import (
+	"context"
+	"fmt"
+	
+	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+)
+
+// CreateDirectoryOperation represents a directory creation operation with clean interfaces.
+type CreateDirectoryOperation struct {
+	*BaseOperation
+}
+
+// NewCreateDirectoryOperation creates a new directory creation operation.
+func NewCreateDirectoryOperation(id core.OperationID, path string) *CreateDirectoryOperation {
+	return &CreateDirectoryOperation{
+		BaseOperation: NewBaseOperation(id, "create_directory", path),
+	}
+}
+
+// Execute creates the directory. The filesystem interface is generic to avoid coupling.
+func (op *CreateDirectoryOperation) Execute(ctx context.Context, fsys interface{}) error {
+	item := op.GetItem()
+	if item == nil {
+		return fmt.Errorf("create_directory operation requires an item")
+	}
+	
+	// The item should implement our ItemInterface
+	dirItem, ok := item.(ItemInterface)
+	if !ok {
+		return fmt.Errorf("item does not implement ItemInterface")
+	}
+	
+	// Get filesystem methods through interface assertions
+	mkdirAll, ok := getMkdirAllMethod(fsys)
+	if !ok {
+		return fmt.Errorf("filesystem does not support MkdirAll")
+	}
+	
+	// Get mode from details or use default
+	mode := op.description.Details["mode"]
+	if mode == nil {
+		mode = interface{}(0755)
+	}
+	
+	// Create the directory with all parent directories
+	if err := mkdirAll(dirItem.Path(), mode); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+	
+	return nil
+}
+
+// Validate checks if the directory can be created.
+func (op *CreateDirectoryOperation) Validate(ctx context.Context, fsys interface{}) error {
+	// First do base validation
+	if err := op.BaseOperation.Validate(ctx, fsys); err != nil {
+		return err
+	}
+	
+	item := op.GetItem()
+	if item == nil {
+		return &core.ValidationError{
+			OperationID:   op.ID(),
+			OperationDesc: op.Describe(),
+			Reason:        "no item provided for create_directory operation",
+		}
+	}
+	
+	// Check if path already exists
+	stat, ok := getStatMethod(fsys)
+	if ok {
+		if info, err := stat(op.description.Path); err == nil {
+			if isDir, ok := info.(interface{ IsDir() bool }); ok && isDir.IsDir() {
+				// Directory already exists - this is okay (idempotent)
+				return nil
+			} else {
+				return &core.ValidationError{
+					OperationID:   op.ID(),
+					OperationDesc: op.Describe(),
+					Reason:        "path exists but is not a directory",
+				}
+			}
+		}
+	}
+	
+	return nil
+}
+
+// Rollback removes the created directory.
+func (op *CreateDirectoryOperation) Rollback(ctx context.Context, fsys interface{}) error {
+	remove, ok := getRemoveMethod(fsys)
+	if !ok {
+		return fmt.Errorf("filesystem does not support Remove")
+	}
+	
+	// Remove the directory
+	if err := remove(op.description.Path); err != nil {
+		// If it doesn't exist, that's fine
+		return nil
+	}
+	
+	return nil
+}
+
+// Helper function to get Stat method from filesystem
+func getStatMethod(fsys interface{}) (func(string) (interface{}, error), bool) {
+	type statFS interface {
+		Stat(name string) (interface{}, error)
+	}
+	
+	if fs, ok := fsys.(statFS); ok {
+		return fs.Stat, true
+	}
+	return nil, false
+}
+
+// Helper function to get Remove method from filesystem
+func getRemoveMethod(fsys interface{}) (func(string) error, bool) {
+	type removeFS interface {
+		Remove(name string) error
+	}
+	
+	if fs, ok := fsys.(removeFS); ok {
+		return fs.Remove, true
+	}
+	return nil, false
+}
