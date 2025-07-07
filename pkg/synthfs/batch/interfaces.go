@@ -42,4 +42,5 @@ type Result interface {
 	GetRestoreOps() []interface{}
 	GetDuration() interface{}
 	GetError() error
+	GetBudget() interface{} // Budget information from execution (may be nil for non-restorable runs)
 }

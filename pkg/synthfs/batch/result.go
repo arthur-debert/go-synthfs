@@ -9,16 +9,23 @@ type ResultImpl struct {
 	restoreOps []interface{}
 	duration   time.Duration
 	err        error
+	budget     interface{} // Budget information from execution
 }
 
 // NewResult creates a new batch result.
 func NewResult(success bool, operations []interface{}, restoreOps []interface{}, duration time.Duration, err error) Result {
+	return NewResultWithBudget(success, operations, restoreOps, duration, err, nil)
+}
+
+// NewResultWithBudget creates a new batch result with budget information.
+func NewResultWithBudget(success bool, operations []interface{}, restoreOps []interface{}, duration time.Duration, err error, budget interface{}) Result {
 	return &ResultImpl{
 		success:    success,
 		operations: operations,
 		restoreOps: restoreOps,
 		duration:   duration,
 		err:        err,
+		budget:     budget,
 	}
 }
 
@@ -45,4 +52,9 @@ func (r *ResultImpl) GetDuration() interface{} {
 // GetError returns any error that occurred during execution.
 func (r *ResultImpl) GetError() error {
 	return r.err
+}
+
+// GetBudget returns the budget information from execution.
+func (r *ResultImpl) GetBudget() interface{} {
+	return r.budget
 }

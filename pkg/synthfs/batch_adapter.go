@@ -99,12 +99,54 @@ func ConvertBatchResult(batchResult interface{}) *Result {
 		return nil
 	}
 
-	// Convert operations from interface{} to Operation
+	// Convert operations from interface{} - could be Operation or core.OperationResult
 	ops := result.GetOperations()
-	operations := make([]Operation, len(ops))
-	for i, op := range ops {
-		if operation, ok := op.(Operation); ok {
-			operations[i] = operation
+	var operationResults []OperationResult
+	
+	for _, op := range ops {
+		// Check if it's already a core.OperationResult (from execution package)
+		if coreOpResult, ok := op.(core.OperationResult); ok {
+			// Check if the operation is wrapped in an operationAdapter
+			if adapter, ok := coreOpResult.Operation.(interface{ GetOriginalOperation() interface{} }); ok {
+				originalOp := adapter.GetOriginalOperation()
+				if operation, ok := originalOp.(Operation); ok {
+					operationResults = append(operationResults, OperationResult{
+						OperationID:  coreOpResult.OperationID,
+						Operation:    operation,
+						Status:       OperationStatus(coreOpResult.Status),
+						Duration:     coreOpResult.Duration,
+						BackupData:   coreOpResult.BackupData,
+						BackupSizeMB: coreOpResult.BackupSizeMB,
+						Error:        coreOpResult.Error,
+					})
+				}
+			} else if operation, ok := coreOpResult.Operation.(Operation); ok {
+				operationResults = append(operationResults, OperationResult{
+					OperationID:  coreOpResult.OperationID,
+					Operation:    operation,
+					Status:       OperationStatus(coreOpResult.Status),
+					Duration:     coreOpResult.Duration,
+					BackupData:   coreOpResult.BackupData,
+					BackupSizeMB: coreOpResult.BackupSizeMB,
+					Error:        coreOpResult.Error,
+				})
+			}
+		} else if operation, ok := op.(Operation); ok {
+			// Original path - operation objects without backup data
+			// Get duration
+			var duration time.Duration
+			if d := result.GetDuration(); d != nil {
+				if dur, ok := d.(time.Duration); ok {
+					duration = dur
+				}
+			}
+			
+			operationResults = append(operationResults, OperationResult{
+				OperationID: operation.ID(),
+				Operation:   operation,
+				Status:      OperationStatus(core.StatusSuccess),
+				Duration:    duration / time.Duration(len(ops)), // Approximate per-operation duration
+			})
 		}
 	}
 
@@ -125,21 +167,18 @@ func ConvertBatchResult(batchResult interface{}) *Result {
 		}
 	}
 
-	// Convert operations to OperationResult
-	operationResults := make([]OperationResult, len(operations))
-	for i, op := range operations {
-		operationResults[i] = OperationResult{
-			OperationID: op.ID(),
-			Operation:   op,
-			Status:      OperationStatus(core.StatusSuccess),
-			Duration:    duration / time.Duration(len(operations)), // Approximate per-operation duration
-		}
-	}
-
 	// Build errors list if execution failed
 	var errors []error
 	if err := result.GetError(); err != nil {
 		errors = append(errors, err)
+	}
+
+	// Extract budget information
+	var budget *BackupBudget
+	if budgetInterface := result.GetBudget(); budgetInterface != nil {
+		if coreBudget, ok := budgetInterface.(*core.BackupBudget); ok {
+			budget = coreBudget
+		}
 	}
 
 	return &Result{
@@ -148,5 +187,6 @@ func ConvertBatchResult(batchResult interface{}) *Result {
 		RestoreOps: restoreOperations,
 		Duration:   duration,
 		Errors:     errors,
+		Budget:     budget,
 	}
 }

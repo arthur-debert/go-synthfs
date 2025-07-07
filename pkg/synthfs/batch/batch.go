@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"reflect"
 	"strings"
 	"time"
 
@@ -399,6 +400,7 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 	
 	duration := time.Since(startTime)
 	
+	
 	// Convert core.Result back to our interface{} result
 	var executionError error
 	if !coreResult.Success && len(coreResult.Errors) > 0 {
@@ -418,13 +420,20 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 		"restore_operations": len(restoreOps),
 	})
 	
+	// Convert execution package results to interface{} slice
+	var operationResults []interface{}
+	for _, opResult := range coreResult.Operations {
+		operationResults = append(operationResults, opResult)
+	}
+	
 	// Convert to batch result interface
-	batchResult := NewResult(
+	batchResult := NewResultWithBudget(
 		coreResult.Success,
-		b.operations,
+		operationResults,
 		restoreOps,
 		duration,
 		executionError,
+		coreResult.Budget,
 	)
 	
 	return batchResult, nil
@@ -555,6 +564,11 @@ func newOperationAdapter(op interface{}) *operationAdapter {
 	return &operationAdapter{op: op}
 }
 
+// GetOriginalOperation returns the wrapped operation
+func (oa *operationAdapter) GetOriginalOperation() interface{} {
+	return oa.op
+}
+
 func (oa *operationAdapter) ID() core.OperationID {
 	if op, ok := oa.op.(interface{ ID() core.OperationID }); ok {
 		return op.ID()
@@ -616,10 +630,54 @@ func (oa *operationAdapter) ValidateV2(ctx interface{}, execCtx *core.ExecutionC
 }
 
 func (oa *operationAdapter) ReverseOps(ctx context.Context, fsys interface{}, budget *core.BackupBudget) ([]interface{}, *core.BackupData, error) {
-	if op, ok := oa.op.(interface{ ReverseOps(context.Context, interface{}, *core.BackupBudget) ([]interface{}, *core.BackupData, error) }); ok {
-		return op.ReverseOps(ctx, fsys, budget)
+	// Use reflection to call the method with the correct signature
+	// OperationsPackageAdapter.ReverseOps expects (context.Context, FileSystem, *BackupBudget) returns ([]Operation, *BackupData, error)
+	opValue := reflect.ValueOf(oa.op)
+	reverseOpsMethod := opValue.MethodByName("ReverseOps")
+	
+	if !reverseOpsMethod.IsValid() {
+		return nil, nil, nil
 	}
-	return nil, nil, nil
+	
+	// Prepare arguments
+	ctxValue := reflect.ValueOf(ctx)
+	fsysValue := reflect.ValueOf(fsys)
+	budgetValue := reflect.ValueOf(budget)
+	
+	// Call the method
+	results := reverseOpsMethod.Call([]reflect.Value{ctxValue, fsysValue, budgetValue})
+	
+	if len(results) != 3 {
+		return nil, nil, nil
+	}
+	
+	// Extract results
+	var ops []interface{}
+	var backupData *core.BackupData
+	var err error
+	
+	// Convert operations slice
+	if !results[0].IsNil() {
+		opsSlice := results[0].Interface()
+		// Try to convert to []interface{}
+		if opsReflect := reflect.ValueOf(opsSlice); opsReflect.Kind() == reflect.Slice {
+			for i := 0; i < opsReflect.Len(); i++ {
+				ops = append(ops, opsReflect.Index(i).Interface())
+			}
+		}
+	}
+	
+	// Extract backup data
+	if !results[1].IsNil() {
+		backupData = results[1].Interface().(*core.BackupData)
+	}
+	
+	// Extract error
+	if !results[2].IsNil() {
+		err = results[2].Interface().(error)
+	}
+	
+	return ops, backupData, err
 }
 
 func (oa *operationAdapter) Rollback(ctx context.Context, fsys interface{}) error {

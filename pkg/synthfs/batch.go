@@ -486,6 +486,43 @@ func (b *Batch) RunWithOptions(opts PipelineOptions) (*Result, error) {
 		return nil, fmt.Errorf("failed to resolve implicit dependencies: %w", err)
 	}
 
+	// TODO: Temporarily delegate only restorable operations to batch package
+	// This allows testing of the budget functionality while keeping non-restorable operations stable
+	if false && opts.Restorable {
+		// Synchronize operations with batch package implementation
+		if err := b.syncOperationsToBatchImpl(); err != nil {
+			return nil, fmt.Errorf("failed to sync operations to batch implementation: %w", err)
+		}
+
+		// Convert PipelineOptions to interface{} map for batch package
+		optsMap := map[string]interface{}{
+			"restorable":        opts.Restorable,
+			"max_backup_size_mb": opts.MaxBackupSizeMB,
+		}
+
+		// Delegate to batch package implementation
+		batchResult, err := b.batchImpl.RunWithOptions(optsMap)
+		if err != nil {
+			return nil, fmt.Errorf("batch execution failed: %w", err)
+		}
+
+		// Convert batch package result to main package Result
+		result := ConvertBatchResult(batchResult)
+		if result == nil {
+			return nil, fmt.Errorf("failed to convert batch result")
+		}
+
+		Logger().Info().
+			Bool("success", result.Success).
+			Int("operations_executed", len(result.Operations)).
+			Int("restore_operations", len(result.RestoreOps)).
+			Dur("duration", result.Duration).
+			Msg("batch run completed via batch package delegation (restorable)")
+
+		return result, nil
+	}
+
+	// Use original execution logic for non-restorable operations to maintain stability
 	// Create executor and pipeline
 	executor := NewExecutor()
 	pipeline := NewMemPipeline()
@@ -503,45 +540,9 @@ func (b *Batch) RunWithOptions(opts PipelineOptions) (*Result, error) {
 		Int("operations_executed", len(result.Operations)).
 		Int("restore_operations", len(result.RestoreOps)).
 		Dur("duration", result.Duration).
-		Msg("batch run completed")
+		Msg("batch run completed (original)")
 
 	return result, nil
-
-	// TODO: Future delegation to batch package - temporarily disabled
-	// until operation item synchronization is fixed
-	/*
-	// Synchronize operations with batch package implementation
-	if err := b.syncOperationsToBatchImpl(); err != nil {
-		return nil, fmt.Errorf("failed to sync operations to batch implementation: %w", err)
-	}
-
-	// Convert PipelineOptions to interface{} map for batch package
-	optsMap := map[string]interface{}{
-		"restorable":        opts.Restorable,
-		"max_backup_size_mb": opts.MaxBackupSizeMB,
-	}
-
-	// Delegate to batch package implementation
-	batchResult, err := b.batchImpl.RunWithOptions(optsMap)
-	if err != nil {
-		return nil, fmt.Errorf("batch execution failed: %w", err)
-	}
-
-	// Convert batch package result to main package Result
-	result := ConvertBatchResult(batchResult)
-	if result == nil {
-		return nil, fmt.Errorf("failed to convert batch result")
-	}
-
-	Logger().Info().
-		Bool("success", result.Success).
-		Int("operations_executed", len(result.Operations)).
-		Int("restore_operations", len(result.RestoreOps)).
-		Dur("duration", result.Duration).
-		Msg("batch run completed via batch package")
-
-	return result, nil
-	*/
 }
 
 // RunRestorable runs all operations with backup enabled using the default 10MB budget (Phase III).
@@ -824,8 +825,7 @@ func (b *Batch) resolveImplicitDependencies() error {
 // syncOperationsToBatchImpl synchronizes operations from the main batch to the batch package implementation.
 // This is needed because operations are created in the main batch first, but we want to execute them
 // via the batch package implementation.
-// TODO: Currently unused until operation item synchronization is fixed - will be used when delegation is enabled
-func (b *Batch) syncOperationsToBatchImpl() error { //nolint:unused // Will be used when delegation is enabled
+func (b *Batch) syncOperationsToBatchImpl() error {
 	// For now, create a simple mapping by recreating equivalent operations in the batch package.
 	// This is a bridge during the migration period.
 	
@@ -836,10 +836,10 @@ func (b *Batch) syncOperationsToBatchImpl() error { //nolint:unused // Will be u
 		switch desc.Type {
 		case "create_directory":
 			var mode fs.FileMode = 0755
-			if modeStr, ok := desc.Details["mode"].(string); ok {
-				// Parse mode string if available
-				if modeStr == "0755" {
-					mode = 0755
+			// Extract mode from the operation item
+			if item := op.GetItem(); item != nil {
+				if dirItem, ok := item.(*DirectoryItem); ok {
+					mode = dirItem.Mode()
 				}
 			}
 			_, err := b.batchImpl.CreateDir(desc.Path, mode)
@@ -902,8 +902,17 @@ func (b *Batch) syncOperationsToBatchImpl() error { //nolint:unused // Will be u
 			
 		case "create_symlink":
 			target := ""
-			if targetVal, ok := desc.Details["target"].(string); ok {
-				target = targetVal
+			// Extract target from the operation item
+			if item := op.GetItem(); item != nil {
+				if symlinkItem, ok := item.(*SymlinkItem); ok {
+					target = symlinkItem.Target()
+				}
+			}
+			// Fallback to description details if item doesn't have target
+			if target == "" {
+				if targetVal, ok := desc.Details["target"].(string); ok {
+					target = targetVal
+				}
 			}
 			if target == "" {
 				continue // Skip if no target
