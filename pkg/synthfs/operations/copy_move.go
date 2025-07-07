@@ -288,3 +288,36 @@ func getRenameMethod(fsys interface{}) (func(string, string) error, bool) {
 	}
 	return nil, false
 }
+
+// ReverseOps for CopyOperation - returns a delete operation for the destination
+func (op *CopyOperation) ReverseOps(ctx context.Context, fsys interface{}, budget interface{}) ([]interface{}, interface{}, error) {
+	_, dst := op.GetPaths()
+	if dst == "" {
+		return nil, nil, fmt.Errorf("copy operation has no destination path")
+	}
+	
+	// Create a delete operation to remove the copied file
+	reverseOp := NewDeleteOperation(
+		core.OperationID(fmt.Sprintf("reverse_%s", op.ID())),
+		dst,
+	)
+	
+	return []interface{}{reverseOp}, nil, nil
+}
+
+// ReverseOps for MoveOperation - returns a move operation to restore the original
+func (op *MoveOperation) ReverseOps(ctx context.Context, fsys interface{}, budget interface{}) ([]interface{}, interface{}, error) {
+	src, dst := op.GetPaths()
+	if src == "" || dst == "" {
+		return nil, nil, fmt.Errorf("move operation missing source or destination path")
+	}
+	
+	// Create a move operation to restore the file to its original location
+	reverseOp := NewMoveOperation(
+		core.OperationID(fmt.Sprintf("reverse_%s", op.ID())),
+		dst, // Move from current location
+	)
+	reverseOp.SetPaths(dst, src) // Back to original location
+	
+	return []interface{}{reverseOp}, nil, nil
+}

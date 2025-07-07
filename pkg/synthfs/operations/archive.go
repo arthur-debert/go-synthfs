@@ -3,6 +3,7 @@ package operations
 import (
 	"archive/tar"
 	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"fmt"
@@ -263,14 +264,39 @@ func (op *UnarchiveOperation) Execute(ctx context.Context, fsys interface{}) err
 
 // extractZipArchive extracts a ZIP archive.
 func (op *UnarchiveOperation) extractZipArchive(archivePath, extractPath string, patterns []string, fsys interface{}) error {
-	// This is a simplified implementation
-	// In a real implementation, we'd use the filesystem interface throughout
+	// Get filesystem methods
+	open, hasOpen := getOpenMethod(fsys)
+	if !hasOpen {
+		return fmt.Errorf("filesystem does not support Open")
+	}
 
-	reader, err := zip.OpenReader(archivePath)
+	// Open archive file through filesystem interface
+	file, err := open(archivePath)
 	if err != nil {
 		return fmt.Errorf("failed to open archive: %w", err)
 	}
-	defer func() { _ = reader.Close() }()
+	defer func() {
+		if closer, ok := file.(io.Closer); ok {
+			_ = closer.Close()
+		}
+	}()
+
+	// Read the entire file content
+	var archiveData []byte
+	if reader, ok := file.(io.Reader); ok {
+		archiveData, err = io.ReadAll(reader)
+		if err != nil {
+			return fmt.Errorf("failed to read archive: %w", err)
+		}
+	} else {
+		return fmt.Errorf("file does not implement io.Reader")
+	}
+
+	// Create a zip reader from the bytes
+	reader, err := zip.NewReader(bytes.NewReader(archiveData), int64(len(archiveData)))
+	if err != nil {
+		return fmt.Errorf("failed to create zip reader: %w", err)
+	}
 
 	// Get filesystem methods
 	mkdirAll, _ := getMkdirAllMethod(fsys)
@@ -313,23 +339,41 @@ func (op *UnarchiveOperation) extractZipArchive(archivePath, extractPath string,
 
 // extractTarArchive extracts a TAR or TAR.GZ archive.
 func (op *UnarchiveOperation) extractTarArchive(archivePath, extractPath string, patterns []string, fsys interface{}, compressed bool) error {
-	// This is a simplified implementation
-	file, err := os.Open(archivePath)
+	// Get filesystem methods
+	open, hasOpen := getOpenMethod(fsys)
+	if !hasOpen {
+		return fmt.Errorf("filesystem does not support Open")
+	}
+
+	// Open archive file through filesystem interface
+	file, err := open(archivePath)
 	if err != nil {
 		return fmt.Errorf("failed to open archive: %w", err)
 	}
-	defer func() { _ = file.Close() }()
+	defer func() {
+		if closer, ok := file.(io.Closer); ok {
+			_ = closer.Close()
+		}
+	}()
+
+	// Convert file to io.Reader
+	var reader io.Reader
+	if r, ok := file.(io.Reader); ok {
+		reader = r
+	} else {
+		return fmt.Errorf("file does not implement io.Reader")
+	}
 
 	var tarReader *tar.Reader
 	if compressed {
-		gzReader, err := gzip.NewReader(file)
+		gzReader, err := gzip.NewReader(reader)
 		if err != nil {
 			return fmt.Errorf("failed to create gzip reader: %w", err)
 		}
 		defer func() { _ = gzReader.Close() }()
 		tarReader = tar.NewReader(gzReader)
 	} else {
-		tarReader = tar.NewReader(file)
+		tarReader = tar.NewReader(reader)
 	}
 
 	// Get filesystem methods

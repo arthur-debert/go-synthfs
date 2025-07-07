@@ -184,3 +184,25 @@ func getMkdirAllMethod(fsys interface{}) (func(string, interface{}) error, bool)
 
 	return nil, false
 }
+
+// ReverseOps for CreateFileOperation - returns a delete operation
+func (op *CreateFileOperation) ReverseOps(ctx context.Context, fsys interface{}, budget interface{}) ([]interface{}, interface{}, error) {
+	// Create a delete operation to remove the file
+	reverseOp := NewDeleteOperation(
+		core.OperationID(fmt.Sprintf("reverse_%s", op.ID())),
+		op.description.Path,
+	)
+	
+	return []interface{}{reverseOp}, nil, nil
+}
+
+// ReverseOps for CreateDirectoryOperation - returns a delete operation
+func (op *CreateDirectoryOperation) ReverseOps(ctx context.Context, fsys interface{}, budget interface{}) ([]interface{}, interface{}, error) {
+	// Create a delete operation to remove the directory
+	reverseOp := NewDeleteOperation(
+		core.OperationID(fmt.Sprintf("reverse_%s", op.ID())),
+		op.description.Path,
+	)
+	
+	return []interface{}{reverseOp}, nil, nil
+}
