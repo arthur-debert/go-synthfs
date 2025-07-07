@@ -3,6 +3,8 @@ package operations
 import (
 	"context"
 	"fmt"
+	"io/fs"
+	"os"
 	
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
@@ -38,10 +40,12 @@ func (op *CreateDirectoryOperation) Execute(ctx context.Context, fsys interface{
 		return fmt.Errorf("filesystem does not support MkdirAll")
 	}
 	
-	// Get mode from details or use default
-	mode := op.description.Details["mode"]
-	if mode == nil {
-		mode = interface{}(0755)
+	// Get mode from item or use default
+	var mode interface{} = fs.FileMode(0755) // Default for directories
+	
+	// Try to get mode from item
+	if modeGetter, ok := item.(interface{ Mode() fs.FileMode }); ok {
+		mode = modeGetter.Mode()
 	}
 	
 	// Create the directory with all parent directories
@@ -50,6 +54,18 @@ func (op *CreateDirectoryOperation) Execute(ctx context.Context, fsys interface{
 	}
 	
 	return nil
+}
+
+// ExecuteV2 performs the directory creation with execution context support.
+func (op *CreateDirectoryOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Convert context
+	context, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
+	
+	// Call the operation's Execute method with proper event handling
+	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
 }
 
 // Validate checks if the directory can be created.
@@ -106,6 +122,29 @@ func (op *CreateDirectoryOperation) Rollback(ctx context.Context, fsys interface
 
 // Helper function to get Stat method from filesystem
 func getStatMethod(fsys interface{}) (func(string) (interface{}, error), bool) {
+	// Try os.FileInfo version
+	type statFSFileInfo interface {
+		Stat(name string) (os.FileInfo, error)
+	}
+	
+	if fs, ok := fsys.(statFSFileInfo); ok {
+		return func(name string) (interface{}, error) {
+			return fs.Stat(name)
+		}, true
+	}
+	
+	// Try fs.FileInfo version
+	type statFSInfo interface {
+		Stat(name string) (fs.FileInfo, error)
+	}
+	
+	if fs, ok := fsys.(statFSInfo); ok {
+		return func(name string) (interface{}, error) {
+			return fs.Stat(name)
+		}, true
+	}
+	
+	// Try interface{} version
 	type statFS interface {
 		Stat(name string) (interface{}, error)
 	}

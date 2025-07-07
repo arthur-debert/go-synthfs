@@ -3,6 +3,7 @@ package operations
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
@@ -53,9 +54,19 @@ func (op *CreateFileOperation) Execute(ctx context.Context, fsys interface{}) er
 		}
 	}
 	
-	// Get content and mode from item details
-	content := op.description.Details["content"].([]byte)
-	mode := op.description.Details["mode"]
+	// Get content and mode from item
+	var content []byte
+	var mode interface{} = fs.FileMode(0644) // Default
+	
+	// Try to get content from item
+	if contentGetter, ok := item.(interface{ Content() []byte }); ok {
+		content = contentGetter.Content()
+	}
+	
+	// Try to get mode from item
+	if modeGetter, ok := item.(interface{ Mode() fs.FileMode }); ok {
+		mode = modeGetter.Mode()
+	}
 	
 	// Write the file
 	if err := writeFile(fileItem.Path(), content, mode); err != nil {
@@ -63,6 +74,18 @@ func (op *CreateFileOperation) Execute(ctx context.Context, fsys interface{}) er
 	}
 	
 	return nil
+}
+
+// ExecuteV2 performs the file creation with execution context support.
+func (op *CreateFileOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Convert context
+	context, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
+	
+	// Call the operation's Execute method with proper event handling
+	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
 }
 
 // Validate checks if the file can be created.
@@ -95,23 +118,69 @@ func (op *CreateFileOperation) Validate(ctx context.Context, fsys interface{}) e
 
 // Helper functions to extract methods from filesystem interface
 func getWriteFileMethod(fsys interface{}) (func(string, []byte, interface{}) error, bool) {
-	type writeFS interface {
+	// Try interface{} version first
+	type writeFSInterface interface {
 		WriteFile(name string, data []byte, perm interface{}) error
 	}
 	
-	if fs, ok := fsys.(writeFS); ok {
+	if fs, ok := fsys.(writeFSInterface); ok {
 		return fs.WriteFile, true
 	}
+	
+	// Try fs.FileMode version
+	type writeFSFileMode interface {
+		WriteFile(name string, data []byte, perm fs.FileMode) error
+	}
+	
+	if fsFileMode, ok := fsys.(writeFSFileMode); ok {
+		// Wrap to convert interface{} to fs.FileMode
+		return func(name string, data []byte, perm interface{}) error {
+			fileMode, ok := perm.(fs.FileMode)
+			if !ok {
+				// Try to convert from other types
+				if mode, ok := perm.(int); ok {
+					fileMode = fs.FileMode(mode)
+				} else {
+					fileMode = 0644 // Default
+				}
+			}
+			return fsFileMode.WriteFile(name, data, fileMode)
+		}, true
+	}
+	
 	return nil, false
 }
 
 func getMkdirAllMethod(fsys interface{}) (func(string, interface{}) error, bool) {
-	type mkdirFS interface {
+	// Try interface{} version first
+	type mkdirFSInterface interface {
 		MkdirAll(path string, perm interface{}) error
 	}
 	
-	if fs, ok := fsys.(mkdirFS); ok {
+	if fs, ok := fsys.(mkdirFSInterface); ok {
 		return fs.MkdirAll, true
 	}
+	
+	// Try fs.FileMode version
+	type mkdirFSFileMode interface {
+		MkdirAll(path string, perm fs.FileMode) error
+	}
+	
+	if fsFileMode, ok := fsys.(mkdirFSFileMode); ok {
+		// Wrap to convert interface{} to fs.FileMode
+		return func(path string, perm interface{}) error {
+			fileMode, ok := perm.(fs.FileMode)
+			if !ok {
+				// Try to convert from other types
+				if mode, ok := perm.(int); ok {
+					fileMode = fs.FileMode(mode)
+				} else {
+					fileMode = 0755 // Default for directories
+				}
+			}
+			return fsFileMode.MkdirAll(path, fileMode)
+		}, true
+	}
+	
 	return nil, false
 }

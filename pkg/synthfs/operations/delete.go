@@ -61,6 +61,18 @@ func (op *DeleteOperation) Execute(ctx context.Context, fsys interface{}) error 
 	return nil
 }
 
+// ExecuteV2 performs the deletion with execution context support.
+func (op *DeleteOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Convert context
+	context, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
+	
+	// Call the operation's Execute method with proper event handling
+	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
+}
+
 // Validate checks if the deletion can be performed.
 func (op *DeleteOperation) Validate(ctx context.Context, fsys interface{}) error {
 	// First do base validation

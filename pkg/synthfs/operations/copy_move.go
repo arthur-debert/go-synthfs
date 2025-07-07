@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"path/filepath"
 	
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
@@ -90,6 +91,18 @@ func (op *CopyOperation) Execute(ctx context.Context, fsys interface{}) error {
 	}
 	
 	return nil
+}
+
+// ExecuteV2 performs the copy with execution context support.
+func (op *CopyOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Convert context
+	context, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
+	
+	// Call the operation's Execute method with proper event handling
+	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
 }
 
 // Validate checks if the copy operation can be performed.
@@ -195,6 +208,18 @@ func (op *MoveOperation) Execute(ctx context.Context, fsys interface{}) error {
 	return nil
 }
 
+// ExecuteV2 performs the move with execution context support.
+func (op *MoveOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Convert context
+	context, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
+	
+	// Call the operation's Execute method with proper event handling
+	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
+}
+
 // Validate checks if the move operation can be performed.
 func (op *MoveOperation) Validate(ctx context.Context, fsys interface{}) error {
 	// Use same validation as copy
@@ -219,6 +244,18 @@ func (op *MoveOperation) Rollback(ctx context.Context, fsys interface{}) error {
 
 // Helper function to get Open method from filesystem
 func getOpenMethod(fsys interface{}) (func(string) (interface{}, error), bool) {
+	// Try fs.File version (most common)
+	type openFSFile interface {
+		Open(name string) (fs.File, error)
+	}
+	
+	if fs, ok := fsys.(openFSFile); ok {
+		return func(name string) (interface{}, error) {
+			return fs.Open(name)
+		}, true
+	}
+	
+	// Try interface{} version
 	type openFS interface {
 		Open(name string) (interface{}, error)
 	}

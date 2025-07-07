@@ -3,7 +3,6 @@ package operations
 import (
 	"context"
 	"fmt"
-	"time"
 	
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
@@ -146,78 +145,11 @@ func (op *BaseOperation) ReverseOps(ctx context.Context, fsys interface{}, budge
 // Note: GetItem, GetChecksum, and GetAllChecksums are already defined above
 
 // ExecuteV2 performs the operation using ExecutionContext.
+// IMPORTANT: This base implementation should NOT be used. Each concrete operation
+// type must override this method to ensure proper method dispatch.
 func (op *BaseOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Convert interfaces back to concrete types
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
-	
-	// Emit operation started event
-	if execCtx.EventBus != nil {
-		startEvent := core.NewOperationStartedEvent(
-			op.id,
-			op.description.Type,
-			op.description.Path,
-			op.description.Details,
-		)
-		execCtx.EventBus.PublishAsync(context, startEvent)
-	}
-	
-	// Execute the operation and measure duration
-	startTime := time.Now()
-	
-	execCtx.Logger.Trace().
-		Str("op_id", string(op.id)).
-		Str("op_type", op.description.Type).
-		Str("path", op.description.Path).
-		Msg("executing operation")
-	
-	err := op.Execute(context, fsys)
-	duration := time.Since(startTime)
-	
-	// Emit completion or failure event
-	if execCtx.EventBus != nil {
-		if err != nil {
-			failEvent := core.NewOperationFailedEvent(
-				op.id,
-				op.description.Type,
-				op.description.Path,
-				op.description.Details,
-				err,
-				duration,
-			)
-			execCtx.EventBus.PublishAsync(context, failEvent)
-		} else {
-			completeEvent := core.NewOperationCompletedEvent(
-				op.id,
-				op.description.Type,
-				op.description.Path,
-				op.description.Details,
-				duration,
-			)
-			execCtx.EventBus.PublishAsync(context, completeEvent)
-		}
-	}
-	
-	if err != nil {
-		execCtx.Logger.Trace().
-			Str("op_id", string(op.id)).
-			Str("op_type", op.description.Type).
-			Str("path", op.description.Path).
-			Dur("duration", duration).
-			Err(err).
-			Msg("operation failed")
-	} else {
-		execCtx.Logger.Trace().
-			Str("op_id", string(op.id)).
-			Str("op_type", op.description.Type).
-			Str("path", op.description.Path).
-			Dur("duration", duration).
-			Msg("operation completed")
-	}
-	
-	return err
+	// This is a fallback that should not be reached if operations are properly implemented
+	return fmt.Errorf("ExecuteV2 not properly implemented for operation type: %s", op.description.Type)
 }
 
 // ValidateV2 checks if the operation can be performed using ExecutionContext.

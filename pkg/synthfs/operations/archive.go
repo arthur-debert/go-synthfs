@@ -148,6 +148,18 @@ func (op *CreateArchiveOperation) createTarArchive(archivePath string, sources [
 	return nil
 }
 
+// ExecuteV2 performs the archive creation with execution context support.
+func (op *CreateArchiveOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Convert context
+	context, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
+	
+	// Call the operation's Execute method with proper event handling
+	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
+}
+
 // Validate checks if the archive can be created.
 func (op *CreateArchiveOperation) Validate(ctx context.Context, fsys interface{}) error {
 	// First do base validation
@@ -380,6 +392,18 @@ func matchesPatterns(name string, patterns []string) bool {
 	}
 	
 	return false
+}
+
+// ExecuteV2 performs the unarchive with execution context support.
+func (op *UnarchiveOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Convert context
+	context, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
+	
+	// Call the operation's Execute method with proper event handling
+	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
 }
 
 // Validate checks if the unarchive operation can be performed.

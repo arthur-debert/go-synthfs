@@ -65,6 +65,18 @@ func (op *CreateSymlinkOperation) Execute(ctx context.Context, fsys interface{})
 	return nil
 }
 
+// ExecuteV2 performs the symlink creation with execution context support.
+func (op *CreateSymlinkOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Convert context
+	context, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
+	
+	// Call the operation's Execute method with proper event handling
+	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
+}
+
 // Validate checks if the symlink can be created.
 func (op *CreateSymlinkOperation) Validate(ctx context.Context, fsys interface{}) error {
 	// First do base validation
