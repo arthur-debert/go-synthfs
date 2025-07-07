@@ -115,15 +115,15 @@ func TestCreateOperations_EdgeCases(t *testing.T) {
 		}
 
 		// Verify parent directories were created
-		if _, ok := fs.dirs["nested"]; !ok {
+		if _, ok := fs.Dirs()["nested"]; !ok {
 			t.Error("Parent directory 'nested' should be created")
 		}
-		if _, ok := fs.dirs["nested/deep"]; !ok {
+		if _, ok := fs.Dirs()["nested/deep"]; !ok {
 			t.Error("Parent directory 'nested/deep' should be created")
 		}
 
 		// Verify file was created
-		if _, ok := fs.files["nested/deep/file.txt"]; !ok {
+		if _, ok := fs.Files()["nested/deep/file.txt"]; !ok {
 			t.Error("File should be created")
 		}
 	})
@@ -146,7 +146,7 @@ func TestCreateOperations_EdgeCases(t *testing.T) {
 		// Verify all directories were created
 		expectedDirs := []string{"a", "a/b", "a/b/c", "a/b/c/d"}
 		for _, dir := range expectedDirs {
-			if _, ok := fs.dirs[dir]; !ok {
+			if _, ok := fs.Dirs()[dir]; !ok {
 				t.Errorf("Directory '%s' should be created", dir)
 			}
 		}
@@ -205,12 +205,12 @@ func TestCopyMoveOperations_EdgeCases(t *testing.T) {
 		}
 
 		// Verify file was copied
-		if _, ok := fs.files["targetdir/source.txt"]; !ok {
+		if _, ok := fs.Files()["targetdir/source.txt"]; !ok {
 			t.Error("File should be copied to target directory")
 		}
 
 		// Verify source still exists
-		if _, ok := fs.files["source.txt"]; !ok {
+		if _, ok := fs.Files()["source.txt"]; !ok {
 			t.Error("Source file should still exist after copy")
 		}
 	})
@@ -243,12 +243,12 @@ func TestCopyMoveOperations_EdgeCases(t *testing.T) {
 		}
 
 		// Verify file was moved
-		if _, ok := fs.files["dir2/file.txt"]; !ok {
+		if _, ok := fs.Files()["dir2/file.txt"]; !ok {
 			t.Error("File should be moved to target directory")
 		}
 
 		// Verify source no longer exists
-		if _, ok := fs.files["dir1/file.txt"]; ok {
+		if _, ok := fs.Files()["dir1/file.txt"]; ok {
 			t.Error("Source file should not exist after move")
 		}
 	})

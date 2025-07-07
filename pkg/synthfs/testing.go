@@ -3,359 +3,385 @@ package synthfs
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"testing"
 	"testing/fstest"
+	
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
-// TestFileSystem extends fstest.MapFS to implement our WriteFS interface
-// This allows using testing/fstest with synthfs operations
-type TestFileSystem struct {
-	fstest.MapFS
-}
+// TestFileSystem is now a type alias for the filesystem package version
+type TestFileSystem = filesystem.TestFileSystem
 
 // NewTestFileSystem creates a new test filesystem based on fstest.MapFS
 func NewTestFileSystem() *TestFileSystem {
-	return &TestFileSystem{
-		MapFS: make(fstest.MapFS),
-	}
+	return filesystem.NewTestFileSystem()
 }
 
 // NewTestFileSystemFromMap creates a test filesystem from an existing map
 func NewTestFileSystemFromMap(files map[string]*fstest.MapFile) *TestFileSystem {
-	return &TestFileSystem{
-		MapFS: files,
-	}
+	return filesystem.NewTestFileSystemFromMap(files)
 }
 
-// WriteFile implements WriteFS for testing
-func (tfs *TestFileSystem) WriteFile(name string, data []byte, perm fs.FileMode) error {
-	if !fs.ValidPath(name) {
-		return &fs.PathError{Op: "writefile", Path: name, Err: fs.ErrInvalid}
-	}
-	tfs.MapFS[name] = &fstest.MapFile{
-		Data: data,
-		Mode: perm,
-	}
-	return nil
-}
-
-// MkdirAll implements WriteFS for testing
-func (tfs *TestFileSystem) MkdirAll(path string, perm fs.FileMode) error {
-	if !fs.ValidPath(path) {
-		return &fs.PathError{Op: "mkdirall", Path: path, Err: fs.ErrInvalid}
-	}
-
-	// Check if a file (not directory) already exists at this path
-	if existing, exists := tfs.MapFS[path]; exists {
-		if !existing.Mode.IsDir() {
-			// Can't create directory where file exists
-			return &fs.PathError{Op: "mkdirall", Path: path, Err: fs.ErrExist}
-		}
-		// Directory already exists, that's fine for MkdirAll
-		return nil
-	}
-
-	tfs.MapFS[path] = &fstest.MapFile{
-		Mode: perm | fs.ModeDir,
-	}
-	return nil
-}
-
-// Remove implements WriteFS for testing
-func (tfs *TestFileSystem) Remove(name string) error {
-	if !fs.ValidPath(name) {
-		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrInvalid}
-	}
-
-	entry, exists := tfs.MapFS[name]
-	if !exists {
-		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrNotExist}
-	}
-
-	// Check if it's a directory with children
-	if entry.Mode.IsDir() {
-		// Check if any paths have this directory as a prefix
-		for path := range tfs.MapFS {
-			if path != name && isSubPath(name, path) {
-				// Directory is not empty
-				return &fs.PathError{Op: "remove", Path: name, Err: fmt.Errorf("directory not empty")}
-			}
-		}
-	}
-
-	delete(tfs.MapFS, name)
-	return nil
-}
-
-// RemoveAll implements WriteFS for testing
-func (tfs *TestFileSystem) RemoveAll(name string) error {
-	if !fs.ValidPath(name) {
-		return &fs.PathError{Op: "removeall", Path: name, Err: fs.ErrInvalid}
-	}
-	// Remove the path and all its children
-	for path := range tfs.MapFS {
-		if path == name || isSubPath(name, path) {
-			delete(tfs.MapFS, path)
-		}
-	}
-	return nil
-}
-
-// Symlink implements WriteFS for testing
-func (tfs *TestFileSystem) Symlink(oldname, newname string) error {
-	if !fs.ValidPath(oldname) || !fs.ValidPath(newname) {
-		return &fs.PathError{Op: "symlink", Path: newname, Err: fs.ErrInvalid}
-	}
-
-	// Check if target exists
-	if _, exists := tfs.MapFS[oldname]; !exists {
-		// Unlike real symlinks, for testing we'll require the target to exist
-		return &fs.PathError{Op: "symlink", Path: oldname, Err: fs.ErrNotExist}
-	}
-
-	// Check if newname already exists
-	if _, exists := tfs.MapFS[newname]; exists {
-		return &fs.PathError{Op: "symlink", Path: newname, Err: fs.ErrExist}
-	}
-
-	// Create symlink as a special file with ModeSymlink
-	tfs.MapFS[newname] = &fstest.MapFile{
-		Data: []byte(oldname), // Store target path as data
-		Mode: fs.ModeSymlink | 0777,
-	}
-	return nil
-}
-
-// Readlink implements WriteFS for testing
-func (tfs *TestFileSystem) Readlink(name string) (string, error) {
-	if !fs.ValidPath(name) {
-		return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrInvalid}
-	}
-
-	file, exists := tfs.MapFS[name]
-	if !exists {
-		return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrNotExist}
-	}
-
-	if file.Mode&fs.ModeSymlink == 0 {
-		return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrInvalid}
-	}
-
-	return string(file.Data), nil
-}
-
-// Rename implements WriteFS for testing
-func (tfs *TestFileSystem) Rename(oldpath, newpath string) error {
-	if !fs.ValidPath(oldpath) || !fs.ValidPath(newpath) {
-		return &fs.PathError{Op: "rename", Path: newpath, Err: fs.ErrInvalid}
-	}
-
-	// Check if source exists
-	file, exists := tfs.MapFS[oldpath]
-	if !exists {
-		return &fs.PathError{Op: "rename", Path: oldpath, Err: fs.ErrNotExist}
-	}
-
-	// Check if destination already exists and is not a directory
-	if destFile, destExists := tfs.MapFS[newpath]; destExists {
-		if destFile.Mode.IsDir() {
-			return &fs.PathError{Op: "rename", Path: newpath, Err: fs.ErrExist}
-		}
-		// File exists, will be overwritten (matches os.Rename behavior)
-	}
-
-	// Move the file
-	tfs.MapFS[newpath] = file
-	delete(tfs.MapFS, oldpath)
-
-	return nil
-}
-
-// Stat implements StatFS for testing
-func (tfs *TestFileSystem) Stat(name string) (fs.FileInfo, error) {
-	if !fs.ValidPath(name) {
-		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrInvalid}
-	}
-
-	// Use Open to get the file and then get its info
-	file, err := tfs.Open(name)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if closeErr := file.Close(); closeErr != nil {
-			// Log error but don't fail the operation
-			Logger().Warn().Err(closeErr).Msg("failed to close file in Stat")
-		}
-	}()
-
-	return file.Stat()
-}
-
-// isSubPath returns true if child is a subpath of parent
-func isSubPath(parent, child string) bool {
-	if parent == "" || parent == "." {
-		return true
-	}
-	if child == parent {
-		return true // The path itself should be included
-	}
-	if len(child) <= len(parent) {
-		return false
-	}
-	return child[:len(parent)+1] == parent+"/"
-}
-
-// TestHelper provides utilities for testing synthfs operations
-type TestHelper struct {
-	t   *testing.T
-	fs  *TestFileSystem
-	ctx context.Context
-}
+// TestHelper is now a type alias for the filesystem package version
+type TestHelper = filesystem.TestHelper
 
 // NewTestHelper creates a new test helper with a fresh filesystem
 func NewTestHelper(t *testing.T) *TestHelper {
-	return &TestHelper{
-		t:   t,
-		fs:  NewTestFileSystem(),
-		ctx: context.Background(),
-	}
+	return filesystem.NewTestHelper(t)
 }
 
 // NewTestHelperWithFiles creates a test helper with predefined files
 func NewTestHelperWithFiles(t *testing.T, files map[string]*fstest.MapFile) *TestHelper {
-	return &TestHelper{
-		t:   t,
-		fs:  NewTestFileSystemFromMap(files),
-		ctx: context.Background(),
+	return filesystem.NewTestHelperWithFiles(t, files)
+}
+
+// RunOperationTest runs a test for a single operation
+func RunOperationTest(t *testing.T, name string, test func(t *testing.T, fs FileSystem, ctx context.Context)) {
+	t.Run(name, func(t *testing.T) {
+		fs := NewTestFileSystem()
+		ctx := context.Background()
+		test(t, fs, ctx)
+	})
+}
+
+// ValidateOperation validates an operation and returns any error
+func ValidateOperation(t *testing.T, op Operation, fs FileSystem) error {
+	ctx := context.Background()
+	return op.Validate(ctx, fs)
+}
+
+// ExecuteOperation executes an operation and returns any error
+func ExecuteOperation(t *testing.T, op Operation, fs FileSystem) error {
+	ctx := context.Background()
+	return op.Execute(ctx, fs)
+}
+
+// RunPipelineTest runs a test for a pipeline of operations
+func RunPipelineTest(t *testing.T, name string, test func(t *testing.T, p Pipeline, fs FileSystem, ctx context.Context)) {
+	t.Run(name, func(t *testing.T) {
+		fs := NewTestFileSystem()
+		ctx := context.Background()
+		p := NewMemPipeline()
+		test(t, p, fs, ctx)
+	})
+}
+
+// AssertOperation is a helper to assert that an operation succeeds
+func AssertOperation(t *testing.T, op Operation, fs FileSystem, msg string) {
+	ctx := context.Background()
+	if err := op.Validate(ctx, fs); err != nil {
+		t.Errorf("%s: validation failed: %v", msg, err)
+		return
+	}
+	if err := op.Execute(ctx, fs); err != nil {
+		t.Errorf("%s: execution failed: %v", msg, err)
 	}
 }
 
-// FS returns the test filesystem
-func (th *TestHelper) FS() *TestFileSystem {
-	return th.fs
+// AssertOperationFails is a helper to assert that an operation fails
+func AssertOperationFails(t *testing.T, op Operation, fs FileSystem, stage string, msg string) {
+	ctx := context.Background()
+	switch stage {
+	case "validate":
+		if err := op.Validate(ctx, fs); err == nil {
+			t.Errorf("%s: expected validation to fail", msg)
+		}
+	case "execute":
+		if err := op.Execute(ctx, fs); err == nil {
+			t.Errorf("%s: expected execution to fail", msg)
+		}
+	default:
+		t.Fatalf("Invalid stage: %s", stage)
+	}
 }
 
-// Context returns the test context
-func (th *TestHelper) Context() context.Context {
-	return th.ctx
+// CreateTestFile is a helper to create a file with content
+func CreateTestFile(t *testing.T, fs FileSystem, path string, content []byte) {
+	if err := fs.WriteFile(path, content, 0644); err != nil {
+		t.Fatalf("Failed to create test file %s: %v", path, err)
+	}
 }
 
-// AssertFileExists verifies that a file exists with optional content check
-func (th *TestHelper) AssertFileExists(path string, expectedContent ...[]byte) {
-	th.t.Helper()
+// CreateTestDir is a helper to create a directory
+func CreateTestDir(t *testing.T, fs FileSystem, path string) {
+	if err := fs.MkdirAll(path, 0755); err != nil {
+		t.Fatalf("Failed to create test directory %s: %v", path, err)
+	}
+}
 
-	file, err := th.fs.Open(path)
+// FileExists checks if a file exists in the filesystem
+func FileExists(t *testing.T, fs FileSystem, path string) bool {
+	if statFS, ok := fs.(StatFS); ok {
+		_, err := statFS.Stat(path)
+		return err == nil
+	}
+	// Fallback to trying to open the file
+	file, err := fs.Open(path)
 	if err != nil {
-		th.t.Fatalf("Expected file %s to exist, but got error: %v", path, err)
+		return false
+	}
+	_ = file.Close()
+	return true
+}
+
+// AssertFileContent verifies that a file has the expected content
+func AssertFileContent(t *testing.T, fs FileSystem, path string, expected []byte) {
+	file, err := fs.Open(path)
+	if err != nil {
+		t.Errorf("Failed to open file %s: %v", path, err)
+		return
 	}
 	defer func() {
-		if closeErr := file.Close(); closeErr != nil {
-			th.t.Logf("Warning: failed to close file %s: %v", path, closeErr)
-		}
+		_ = file.Close() // Best effort close
 	}()
 
 	info, err := file.Stat()
 	if err != nil {
-		th.t.Fatalf("Failed to stat file %s: %v", path, err)
+		t.Errorf("Failed to stat file %s: %v", path, err)
+		return
 	}
 
-	if info.IsDir() {
-		th.t.Fatalf("Expected %s to be a file, but it's a directory", path)
-	}
-
-	// Check content if provided
-	if len(expectedContent) > 0 {
-		mapFile := th.fs.MapFS[path]
-		if mapFile == nil {
-			th.t.Fatalf("File %s exists but has no content data", path)
-		}
-
-		expected := expectedContent[0]
-		if string(mapFile.Data) != string(expected) {
-			th.t.Errorf("File %s content mismatch.\nExpected: %q\nGot: %q",
-				path, string(expected), string(mapFile.Data))
-		}
-	}
-}
-
-// AssertDirExists verifies that a directory exists
-func (th *TestHelper) AssertDirExists(path string) {
-	th.t.Helper()
-
-	info, err := th.fs.Stat(path)
+	actual := make([]byte, info.Size())
+	n, err := file.Read(actual)
 	if err != nil {
-		th.t.Fatalf("Expected directory %s to exist, but got error: %v", path, err)
+		t.Errorf("Failed to read file %s: %v", path, err)
+		return
 	}
 
-	if !info.IsDir() {
-		th.t.Fatalf("Expected %s to be a directory, but it's a file", path)
-	}
-}
-
-// AssertNotExists verifies that a path does not exist
-func (th *TestHelper) AssertNotExists(path string) {
-	th.t.Helper()
-
-	_, err := th.fs.Stat(path)
-	if err == nil {
-		th.t.Fatalf("Expected %s to not exist, but it does", path)
-	}
-
-	if !isNotExistError(err) {
-		th.t.Fatalf("Expected %s to not exist, but got unexpected error: %v", path, err)
+	if string(actual[:n]) != string(expected) {
+		t.Errorf("File %s content mismatch:\nExpected: %q\nActual: %q", path, expected, actual[:n])
 	}
 }
 
-// RunAndAssert runs a pipeline and asserts it succeeds
-func (th *TestHelper) RunAndAssert(pipeline Pipeline) *Result {
-	th.t.Helper()
+// SetupTestFiles creates multiple test files from a map
+func SetupTestFiles(t *testing.T, fs FileSystem, files map[string]string) {
+	for path, content := range files {
+		CreateTestFile(t, fs, path, []byte(content))
+	}
+}
 
-	executor := NewExecutor()
-	result := executor.Run(th.ctx, pipeline, th.fs)
+// SetupTestDirs creates multiple test directories from a slice
+func SetupTestDirs(t *testing.T, fs FileSystem, dirs []string) {
+	for _, dir := range dirs {
+		CreateTestDir(t, fs, dir)
+	}
+}
 
+// AssertFileNotExists verifies that a file does not exist
+func AssertFileNotExists(t *testing.T, fs FileSystem, path string) {
+	if FileExists(t, fs, path) {
+		t.Errorf("Expected file %s to not exist, but it does", path)
+	}
+}
+
+// LogOperationDetails logs details about an operation for debugging
+func LogOperationDetails(t *testing.T, op Operation) {
+	desc := op.Describe()
+	t.Logf("Operation: ID=%s, Type=%s, Path=%s", op.ID(), desc.Type, desc.Path)
+	if len(desc.Details) > 0 {
+		t.Logf("Details: %v", desc.Details)
+	}
+	if len(op.Dependencies()) > 0 {
+		t.Logf("Dependencies: %v", op.Dependencies())
+	}
+	if len(op.Conflicts()) > 0 {
+		t.Logf("Conflicts: %v", op.Conflicts())
+	}
+}
+
+// TestBatchHelper provides utilities for testing batch operations
+type TestBatchHelper struct {
+	t     *testing.T
+	batch *Batch
+	fs    FileSystem
+}
+
+// NewTestBatchHelper creates a new batch test helper
+func NewTestBatchHelper(t *testing.T) *TestBatchHelper {
+	fs := NewTestFileSystem()
+	batch := NewBatch().WithFileSystem(fs)
+	return &TestBatchHelper{
+		t:     t,
+		batch: batch,
+		fs:    fs,
+	}
+}
+
+// Batch returns the test batch
+func (tbh *TestBatchHelper) Batch() *Batch {
+	return tbh.batch
+}
+
+// FileSystem returns the test filesystem
+func (tbh *TestBatchHelper) FileSystem() FileSystem {
+	return tbh.fs
+}
+
+// Run executes the batch and returns the result
+func (tbh *TestBatchHelper) Run() (*Result, error) {
+	result, err := tbh.batch.Run()
+	if err != nil {
+		tbh.t.Logf("Batch run failed: %v", err)
+	}
+	return result, err
+}
+
+// AssertSuccess asserts that the batch runs successfully
+func (tbh *TestBatchHelper) AssertSuccess() *Result {
+	result, err := tbh.Run()
+	if err != nil {
+		tbh.t.Fatalf("Expected batch to succeed, but got error: %v", err)
+	}
 	if !result.Success {
-		th.t.Fatalf("Expected run to succeed, but it failed with errors: %v", result.Errors)
+		tbh.t.Fatalf("Expected batch to succeed, but Success=false. Errors: %v", result.Errors)
 	}
-
 	return result
 }
 
-// RunAndExpectError runs a pipeline and expects it to fail
-func (th *TestHelper) RunAndExpectError(pipeline Pipeline) *Result {
-	th.t.Helper()
+// AssertFailure asserts that the batch fails
+func (tbh *TestBatchHelper) AssertFailure() *Result {
+	result, err := tbh.Run()
+	if err == nil && result.Success {
+		tbh.t.Fatalf("Expected batch to fail, but it succeeded")
+	}
+	return result
+}
 
+// TestPipelineHelper provides utilities for testing pipelines
+type TestPipelineHelper struct {
+	t        *testing.T
+	pipeline Pipeline
+	fs       FileSystem
+	executor *Executor
+}
+
+// NewTestPipelineHelper creates a new pipeline test helper
+func NewTestPipelineHelper(t *testing.T) *TestPipelineHelper {
+	fs := NewTestFileSystem()
+	pipeline := NewMemPipeline()
 	executor := NewExecutor()
-	result := executor.Run(th.ctx, pipeline, th.fs)
-
-	if result.Success {
-		th.t.Fatalf("Expected run to fail, but it succeeded")
+	return &TestPipelineHelper{
+		t:        t,
+		pipeline: pipeline,
+		fs:       fs,
+		executor: executor,
 	}
+}
 
+// Pipeline returns the test pipeline
+func (tph *TestPipelineHelper) Pipeline() Pipeline {
+	return tph.pipeline
+}
+
+// FileSystem returns the test filesystem
+func (tph *TestPipelineHelper) FileSystem() FileSystem {
+	return tph.fs
+}
+
+// Execute runs the pipeline and returns the result
+func (tph *TestPipelineHelper) Execute(ctx context.Context) *Result {
+	return tph.executor.Run(ctx, tph.pipeline, tph.fs)
+}
+
+// ExecuteWithOptions runs the pipeline with options and returns the result
+func (tph *TestPipelineHelper) ExecuteWithOptions(ctx context.Context, opts PipelineOptions) *Result {
+	return tph.executor.RunWithOptions(ctx, tph.pipeline, tph.fs, opts)
+}
+
+// AssertSuccess asserts that the pipeline executes successfully
+func (tph *TestPipelineHelper) AssertSuccess(ctx context.Context) *Result {
+	result := tph.Execute(ctx)
+	if !result.Success {
+		tph.t.Fatalf("Expected pipeline to succeed, but Success=false. Errors: %v", result.Errors)
+	}
 	return result
 }
 
-// ValidateTestFS validates a TestFileSystem using testing/fstest
-func ValidateTestFS(t *testing.T, testFS *TestFileSystem) {
-	t.Helper()
-
-	// Collect expected files from the filesystem
-	expectedFiles := make([]string, 0, len(testFS.MapFS))
-	for path := range testFS.MapFS {
-		expectedFiles = append(expectedFiles, path)
+// AssertFailure asserts that the pipeline fails
+func (tph *TestPipelineHelper) AssertFailure(ctx context.Context) *Result {
+	result := tph.Execute(ctx)
+	if result.Success {
+		tph.t.Fatalf("Expected pipeline to fail, but it succeeded")
 	}
+	return result
+}
 
-	// Use testing/fstest to validate the filesystem
-	if err := fstest.TestFS(testFS.MapFS, expectedFiles...); err != nil {
-		t.Fatalf("TestFileSystem validation failed: %v", err)
+// AssertOperationCount asserts the number of operations in the pipeline
+func (tph *TestPipelineHelper) AssertOperationCount(expected int) {
+	actual := len(tph.pipeline.Operations())
+	if actual != expected {
+		tph.t.Errorf("Expected %d operations, got %d", expected, actual)
 	}
 }
 
-// isNotExistError checks if an error indicates that a file/directory doesn't exist
-func isNotExistError(err error) bool {
-	if pathErr, ok := err.(*fs.PathError); ok {
-		return pathErr.Err == fs.ErrNotExist
+// AddOperation adds an operation to the pipeline
+func (tph *TestPipelineHelper) AddOperation(op Operation) {
+	if err := tph.pipeline.Add(op); err != nil {
+		tph.t.Errorf("Failed to add operation to pipeline: %v", err)
 	}
-	return false
+}
+
+// LogPipelineState logs the current state of the pipeline for debugging
+func (tph *TestPipelineHelper) LogPipelineState() {
+	ops := tph.pipeline.Operations()
+	tph.t.Logf("Pipeline contains %d operations:", len(ops))
+	for i, op := range ops {
+		desc := op.Describe()
+		tph.t.Logf("  [%d] ID=%s, Type=%s, Path=%s", i, op.ID(), desc.Type, desc.Path)
+	}
+}
+
+// CreateTestOperation creates a simple test operation
+func CreateTestOperation(id, opType, path string) Operation {
+	registry := GetDefaultRegistry()
+	op, err := registry.CreateOperation(OperationID(id), opType, path)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create test operation: %v", err))
+	}
+	return op.(Operation)
+}
+
+// CreateTestFile creates a file operation with content
+func CreateTestFileOperation(id, path string, content []byte) Operation {
+	op := CreateTestOperation(id, "create_file", path)
+	item := NewFile(path).WithContent(content)
+	if err := GetDefaultRegistry().SetItemForOperation(op, item); err != nil {
+		panic(fmt.Sprintf("Failed to set item for operation: %v", err))
+	}
+	return op
+}
+
+// CreateTestDirectoryOperation creates a directory operation
+func CreateTestDirectoryOperation(id, path string) Operation {
+	op := CreateTestOperation(id, "create_directory", path)
+	item := NewDirectory(path)
+	if err := GetDefaultRegistry().SetItemForOperation(op, item); err != nil {
+		panic(fmt.Sprintf("Failed to set item for operation: %v", err))
+	}
+	return op
+}
+
+// CreateTestCopyOperation creates a copy operation
+func CreateTestCopyOperation(id, src, dst string) Operation {
+	op := CreateTestOperation(id, "copy", src)
+	op.SetDescriptionDetail("destination", dst)
+	if adapter, ok := op.(*OperationsPackageAdapter); ok {
+		adapter.opsOperation.SetPaths(src, dst)
+	}
+	return op
+}
+
+// CreateTestMoveOperation creates a move operation
+func CreateTestMoveOperation(id, src, dst string) Operation {
+	op := CreateTestOperation(id, "move", src)
+	op.SetDescriptionDetail("destination", dst)
+	if adapter, ok := op.(*OperationsPackageAdapter); ok {
+		adapter.opsOperation.SetPaths(src, dst)
+	}
+	return op
+}
+
+// CreateTestDeleteOperation creates a delete operation
+func CreateTestDeleteOperation(id, path string) Operation {
+	return CreateTestOperation(id, "delete", path)
 }

@@ -28,7 +28,7 @@ func TestCreateFileOperation(t *testing.T) {
 		}
 
 		// Verify file was created
-		if content, ok := fs.files["test.txt"]; !ok {
+		if content, ok := fs.Files()["test.txt"]; !ok {
 			t.Error("Expected file to be created")
 		} else if string(content) != "test content" {
 			t.Errorf("Expected content 'test content', got '%s'", content)
@@ -64,12 +64,12 @@ func TestCreateFileOperation(t *testing.T) {
 		}
 
 		// Verify directory was created
-		if _, ok := fs.dirs["subdir"]; !ok {
+		if _, ok := fs.Dirs()["subdir"]; !ok {
 			t.Error("Expected parent directory to be created")
 		}
 
 		// Verify file was created
-		if _, ok := fs.files["subdir/test.txt"]; !ok {
+		if _, ok := fs.Files()["subdir/test.txt"]; !ok {
 			t.Error("Expected file to be created")
 		}
 	})
@@ -145,7 +145,7 @@ func TestCreateDirectoryOperation(t *testing.T) {
 		}
 
 		// Verify directory was created
-		if _, ok := fs.dirs["testdir"]; !ok {
+		if _, ok := fs.Dirs()["testdir"]; !ok {
 			t.Error("Expected directory to be created")
 		}
 	})
@@ -166,7 +166,7 @@ func TestCreateDirectoryOperation(t *testing.T) {
 		}
 
 		// Verify all directories were created
-		if _, ok := fs.dirs["parent/child/grandchild"]; !ok {
+		if _, ok := fs.Dirs()["parent/child/grandchild"]; !ok {
 			t.Error("Expected nested directory to be created")
 		}
 	})

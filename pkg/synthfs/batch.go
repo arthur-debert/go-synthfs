@@ -8,13 +8,15 @@ import (
 	"strings"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/targets"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/validation"
 )
 
 // computeFileChecksum computes MD5 checksum for a file
 func (b *Batch) computeFileChecksum(filePath string) (*ChecksumRecord, error) {
 	// Phase I, Milestone 3: Basic checksumming for copy/move operations
-	return ComputeFileChecksum(b.fs, filePath)
+	return validation.ComputeFileChecksum(b.fs, filePath)
 }
 
 // Batch represents a collection of filesystem operations that can be validated and executed as a unit.
@@ -30,7 +32,7 @@ type Batch struct {
 
 // NewBatch creates a new operation batch with default filesystem and context.
 func NewBatch() *Batch {
-	fs := NewOSFileSystem(".") // Use current directory as default root
+	fs := filesystem.NewOSFileSystem(".") // Use current directory as default root
 	return &Batch{
 		operations:  []Operation{},
 		fs:          fs,

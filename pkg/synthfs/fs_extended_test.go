@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 func TestOSFileSystemExtended(t *testing.T) {
@@ -21,7 +21,7 @@ func TestOSFileSystemExtended(t *testing.T) {
 		}
 	}()
 
-	osfs := synthfs.NewOSFileSystem(tempDir)
+	osfs := filesystem.NewOSFileSystem(tempDir)
 
 	t.Run("Symlink and Readlink", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
@@ -146,7 +146,7 @@ func TestOSFileSystemExtended(t *testing.T) {
 }
 
 func TestTestFileSystemExtended(t *testing.T) {
-	testFS := synthfs.NewTestFileSystem()
+	testFS := filesystem.NewTestFileSystem()
 
 	t.Run("Symlink and Readlink", func(t *testing.T) {
 		// Create a target file

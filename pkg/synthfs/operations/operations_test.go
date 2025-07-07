@@ -1,141 +1,21 @@
 package operations_test
 
 import (
-	"bytes"
 	"errors"
-	"io"
 	"io/fs"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
-// MockFilesystem implements a minimal filesystem for testing
-type MockFilesystem struct {
-	files map[string][]byte
-	dirs  map[string]bool
-}
+// Type aliases for the consolidated mock filesystem
+type MockFilesystem = testutil.OperationsMockFS
 
 func NewMockFilesystem() *MockFilesystem {
-	return &MockFilesystem{
-		files: make(map[string][]byte),
-		dirs:  make(map[string]bool),
-	}
+	return testutil.NewOperationsMockFS()
 }
-
-func (m *MockFilesystem) WriteFile(name string, data []byte, perm interface{}) error {
-	m.files[name] = data
-	return nil
-}
-
-func (m *MockFilesystem) MkdirAll(path string, perm interface{}) error {
-	// Create all parent directories too
-	parts := strings.Split(path, "/")
-	for i := 1; i <= len(parts); i++ {
-		dir := strings.Join(parts[:i], "/")
-		if dir != "" {
-			m.dirs[dir] = true
-		}
-	}
-	return nil
-}
-
-func (m *MockFilesystem) Remove(name string) error {
-	delete(m.files, name)
-	delete(m.dirs, name)
-	return nil
-}
-
-func (m *MockFilesystem) RemoveAll(path string) error {
-	// Remove the path and all its children
-	delete(m.dirs, path)
-	delete(m.files, path)
-	
-	// Remove all children
-	prefix := path + "/"
-	for p := range m.files {
-		if strings.HasPrefix(p, prefix) {
-			delete(m.files, p)
-		}
-	}
-	for p := range m.dirs {
-		if strings.HasPrefix(p, prefix) {
-			delete(m.dirs, p)
-		}
-	}
-	return nil
-}
-
-func (m *MockFilesystem) Stat(name string) (interface{}, error) {
-	if _, ok := m.files[name]; ok {
-		return &mockFileInfo{name: name, size: int64(len(m.files[name]))}, nil
-	}
-	if _, ok := m.dirs[name]; ok {
-		return &mockFileInfo{name: name, isDir: true}, nil
-	}
-	return nil, fs.ErrNotExist
-}
-
-func (m *MockFilesystem) Open(name string) (interface{}, error) {
-	if content, ok := m.files[name]; ok {
-		return &mockFile{Reader: bytes.NewReader(content)}, nil
-	}
-	return nil, fs.ErrNotExist
-}
-
-func (m *MockFilesystem) Rename(oldpath, newpath string) error {
-	// Check if source exists
-	if content, ok := m.files[oldpath]; ok {
-		// It's a file
-		m.files[newpath] = content
-		delete(m.files, oldpath)
-		return nil
-	}
-	if _, ok := m.dirs[oldpath]; ok {
-		// It's a directory
-		m.dirs[newpath] = true
-		delete(m.dirs, oldpath)
-		// Also rename all children
-		for p, content := range m.files {
-			if strings.HasPrefix(p, oldpath+"/") {
-				newP := newpath + p[len(oldpath):]
-				m.files[newP] = content
-				delete(m.files, p)
-			}
-		}
-		for p := range m.dirs {
-			if strings.HasPrefix(p, oldpath+"/") {
-				newP := newpath + p[len(oldpath):]
-				m.dirs[newP] = true
-				delete(m.dirs, p)
-			}
-		}
-		return nil
-	}
-	return fs.ErrNotExist
-}
-
-type mockFileInfo struct {
-	name  string
-	size  int64
-	isDir bool
-}
-
-func (m *mockFileInfo) Name() string       { return m.name }
-func (m *mockFileInfo) Size() int64        { return m.size }
-func (m *mockFileInfo) Mode() fs.FileMode  { return 0644 }
-func (m *mockFileInfo) IsDir() bool        { return m.isDir }
-func (m *mockFileInfo) Sys() interface{}   { return nil }
-func (m *mockFileInfo) ModTime() time.Time { return time.Now() }
-
-type mockFile struct {
-	io.Reader
-}
-
-func (m *mockFile) Close() error { return nil }
 
 // TestFileItem is a mock item for testing
 type TestFileItem struct {

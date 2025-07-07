@@ -50,7 +50,7 @@ func TestArchiveOperations(t *testing.T) {
 		}
 
 		// Verify archive was created
-		archiveData, ok := fs.files["archive.zip"]
+		archiveData, ok := fs.Files()["archive.zip"]
 		if !ok {
 			t.Fatal("Archive file was not created")
 		}
@@ -142,14 +142,14 @@ func TestArchiveOperations(t *testing.T) {
 		}
 
 		// Verify files were extracted
-		content1, ok := fs.files["output/extracted/file1.txt"]
+		content1, ok := fs.Files()["output/extracted/file1.txt"]
 		if !ok {
 			t.Error("Expected output/extracted/file1.txt to be extracted")
 		} else if string(content1) != "content1" {
 			t.Errorf("Wrong content for file1.txt: %q", string(content1))
 		}
 
-		content2, ok := fs.files["output/extracted/file2.txt"]
+		content2, ok := fs.Files()["output/extracted/file2.txt"]
 		if !ok {
 			t.Error("Expected output/extracted/file2.txt to be extracted")
 		} else if string(content2) != "content2" {

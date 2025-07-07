@@ -183,7 +183,7 @@ func TestTestHelper(t *testing.T) {
 	t.Run("NewTestHelper", func(t *testing.T) {
 		helper := synthfs.NewTestHelper(t)
 
-		if helper.FS() == nil {
+		if helper.FileSystem() == nil {
 			t.Errorf("Expected non-nil filesystem")
 		}
 
@@ -203,7 +203,10 @@ func TestTestHelper(t *testing.T) {
 		helper := synthfs.NewTestHelperWithFiles(t, files)
 
 		// The file should exist
-		helper.AssertFileExists("test.txt", []byte("test content"))
+		if !helper.FileExists("test.txt") {
+			t.Errorf("Expected file test.txt to exist")
+		}
+		helper.AssertFileContent("test.txt", []byte("test content"))
 	})
 
 	t.Run("AssertFileExists", func(t *testing.T) {
@@ -211,40 +214,39 @@ func TestTestHelper(t *testing.T) {
 
 		// Create a file
 		content := []byte("test content")
-		err := helper.FS().WriteFile("test.txt", content, 0644)
-		if err != nil {
-			t.Fatalf("WriteFile failed: %v", err)
-		}
+		helper.WriteFile("test.txt", content, 0644)
 
 		// Should not panic
-		helper.AssertFileExists("test.txt", content)
+		if !helper.FileExists("test.txt") {
+			t.Errorf("Expected file test.txt to exist")
+		}
+		helper.AssertFileContent("test.txt", content)
 	})
 
 	t.Run("AssertDirExists", func(t *testing.T) {
 		helper := synthfs.NewTestHelper(t)
 
 		// Create a directory
-		err := helper.FS().MkdirAll("testdir", 0755)
-		if err != nil {
-			t.Fatalf("MkdirAll failed: %v", err)
-		}
+		helper.MkdirAll("testdir", 0755)
 
-		// Should not panic
-		helper.AssertDirExists("testdir")
+		// Check if directory exists
+		if !helper.FileExists("testdir") {
+			t.Errorf("Expected directory testdir to exist")
+		}
 	})
 
 	t.Run("AssertNotExists", func(t *testing.T) {
 		helper := synthfs.NewTestHelper(t)
 
-		// Should not panic for non-existent file
-		helper.AssertNotExists("nonexistent.txt")
+		// Check that file doesn't exist
+		helper.AssertFileNotExists("nonexistent.txt")
 	})
 
 	t.Run("ExecuteAndAssert", func(t *testing.T) {
 		helper := synthfs.NewTestHelper(t)
 
 		// Use the new Batch API instead of old ops
-		batch := synthfs.NewBatch().WithFileSystem(helper.FS())
+		batch := synthfs.NewBatch().WithFileSystem(helper.FileSystem())
 		_, err := batch.CreateFile("success.txt", []byte("content"))
 		if err != nil {
 			t.Fatalf("CreateFile failed: %v", err)
@@ -264,7 +266,7 @@ func TestTestHelper(t *testing.T) {
 		helper := synthfs.NewTestHelper(t)
 
 		// Use the new Batch API with invalid operation to cause error
-		batch := synthfs.NewBatch().WithFileSystem(helper.FS())
+		batch := synthfs.NewBatch().WithFileSystem(helper.FileSystem())
 		_, err := batch.CreateFile("", []byte("content")) // Empty path should fail validation
 		if err == nil {
 			t.Fatal("Expected validation error for empty path")
@@ -275,22 +277,6 @@ func TestTestHelper(t *testing.T) {
 	})
 }
 
-func TestValidateTestFS(t *testing.T) {
-	t.Run("Valid filesystem", func(t *testing.T) {
-		tfs := synthfs.NewTestFileSystem()
-
-		// Add some test files
-		if err := tfs.WriteFile("test.txt", []byte("content"), 0644); err != nil {
-			t.Fatalf("WriteFile failed: %v", err)
-		}
-		if err := tfs.MkdirAll("testdir", 0755); err != nil {
-			t.Fatalf("MkdirAll failed: %v", err)
-		}
-
-		// Should not panic - provide the expected files list
-		synthfs.ValidateTestFS(t, tfs)
-	})
-}
 
 func TestIsSubPath(t *testing.T) {
 	// This tests the internal isSubPath function via RemoveAll behavior

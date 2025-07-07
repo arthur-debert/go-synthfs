@@ -2,12 +2,11 @@ package operations_test
 
 import (
 	"context"
-	"io/fs"
-	"path/filepath"
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
 func TestDeleteOperation_ReverseOps(t *testing.T) {
@@ -213,78 +212,11 @@ func TestDeleteOperation_Execute(t *testing.T) {
 	})
 }
 
-// ExtendedMockFilesystem adds ReadDir support to MockFilesystem
-type ExtendedMockFilesystem struct {
-	*MockFilesystem
-}
+// Type aliases for the consolidated mock filesystem with ReadDir support
+type ExtendedMockFilesystem = testutil.OperationsMockFSWithReadDir
 
 func NewExtendedMockFilesystem() *ExtendedMockFilesystem {
-	return &ExtendedMockFilesystem{
-		MockFilesystem: NewMockFilesystem(),
-	}
-}
-
-// mockDirEntry implements fs.DirEntry
-type mockDirEntry struct {
-	name  string
-	isDir bool
-	info  fs.FileInfo
-}
-
-func (m *mockDirEntry) Name() string               { return m.name }
-func (m *mockDirEntry) IsDir() bool                { return m.isDir }
-func (m *mockDirEntry) Type() fs.FileMode          { return m.info.Mode().Type() }
-func (m *mockDirEntry) Info() (fs.FileInfo, error) { return m.info, nil }
-
-func (m *ExtendedMockFilesystem) ReadDir(name string) ([]fs.DirEntry, error) {
-	var entries []fs.DirEntry
-	
-	// Check if the directory exists
-	if _, ok := m.dirs[name]; !ok {
-		// Check if it's the parent of any files
-		hasChildren := false
-		for path := range m.files {
-			if dir := filepath.Dir(path); dir == name {
-				hasChildren = true
-				break
-			}
-		}
-		for path := range m.dirs {
-			if dir := filepath.Dir(path); dir == name && path != name {
-				hasChildren = true
-				break
-			}
-		}
-		if !hasChildren {
-			return nil, fs.ErrNotExist
-		}
-	}
-
-	// Add subdirectories
-	for path := range m.dirs {
-		if dir := filepath.Dir(path); dir == name && path != name {
-			base := filepath.Base(path)
-			entries = append(entries, &mockDirEntry{
-				name:  base,
-				isDir: true,
-				info:  &mockFileInfo{name: base, isDir: true},
-			})
-		}
-	}
-
-	// Add files
-	for path, content := range m.files {
-		if filepath.Dir(path) == name {
-			base := filepath.Base(path)
-			entries = append(entries, &mockDirEntry{
-				name:  base,
-				isDir: false,
-				info:  &mockFileInfo{name: base, size: int64(len(content))},
-			})
-		}
-	}
-
-	return entries, nil
+	return testutil.NewOperationsMockFSWithReadDir()
 }
 
 func TestDeleteOperation_ReverseOps_WithReadDir(t *testing.T) {

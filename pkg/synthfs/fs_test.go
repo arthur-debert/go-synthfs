@@ -9,7 +9,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 func TestOSFileSystem(t *testing.T) {
@@ -24,7 +24,7 @@ func TestOSFileSystem(t *testing.T) {
 		}
 	}()
 
-	osfs := synthfs.NewOSFileSystem(tempDir)
+	osfs := filesystem.NewOSFileSystem(tempDir)
 
 	t.Run("WriteFile and Open", func(t *testing.T) {
 		content := []byte("Hello, World!")
@@ -222,7 +222,7 @@ func TestReadOnlyWrapper(t *testing.T) {
 		},
 	}
 
-	wrapper := synthfs.NewReadOnlyWrapper(testFS)
+	wrapper := filesystem.NewReadOnlyWrapper(testFS)
 
 	t.Run("Open", func(t *testing.T) {
 		file, err := wrapper.Open("file.txt")
@@ -290,7 +290,7 @@ func TestReadOnlyWrapper_WithNonStatFS(t *testing.T) {
 
 	// Wrap it to hide the StatFS interface
 	var plainFS fs.FS = testFS
-	wrapper := synthfs.NewReadOnlyWrapper(plainFS)
+	wrapper := filesystem.NewReadOnlyWrapper(plainFS)
 
 	t.Run("Stat fallback to Open", func(t *testing.T) {
 		info, err := wrapper.Stat("file.txt")

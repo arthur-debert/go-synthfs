@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 func TestUnarchiveItem(t *testing.T) {
@@ -71,7 +72,7 @@ func TestUnarchiveItem(t *testing.T) {
 
 func TestUnarchiveValidation(t *testing.T) {
 	ctx := context.Background()
-	fs := NewOSFileSystem(".")
+	fs := filesystem.NewOSFileSystem(".")
 
 	t.Run("validates archive path", func(t *testing.T) {
 		registry := GetDefaultRegistry()
@@ -141,7 +142,7 @@ func TestUnarchiveValidation(t *testing.T) {
 		supportedFormats := []string{"test.tar.gz", "test.tgz", "test.zip"}
 
 		// Phase I, Milestone 1: Create dummy archive files since we now validate existence
-		testFS := NewOSFileSystem(".")
+		testFS := filesystem.NewOSFileSystem(".")
 		for _, format := range supportedFormats {
 			// Create a minimal dummy archive file for testing
 			err := testFS.WriteFile(format, []byte("dummy archive content"), 0644)
@@ -195,7 +196,7 @@ func TestUnarchiveValidation(t *testing.T) {
 func TestUnarchiveIntegration(t *testing.T) {
 	// Create temporary directory for test
 	tempDir := t.TempDir()
-	fs := NewOSFileSystem(tempDir)
+	fs := filesystem.NewOSFileSystem(tempDir)
 	ctx := context.Background()
 
 	t.Run("extract tar.gz archive", func(t *testing.T) {
@@ -399,7 +400,7 @@ func TestUnarchiveIntegration(t *testing.T) {
 func TestBatchUnarchive(t *testing.T) {
 	t.Run("batch unarchive operation", func(t *testing.T) {
 		tempDir := t.TempDir()
-		fs := NewOSFileSystem(tempDir)
+		fs := filesystem.NewOSFileSystem(tempDir)
 
 		// Create test archive first
 		testFiles := map[string][]byte{
@@ -449,7 +450,7 @@ func TestBatchUnarchive(t *testing.T) {
 
 	t.Run("batch unarchive with patterns", func(t *testing.T) {
 		tempDir := t.TempDir()
-		fs := NewOSFileSystem(tempDir)
+		fs := filesystem.NewOSFileSystem(tempDir)
 
 		// Create test archive with multiple files
 		testFiles := map[string][]byte{
