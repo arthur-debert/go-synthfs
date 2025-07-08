@@ -8,20 +8,7 @@ import (
 	"github.com/gammazero/toposort"
 )
 
-// OperationInterface defines the interface for operations in the pipeline  
-// This should match the interface defined in executor.go
-type OperationInterface interface {
-	ID() core.OperationID
-	Describe() core.OperationDesc
-	Dependencies() []core.OperationID
-	Conflicts() []core.OperationID
-	AddDependency(depID core.OperationID)
-	ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
-	ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
-	ReverseOps(ctx context.Context, fsys interface{}, budget *core.BackupBudget) ([]interface{}, *core.BackupData, error)
-	Rollback(ctx context.Context, fsys interface{}) error
-	GetItem() interface{}
-}
+// OperationInterface is defined in executor.go to avoid duplication
 
 // Pipeline manages a sequence of operations
 type Pipeline interface {
@@ -365,7 +352,9 @@ func (mp *memPipeline) ResolvePrerequisites(resolver core.PrerequisiteResolver, 
 						newOps = append(newOps, resolvedOpInterface)
 						
 						// Add dependency from original operation to resolved operation
-						op.AddDependency(resolvedOpInterface.ID())
+						if depAdder, ok := op.(interface{ AddDependency(core.OperationID) }); ok {
+							depAdder.AddDependency(resolvedOpInterface.ID())
+						}
 						
 						mp.logger.Debug().
 							Str("resolved_op_id", string(resolvedOpInterface.ID())).

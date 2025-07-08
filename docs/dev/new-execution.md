@@ -106,7 +106,7 @@ type NoConflictPrerequisite struct {
 4. When false (default), use existing batch behavior
 5. **Tests**: Add tests for new resolver, existing tests unchanged
 
-### Phase 4: Create SimpleBatch Alternative (No Breaking Changes)
+### Phase 4: Create SimpleBatch Alternative (No Breaking Changes) (DONE)
 
 **Goal**: New simplified batch that doesn't handle prerequisites
 
@@ -116,7 +116,7 @@ type NoConflictPrerequisite struct {
 4. Existing `NewBatch()` returns current implementation
 5. **Tests**: New tests for SimpleBatch, old batch tests unchanged
 
-### Phase 5: Migration Path (No Breaking Changes)
+### Phase 5: Migration Path (No Breaking Changes) (DONE)
 
 **Goal**: Allow gradual migration to new design
 

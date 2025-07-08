@@ -20,25 +20,42 @@ import (
 // BatchImpl represents a collection of operations that can be validated and executed as a unit.
 // This implementation uses interface{} types to avoid circular dependencies.
 type BatchImpl struct {
-	operations  []interface{}
-	fs          interface{} // Filesystem interface
-	ctx         context.Context
-	idCounter   int
-	pathTracker *pathStateTracker // Path state tracker
-	registry    core.OperationFactory
-	logger      core.Logger
+	operations       []interface{}
+	fs               interface{} // Filesystem interface
+	ctx              context.Context
+	idCounter        int
+	pathTracker      *pathStateTracker // Path state tracker
+	registry         core.OperationFactory
+	logger           core.Logger
+	useSimpleBatch   bool // Flag to enable SimpleBatch behavior (default: false for backward compatibility)
 }
 
 // NewBatch creates a new operation batch.
 func NewBatch(fs interface{}, registry core.OperationFactory) Batch {
 	return &BatchImpl{
-		operations:  []interface{}{},
-		fs:          fs,
-		ctx:         context.Background(),
-		idCounter:   0,
-		pathTracker: newPathStateTracker(fs),
-		registry:    registry,
-		logger:      nil, // Will be set by WithLogger method
+		operations:     []interface{}{},
+		fs:             fs,
+		ctx:            context.Background(),
+		idCounter:      0,
+		pathTracker:    newPathStateTracker(fs),
+		registry:       registry,
+		logger:         nil, // Will be set by WithLogger method
+		useSimpleBatch: false, // Default to legacy behavior for backward compatibility
+	}
+}
+
+// NewBatchWithSimpleBatch creates a new operation batch with SimpleBatch behavior enabled.
+// This disables automatic parent directory creation and relies on prerequisite resolution.
+func NewBatchWithSimpleBatch(fs interface{}, registry core.OperationFactory) Batch {
+	return &BatchImpl{
+		operations:     []interface{}{},
+		fs:             fs,
+		ctx:            context.Background(),
+		idCounter:      0,
+		pathTracker:    nil, // No path tracker needed for SimpleBatch behavior
+		registry:       registry,
+		logger:         nil, // Will be set by WithLogger method
+		useSimpleBatch: true, // Enable SimpleBatch behavior
 	}
 }
 
@@ -76,13 +93,27 @@ func (b *BatchImpl) WithLogger(logger core.Logger) Batch {
 	return b
 }
 
+// WithSimpleBatch enables SimpleBatch behavior that relies on prerequisite resolution
+// instead of hardcoded parent directory creation logic.
+func (b *BatchImpl) WithSimpleBatch(enabled bool) Batch {
+	b.useSimpleBatch = enabled
+	// If enabling SimpleBatch behavior, disable the path tracker as it's not needed
+	if enabled {
+		b.pathTracker = nil
+	} else if b.pathTracker == nil {
+		// If disabling SimpleBatch behavior, recreate the path tracker
+		b.pathTracker = newPathStateTracker(b.fs)
+	}
+	return b
+}
+
 // add adds an operation to the batch and validates it
 func (b *BatchImpl) add(op interface{}) error {
 	// Validate the operation first
 	if err := b.validateOperation(op); err != nil {
 		// For create operations, if the error is "file already exists" and the file
 		// is scheduled for deletion, we should give a more specific error
-		if b.pathTracker != nil {
+		if b.pathTracker != nil && !b.useSimpleBatch {
 			// Get operation description to check if it's a create operation
 			if describer, ok := op.(interface{ Describe() core.OperationDesc }); ok {
 				desc := describer.Describe()
@@ -102,21 +133,23 @@ func (b *BatchImpl) add(op interface{}) error {
 		return err
 	}
 
-	// Check for conflicts with projected state
-	if err := b.checkPathConflicts(op); err != nil {
-		return err
-	}
-
-	// Update projected state
-	if b.pathTracker != nil {
-		if err := b.pathTracker.updateState(op); err != nil {
+	// Check for conflicts with projected state (only in legacy mode)
+	if !b.useSimpleBatch {
+		if err := b.checkPathConflicts(op); err != nil {
 			return err
 		}
-	}
 
-	// Auto-create parent directories if needed
-	if err := b.autoCreateParentDirs(op); err != nil {
-		return err
+		// Update projected state
+		if b.pathTracker != nil {
+			if err := b.pathTracker.updateState(op); err != nil {
+				return err
+			}
+		}
+
+		// Auto-create parent directories if needed (legacy behavior)
+		if err := b.autoCreateParentDirs(op); err != nil {
+			return err
+		}
 	}
 
 	b.operations = append(b.operations, op)
@@ -628,8 +661,9 @@ func (b *BatchImpl) UnarchiveWithPatterns(archivePath, extractPath string, patte
 func (b *BatchImpl) Run() (interface{}, error) {
 	// Use default pipeline options
 	defaultOpts := map[string]interface{}{
-		"restorable":        false,
-		"max_backup_size_mb": 0,
+		"restorable":            false,
+		"max_backup_size_mb":    0,
+		"resolve_prerequisites": b.useSimpleBatch, // Enable prerequisite resolution for SimpleBatch behavior
 	}
 	return b.RunWithOptions(defaultOpts)
 }
@@ -642,7 +676,7 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 	pipelineOpts := core.PipelineOptions{
 		Restorable:           false,
 		MaxBackupSizeMB:      10,
-		ResolvePrerequisites: false,
+		ResolvePrerequisites: b.useSimpleBatch, // Default based on batch mode
 	}
 	
 	if optsMap, ok := opts.(map[string]interface{}); ok {
@@ -663,6 +697,8 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 			Int("operation_count", len(b.operations)).
 			Bool("restorable", pipelineOpts.Restorable).
 			Int("max_backup_mb", pipelineOpts.MaxBackupSizeMB).
+			Bool("resolve_prerequisites", pipelineOpts.ResolvePrerequisites).
+			Bool("use_simple_batch", b.useSimpleBatch).
 			Msg("executing batch")
 	}
 	
@@ -763,9 +799,10 @@ func (b *BatchImpl) RunRestorableWithBudget(maxBackupMB int) (interface{}, error
 }
 
 // RunWithPrerequisites runs all operations with prerequisite resolution enabled.
+// This method forces prerequisite resolution regardless of the batch mode.
 func (b *BatchImpl) RunWithPrerequisites() (interface{}, error) {
 	opts := map[string]interface{}{
-		"resolve_prerequisites": true,
+		"resolve_prerequisites": true, // Force prerequisite resolution
 		"restorable":            false,
 		"max_backup_size_mb":    0,
 	}
@@ -773,9 +810,10 @@ func (b *BatchImpl) RunWithPrerequisites() (interface{}, error) {
 }
 
 // RunWithPrerequisitesAndBudget runs all operations with prerequisite resolution and backup enabled.
+// This method forces prerequisite resolution regardless of the batch mode.
 func (b *BatchImpl) RunWithPrerequisitesAndBudget(maxBackupMB int) (interface{}, error) {
 	opts := map[string]interface{}{
-		"resolve_prerequisites": true,
+		"resolve_prerequisites": true, // Force prerequisite resolution
 		"restorable":            true,
 		"max_backup_size_mb":    maxBackupMB,
 	}
@@ -975,6 +1013,12 @@ func (oa *operationAdapter) GetItem() interface{} {
 func (oa *operationAdapter) AddDependency(depID core.OperationID) {
 	if op, ok := oa.op.(interface{ AddDependency(core.OperationID) }); ok {
 		op.AddDependency(depID)
+	}
+}
+
+func (oa *operationAdapter) SetDescriptionDetail(key string, value interface{}) {
+	if op, ok := oa.op.(interface{ SetDescriptionDetail(string, interface{}) }); ok {
+		op.SetDescriptionDetail(key, value)
 	}
 }
 

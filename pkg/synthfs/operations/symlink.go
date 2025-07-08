@@ -20,7 +20,7 @@ func NewCreateSymlinkOperation(id core.OperationID, linkPath string) *CreateSyml
 	}
 }
 
-// Prerequisites returns the prerequisites for creating a symlink
+// Prerequisites returns the prerequisites for creating a symlink.
 func (op *CreateSymlinkOperation) Prerequisites() []core.Prerequisite {
 	var prereqs []core.Prerequisite
 	

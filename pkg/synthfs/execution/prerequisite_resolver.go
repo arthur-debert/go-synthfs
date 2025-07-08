@@ -2,81 +2,146 @@ package execution
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
-// PrerequisiteResolver can create operations to satisfy prerequisites
+// PrerequisiteResolver resolves prerequisites by creating necessary operations
 type PrerequisiteResolver struct {
-	factory core.OperationFactory
-	logger  core.Logger
-	idCounter int
+	operationFactory core.OperationFactory
+	idCounter        int
+	logger           core.Logger
 }
 
 // NewPrerequisiteResolver creates a new prerequisite resolver
-func NewPrerequisiteResolver(factory core.OperationFactory, logger core.Logger) core.PrerequisiteResolver {
+func NewPrerequisiteResolver(factory core.OperationFactory, logger core.Logger) *PrerequisiteResolver {
 	return &PrerequisiteResolver{
-		factory:   factory,
-		logger:    logger,
-		idCounter: 0,
+		operationFactory: factory,
+		idCounter:        0,
+		logger:           logger,
 	}
 }
 
-// CanResolve returns true if the resolver can resolve the given prerequisite
+// CanResolve checks if a prerequisite can be resolved
 func (pr *PrerequisiteResolver) CanResolve(prereq core.Prerequisite) bool {
-	// Only resolve parent directory prerequisites if we have a factory
-	return prereq.Type() == "parent_dir" && pr.factory != nil
+	switch prereq.Type() {
+	case "parent_dir":
+		return true
+	case "no_conflict":
+		return false // Cannot auto-resolve conflicts
+	case "source_exists":
+		return false // Cannot auto-create sources
+	default:
+		return false
+	}
 }
 
-// Resolve creates operations to satisfy the given prerequisite
+// Resolve creates operations to satisfy the prerequisite
 func (pr *PrerequisiteResolver) Resolve(prereq core.Prerequisite) ([]interface{}, error) {
 	switch prereq.Type() {
 	case "parent_dir":
 		return pr.resolveParentDir(prereq)
 	default:
-		return nil, fmt.Errorf("unsupported prerequisite type: %s", prereq.Type())
+		return nil, fmt.Errorf("cannot resolve prerequisite type: %s", prereq.Type())
 	}
 }
 
-// resolveParentDir creates a CreateDirectory operation for parent directories
+// resolveParentDir creates parent directory operations
 func (pr *PrerequisiteResolver) resolveParentDir(prereq core.Prerequisite) ([]interface{}, error) {
-	if pr.factory == nil {
-		return nil, fmt.Errorf("no operation factory available for prerequisite resolution")
-	}
-
 	path := prereq.Path()
-	parentDir := filepath.Dir(path)
-
-	// Skip if parent is root or current directory
-	if parentDir == "." || parentDir == "/" || parentDir == path {
-		pr.logger.Debug().
-			Str("path", path).
-			Str("parent", parentDir).
-			Msg("skipping parent directory prerequisite - already at root")
-		return []interface{}{}, nil
+	if path == "" {
+		return nil, fmt.Errorf("parent_dir prerequisite has empty path")
 	}
 
-	pr.logger.Debug().
-		Str("path", path).
-		Str("parent_dir", parentDir).
-		Msg("resolving parent directory prerequisite")
+	// Get parent directory path
+	parentPath := getParentPath(path)
+	if parentPath == "." || parentPath == "/" {
+		return nil, nil // No parent directory needed
+	}
 
 	// Generate unique operation ID
 	pr.idCounter++
-	opID := core.OperationID(fmt.Sprintf("prereq_parent_dir_%d_%s", pr.idCounter, 
-		filepath.Base(parentDir)))
+	opID := core.OperationID(fmt.Sprintf("prereq_parent_dir_%d_%s", pr.idCounter, cleanPath(parentPath)))
 
 	// Create parent directory operation
-	op, err := pr.factory.CreateOperation(opID, "create_directory", parentDir)
+	op, err := pr.operationFactory.CreateOperation(opID, "create_directory", parentPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create parent directory operation: %w", err)
 	}
 
-	pr.logger.Debug().
-		Str("op_id", string(opID)).
-		Str("parent_dir", parentDir).
-		Msg("created parent directory operation")
+	// Set default directory item
+	if err := pr.setDefaultDirItem(op, parentPath); err != nil {
+		return nil, fmt.Errorf("failed to set directory item: %w", err)
+	}
 
 	return []interface{}{op}, nil
+}
+
+// setDefaultDirItem sets a default directory item for the operation
+func (pr *PrerequisiteResolver) setDefaultDirItem(op interface{}, path string) error {
+	// Create a minimal directory item
+	dirItem := &defaultDirItem{
+		path: path,
+		mode: 0755, // Default directory permissions
+	}
+
+	return pr.operationFactory.SetItemForOperation(op, dirItem)
+}
+
+// Helper functions
+
+// getParentPath extracts the parent directory path
+func getParentPath(path string) string {
+	if path == "" || path == "." || path == "/" {
+		return ""
+	}
+	
+	// Simple parent path extraction (could use filepath.Dir)
+	for i := len(path) - 1; i >= 0; i-- {
+		if path[i] == '/' || path[i] == '\\' {
+			parent := path[:i]
+			if parent == "" {
+				return "/"
+			}
+			return parent
+		}
+	}
+	return "."
+}
+
+// cleanPath removes invalid characters from paths for IDs
+func cleanPath(path string) string {
+	result := ""
+	for _, char := range path {
+		if char == '/' || char == '\\' {
+			result += "_"
+		} else if char == ':' {
+			result += "_"
+		} else {
+			result += string(char)
+		}
+	}
+	return result
+}
+
+// defaultDirItem is a minimal directory item implementation
+type defaultDirItem struct {
+	path string
+	mode int
+}
+
+func (d *defaultDirItem) Path() string {
+	return d.path
+}
+
+func (d *defaultDirItem) Type() string {
+	return "directory"
+}
+
+func (d *defaultDirItem) Mode() interface{} {
+	return d.mode
+}
+
+func (d *defaultDirItem) IsDir() bool {
+	return true
 }

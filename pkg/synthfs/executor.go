@@ -246,3 +246,8 @@ func (ow *operationWrapper) AddDependency(depID core.OperationID) {
 	// Delegate to the original operation's AddDependency method
 	ow.op.AddDependency(depID)
 }
+
+func (ow *operationWrapper) SetDescriptionDetail(key string, value interface{}) {
+	// Delegate to the original operation's SetDescriptionDetail method
+	ow.op.SetDescriptionDetail(key, value)
+}

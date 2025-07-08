@@ -133,6 +133,12 @@ func (w *operationWrapper) AddDependency(depID core.OperationID) {
 	}
 }
 
+func (w *operationWrapper) SetDescriptionDetail(key string, value interface{}) {
+	if op, ok := w.op.(interface{ SetDescriptionDetail(string, interface{}) }); ok {
+		op.SetDescriptionDetail(key, value)
+	}
+}
+
 // ensureParentDirectories generates CreateDir operations for missing parent directories
 func ensureParentDirectories(b *BatchImpl, path string) ([]core.OperationID, error) {
 	// Clean and normalize the path

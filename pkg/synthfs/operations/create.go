@@ -21,7 +21,7 @@ func NewCreateFileOperation(id core.OperationID, path string) *CreateFileOperati
 	}
 }
 
-// Prerequisites returns the prerequisites for creating a file
+// Prerequisites returns the prerequisites for creating a file.
 func (op *CreateFileOperation) Prerequisites() []core.Prerequisite {
 	var prereqs []core.Prerequisite
 	

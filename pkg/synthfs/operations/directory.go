@@ -22,7 +22,7 @@ func NewCreateDirectoryOperation(id core.OperationID, path string) *CreateDirect
 	}
 }
 
-// Prerequisites returns the prerequisites for creating a directory
+// Prerequisites returns the prerequisites for creating a directory.
 func (op *CreateDirectoryOperation) Prerequisites() []core.Prerequisite {
 	var prereqs []core.Prerequisite
 	
@@ -31,8 +31,8 @@ func (op *CreateDirectoryOperation) Prerequisites() []core.Prerequisite {
 		prereqs = append(prereqs, core.NewParentDirPrerequisite(op.description.Path))
 	}
 	
-	// Need no conflict with existing files
-	prereqs = append(prereqs, core.NewNoConflictPrerequisite(op.description.Path))
+	// Note: Directories can be created even if they already exist (idempotent)
+	// so we don't need NoConflictPrerequisite
 	
 	return prereqs
 }

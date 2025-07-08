@@ -47,6 +47,7 @@ type OperationInterface interface {
 	ReverseOps(ctx context.Context, fsys interface{}, budget *core.BackupBudget) ([]interface{}, *core.BackupData, error)
 	Rollback(ctx context.Context, fsys interface{}) error
 	GetItem() interface{}
+	SetDescriptionDetail(key string, value interface{})
 }
 
 // PipelineInterface defines the minimal interface needed by executor
@@ -113,18 +114,19 @@ func (e *Executor) RunWithOptionsAndResolver(ctx context.Context, pipeline Pipel
 		// Use provided resolver or create default one
 		prereqResolver := resolver
 		if prereqResolver == nil {
-			e.logger.Debug().Msg("no prerequisite resolver provided - creating default resolver with nil factory")
-			prereqResolver = NewPrerequisiteResolver(nil, e.logger)
+			e.logger.Debug().Msg("no prerequisite resolver provided and no factory available - skipping prerequisite resolution")
+			// Cannot create a default resolver without a factory, so skip prerequisite resolution
+			e.logger.Info().Msg("prerequisite resolution skipped - no resolver provided")
+		} else {
+			if err := pipeline.ResolvePrerequisites(prereqResolver, fs); err != nil {
+				e.logger.Info().Err(err).Msg("prerequisite resolution failed")
+				result.Success = false
+				result.Errors = append(result.Errors, fmt.Errorf("prerequisite resolution failed: %w", err))
+				result.Duration = time.Since(start)
+				return result
+			}
+			e.logger.Info().Msg("prerequisite resolution completed successfully")
 		}
-		
-		if err := pipeline.ResolvePrerequisites(prereqResolver, fs); err != nil {
-			e.logger.Info().Err(err).Msg("prerequisite resolution failed")
-			result.Success = false
-			result.Errors = append(result.Errors, fmt.Errorf("prerequisite resolution failed: %w", err))
-			result.Duration = time.Since(start)
-			return result
-		}
-		e.logger.Info().Msg("prerequisite resolution completed successfully")
 	}
 
 	// Resolve dependencies 

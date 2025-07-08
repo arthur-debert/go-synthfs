@@ -27,6 +27,40 @@ func NewCreateArchiveOperation(id core.OperationID, archivePath string) *CreateA
 	}
 }
 
+// Prerequisites returns the prerequisites for creating an archive.
+func (op *CreateArchiveOperation) Prerequisites() []core.Prerequisite {
+	var prereqs []core.Prerequisite
+	
+	// Need parent directory to exist for archive
+	if filepath.Dir(op.description.Path) != "." && filepath.Dir(op.description.Path) != "/" {
+		prereqs = append(prereqs, core.NewParentDirPrerequisite(op.description.Path))
+	}
+	
+	// Need no conflict with existing files
+	prereqs = append(prereqs, core.NewNoConflictPrerequisite(op.description.Path))
+	
+	// Need all source files to exist
+	var sources []string
+	if item := op.GetItem(); item != nil {
+		if archiveItem, ok := item.(interface{ Sources() []string }); ok {
+			sources = archiveItem.Sources()
+		}
+	}
+	
+	// Fallback to details
+	if len(sources) == 0 {
+		if detailSources, ok := op.description.Details["sources"].([]string); ok {
+			sources = detailSources
+		}
+	}
+	
+	for _, source := range sources {
+		prereqs = append(prereqs, core.NewSourceExistsPrerequisite(source))
+	}
+	
+	return prereqs
+}
+
 // Prerequisites returns the prerequisites for creating an archive
 func (op *CreateArchiveOperation) Prerequisites() []core.Prerequisite {
 	var prereqs []core.Prerequisite

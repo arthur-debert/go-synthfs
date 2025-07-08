@@ -28,6 +28,20 @@ func NewBatch() *Batch {
 	return &Batch{impl: impl}
 }
 
+// NewBatchWithSimpleBatch creates a new operation batch with SimpleBatch behavior enabled.
+// This disables automatic parent directory creation and relies on prerequisite resolution.
+// This is the recommended way to create batches for new code as it provides cleaner separation
+// of concerns and more predictable behavior.
+func NewBatchWithSimpleBatch() *Batch {
+	fs := filesystem.NewOSFileSystem(".")
+	registry := GetDefaultRegistry()
+	logger := NewLoggerAdapter(Logger())
+	impl := batch.NewBatchWithSimpleBatch(fs, registry).
+		WithContext(context.Background()).
+		WithLogger(logger)
+	return &Batch{impl: impl}
+}
+
 // WithFileSystem sets the filesystem for the batch operations.
 func (b *Batch) WithFileSystem(fs FullFileSystem) *Batch {
 	b.impl = b.impl.WithFileSystem(fs)
@@ -49,6 +63,14 @@ func (b *Batch) WithRegistry(registry core.OperationFactory) *Batch {
 // WithLogger sets the logger for the batch.
 func (b *Batch) WithLogger(logger core.Logger) *Batch {
 	b.impl = b.impl.WithLogger(logger)
+	return b
+}
+
+// WithSimpleBatch enables SimpleBatch behavior that relies on prerequisite resolution
+// instead of hardcoded parent directory creation logic.
+// This method allows migration of existing code to the new behavior.
+func (b *Batch) WithSimpleBatch(enabled bool) *Batch {
+	b.impl = b.impl.WithSimpleBatch(enabled)
 	return b
 }
 

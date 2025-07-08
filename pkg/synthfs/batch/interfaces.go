@@ -28,6 +28,7 @@ type Batch interface {
 	WithContext(ctx context.Context) Batch
 	WithRegistry(registry core.OperationFactory) Batch
 	WithLogger(logger core.Logger) Batch
+	WithSimpleBatch(enabled bool) Batch // Enable SimpleBatch behavior for migration
 
 	// Execution
 	Run() (interface{}, error)
