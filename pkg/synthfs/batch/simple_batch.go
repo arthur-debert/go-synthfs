@@ -66,6 +66,12 @@ func (b *SimpleBatchImpl) WithLogger(logger core.Logger) Batch {
 	return b
 }
 
+// WithOptions sets the batch options for the batch.
+func (b *SimpleBatchImpl) WithOptions(opts BatchOptions) Batch {
+	// SimpleBatch always uses prerequisite resolution, so options don't change behavior
+	return b
+}
+
 // add adds an operation to the batch with minimal validation
 func (b *SimpleBatchImpl) add(op interface{}) error {
 	// Basic validation only - no hardcoded parent directory logic

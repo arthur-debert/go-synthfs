@@ -7,10 +7,7 @@ import (
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
-// BatchOptions controls how batch operations are executed
-type BatchOptions struct {
-	UseSimpleBatch bool // When true, use SimpleBatch + prerequisite resolution; when false (default), use existing behavior
-}
+// Note: BatchOptions is now defined in options.go
 
 // Batch represents a collection of operations that can be validated and executed as a unit.
 type Batch interface {

@@ -1,4 +1,4 @@
-THIS SHOULD BE A LINTER ERRORpackage batch
+THIS SHOULD BE A LINTER ERRORTHIS SHOULD BE A LINTER ERRORpackage batch
 
 import (
 	"context"
@@ -616,52 +616,16 @@ func (b *BatchImpl) RunRestorableWithBudget(maxBackupMB int) (interface{}, error
 	return b.RunWithOptions(opts)
 }
 
-// RunWithSimpleBatch runs all operations with prerequisite resolution enabled.
-// Note: As of Phase 6, this is now the default behavior. This method is kept for compatibility.
+// RunWithSimpleBatch is deprecated. All batch operations now use prerequisite resolution.
+// This method is kept for backward compatibility and is equivalent to Run().
 func (b *BatchImpl) RunWithSimpleBatch() (interface{}, error) {
-	opts := map[string]interface{}{
-		"use_simple_batch":      true,
-		"resolve_prerequisites": true,
-		"restorable":            false,
-		"max_backup_size_mb":    0,
-	}
-	return b.RunWithOptions(opts)
+	return b.Run()
 }
 
-// RunWithSimpleBatchAndBudget runs all operations with prerequisite resolution and backup enabled.
-// Note: As of Phase 6, simple batch behavior is now the default. This method is kept for compatibility.
+// RunWithSimpleBatchAndBudget is deprecated. Use RunRestorableWithBudget instead.
+// This method is kept for backward compatibility.
 func (b *BatchImpl) RunWithSimpleBatchAndBudget(maxBackupMB int) (interface{}, error) {
-	opts := map[string]interface{}{
-		"use_simple_batch":      true,
-		"resolve_prerequisites": true,
-		"restorable":            true,
-		"max_backup_size_mb":    maxBackupMB,
-	}
-	return b.RunWithOptions(opts)
-}
-
-// RunWithLegacyBatch runs all operations using legacy batch behavior (without SimpleBatch delegation).
-// Deprecated: The legacy batch behavior is deprecated as of Phase 6. Use RunWithOptions with use_simple_batch: false if needed.
-func (b *BatchImpl) RunWithLegacyBatch() (interface{}, error) {
-	opts := map[string]interface{}{
-		"use_simple_batch":      false,
-		"resolve_prerequisites": true,
-		"restorable":            false,
-		"max_backup_size_mb":    0,
-	}
-	return b.RunWithOptions(opts)
-}
-
-// RunWithLegacyBatchAndBudget runs all operations using legacy batch behavior with backup enabled.
-// Deprecated: The legacy batch behavior is deprecated as of Phase 6. Use RunWithOptions with use_simple_batch: false if needed.
-func (b *BatchImpl) RunWithLegacyBatchAndBudget(maxBackupMB int) (interface{}, error) {
-	opts := map[string]interface{}{
-		"use_simple_batch":      false,
-		"resolve_prerequisites": true,
-		"restorable":            true,
-		"max_backup_size_mb":    maxBackupMB,
-	}
-	return b.RunWithOptions(opts)
+	return b.RunRestorableWithBudget(maxBackupMB)
 }
 
 // Helper methods
