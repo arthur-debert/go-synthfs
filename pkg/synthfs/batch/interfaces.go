@@ -27,6 +27,7 @@ type Batch interface {
 	WithFileSystem(fs interface{}) Batch
 	WithContext(ctx context.Context) Batch
 	WithRegistry(registry core.OperationFactory) Batch
+	WithLogger(logger core.Logger) Batch
 
 	// Execution
 	Run() (interface{}, error)

@@ -15,34 +15,30 @@ import (
 	"github.com/arthur-debert/synthfs/pkg/synthfs/validation"
 )
 
-// logInfo is a simple logger for the batch package
-func logInfo(msg string, fields map[string]interface{}) {
-	// For now, just use fmt for logging
-	// TODO: Integrate with proper logging system
-	fmt.Printf("[BATCH] %s %+v\n", msg, fields)
-}
 
 
 // BatchImpl represents a collection of operations that can be validated and executed as a unit.
 // This implementation uses interface{} types to avoid circular dependencies.
 type BatchImpl struct {
-	operations []interface{}
-	fs         interface{} // Filesystem interface
-	ctx        context.Context
-	idCounter  int
-	// TODO: Add pathTracker when implementing path state tracking
-	// pathTracker interface{} // Path state tracker interface
-	registry core.OperationFactory
+	operations  []interface{}
+	fs          interface{} // Filesystem interface
+	ctx         context.Context
+	idCounter   int
+	pathTracker *pathStateTracker // Path state tracker
+	registry    core.OperationFactory
+	logger      core.Logger
 }
 
 // NewBatch creates a new operation batch.
 func NewBatch(fs interface{}, registry core.OperationFactory) Batch {
 	return &BatchImpl{
-		operations: []interface{}{},
-		fs:         fs,
-		ctx:        context.Background(),
-		idCounter:  0,
-		registry:   registry,
+		operations:  []interface{}{},
+		fs:          fs,
+		ctx:         context.Background(),
+		idCounter:   0,
+		pathTracker: newPathStateTracker(fs),
+		registry:    registry,
+		logger:      nil, // Will be set by WithLogger method
 	}
 }
 
@@ -57,7 +53,8 @@ func (b *BatchImpl) Operations() []interface{} {
 // WithFileSystem sets the filesystem for the batch operations.
 func (b *BatchImpl) WithFileSystem(fs interface{}) Batch {
 	b.fs = fs
-	// TODO: Recreate pathTracker with new filesystem
+	// Recreate pathTracker with new filesystem
+	b.pathTracker = newPathStateTracker(fs)
 	return b
 }
 
@@ -73,8 +70,104 @@ func (b *BatchImpl) WithRegistry(registry core.OperationFactory) Batch {
 	return b
 }
 
+// WithLogger sets the logger for the batch.
+func (b *BatchImpl) WithLogger(logger core.Logger) Batch {
+	b.logger = logger
+	return b
+}
+
 // add adds an operation to the batch and validates it
 func (b *BatchImpl) add(op interface{}) error {
+	// Validate the operation first
+	if err := b.validateOperation(op); err != nil {
+		// For create operations, if the error is "file already exists" and the file
+		// is scheduled for deletion, we should give a more specific error
+		if b.pathTracker != nil {
+			// Get operation description to check if it's a create operation
+			if describer, ok := op.(interface{ Describe() core.OperationDesc }); ok {
+				desc := describer.Describe()
+				if strings.HasPrefix(desc.Type, "create") && b.pathTracker.isDeleted(desc.Path) {
+					// Check if the error is about file existence
+					if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "file already exists") {
+						opID := ""
+						if idGetter, ok := op.(interface{ ID() core.OperationID }); ok {
+							opID = string(idGetter.ID())
+						}
+						return fmt.Errorf("validation error for operation %s (%s): path was scheduled for deletion", 
+							opID, desc.Path)
+					}
+				}
+			}
+		}
+		return err
+	}
+
+	// Check for conflicts with projected state
+	if err := b.checkPathConflicts(op); err != nil {
+		return err
+	}
+
+	// Update projected state
+	if b.pathTracker != nil {
+		if err := b.pathTracker.updateState(op); err != nil {
+			return err
+		}
+	}
+
+	// Auto-create parent directories if needed
+	if err := b.autoCreateParentDirs(op); err != nil {
+		return err
+	}
+
+	b.operations = append(b.operations, op)
+	return nil
+}
+
+// addWithoutAutoParent adds an operation without auto-creating parent directories
+// This is used when creating parent directories to avoid infinite recursion
+func (b *BatchImpl) addWithoutAutoParent(op interface{}) error {
+	// Validate the operation first
+	if err := b.validateOperation(op); err != nil {
+		// For create operations, if the error is "file already exists" and the file
+		// is scheduled for deletion, we should give a more specific error
+		if b.pathTracker != nil {
+			// Get operation description to check if it's a create operation
+			if describer, ok := op.(interface{ Describe() core.OperationDesc }); ok {
+				desc := describer.Describe()
+				if strings.HasPrefix(desc.Type, "create") && b.pathTracker.isDeleted(desc.Path) {
+					// Check if the error is about file existence
+					if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "file already exists") {
+						opID := ""
+						if idGetter, ok := op.(interface{ ID() core.OperationID }); ok {
+							opID = string(idGetter.ID())
+						}
+						return fmt.Errorf("validation error for operation %s (%s): path was scheduled for deletion", 
+							opID, desc.Path)
+					}
+				}
+			}
+		}
+		return err
+	}
+
+	// Check for conflicts with projected state
+	if err := b.checkPathConflicts(op); err != nil {
+		return err
+	}
+
+	// Update projected state
+	if b.pathTracker != nil {
+		if err := b.pathTracker.updateState(op); err != nil {
+			return err
+		}
+	}
+
+	b.operations = append(b.operations, op)
+	return nil
+}
+
+// validateOperation validates an operation
+func (b *BatchImpl) validateOperation(op interface{}) error {
 	// Try to validate the operation
 	// First check if it has a Validate method that accepts interface{}
 	type validator interface {
@@ -104,9 +197,112 @@ func (b *BatchImpl) add(op interface{}) error {
 		}
 	}
 
-	// TODO: Validate against projected state using pathTracker
+	return nil
+}
 
-	b.operations = append(b.operations, op)
+// checkPathConflicts checks for conflicts with the projected state
+func (b *BatchImpl) checkPathConflicts(op interface{}) error {
+	if b.pathTracker == nil {
+		return nil
+	}
+
+	// Get operation description
+	type describer interface {
+		Describe() core.OperationDesc
+	}
+	d, ok := op.(describer)
+	if !ok {
+		return nil
+	}
+
+	desc := d.Describe()
+	path := desc.Path
+
+	// Check for conflicts based on operation type
+	switch desc.Type {
+	case "create_file", "create_directory", "create_symlink", "create_archive":
+		// Check if path already exists in projected state
+		state, err := b.pathTracker.getState(path)
+		if err == nil && state != nil && state.WillExist {
+			// Special case: creating after deletion is OK
+			if !b.pathTracker.isDeleted(path) {
+				return fmt.Errorf("path %s conflicts with existing state", path)
+			}
+		}
+
+	case "copy", "move":
+		// Get destination path
+		if details, ok := desc.Details["destination"]; ok {
+			if dst, ok := details.(string); ok {
+				// Check if destination already exists
+				state, err := b.pathTracker.getState(dst)
+				if err == nil && state != nil && state.WillExist {
+					if !b.pathTracker.isDeleted(dst) {
+						return fmt.Errorf("destination path %s conflicts with existing state", dst)
+					}
+				}
+			}
+		}
+
+	case "delete":
+		// Don't check here - let the PathStateTracker handle all delete validation
+		// to ensure consistent error messages
+	}
+
+	return nil
+}
+
+// autoCreateParentDirs automatically creates parent directories if needed
+func (b *BatchImpl) autoCreateParentDirs(op interface{}) error {
+	// Get operation description
+	type describer interface {
+		Describe() core.OperationDesc
+	}
+	d, ok := op.(describer)
+	if !ok {
+		return nil
+	}
+
+	desc := d.Describe()
+	
+	// Only create parent dirs for operations that create new paths
+	switch desc.Type {
+	case "create_file", "create_directory", "create_symlink", "create_archive":
+		parentDeps, err := ensureParentDirectories(b, desc.Path)
+		if err != nil {
+			return fmt.Errorf("failed to ensure parent directories: %w", err)
+		}
+		
+		// Add dependencies to the operation
+		if len(parentDeps) > 0 {
+			if depAdder, ok := op.(interface{ AddDependency(core.OperationID) }); ok {
+				for _, depID := range parentDeps {
+					depAdder.AddDependency(depID)
+				}
+			}
+		}
+		
+	case "copy", "move":
+		// Also check destination path
+		if details, ok := desc.Details["destination"]; ok {
+			if dst, ok := details.(string); ok {
+				parentDeps, err := ensureParentDirectories(b, dst)
+				if err != nil {
+					return fmt.Errorf("failed to ensure parent directories for destination: %w", err)
+				}
+				
+				// Add dependencies to the operation
+				if len(parentDeps) > 0 {
+					if depAdder, ok := op.(interface{ AddDependency(core.OperationID) }); ok {
+						for _, depID := range parentDeps {
+							depAdder.AddDependency(depID)
+						}
+					}
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -191,6 +387,8 @@ func (b *BatchImpl) Copy(src, dst string) (interface{}, error) {
 	// Set operation details
 	if err := b.setOperationDetails(op, map[string]interface{}{
 		"destination": dst,
+		"src": src,
+		"dst": dst,
 	}); err != nil {
 		return nil, err
 	}
@@ -236,6 +434,8 @@ func (b *BatchImpl) Move(src, dst string) (interface{}, error) {
 	// Set operation details
 	if err := b.setOperationDetails(op, map[string]interface{}{
 		"destination": dst,
+		"src": src,
+		"dst": dst,
 	}); err != nil {
 		return nil, err
 	}
@@ -454,28 +654,36 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 	}
 	
 	// Log the start of execution
-	logInfo("executing batch", map[string]interface{}{
-		"operation_count": len(b.operations),
-		"restorable": pipelineOpts.Restorable,
-		"max_backup_mb": pipelineOpts.MaxBackupSizeMB,
-	})
+	if b.logger != nil {
+		b.logger.Info().
+			Int("operation_count", len(b.operations)).
+			Bool("restorable", pipelineOpts.Restorable).
+			Int("max_backup_mb", pipelineOpts.MaxBackupSizeMB).
+			Msg("executing batch")
+	}
 	
 	// If no operations, return successful empty result
 	if len(b.operations) == 0 {
 		duration := time.Since(startTime)
-		logInfo("batch execution completed", map[string]interface{}{
-			"success": true,
-			"duration": duration,
-			"operations_executed": 0,
-		})
+		if b.logger != nil {
+			b.logger.Info().
+				Bool("success", true).
+				Dur("duration", duration).
+				Int("operations_executed", 0).
+				Msg("batch execution completed")
+		}
 		
 		batchResult := NewResult(true, b.operations, []interface{}{}, duration, nil)
 		return batchResult, nil
 	}
 	
 	// Create executor and pipeline using execution package
-	logger := &simpleLogger{}
-	executor := execution.NewExecutor(logger)
+	loggerToUse := b.logger
+	if loggerToUse == nil {
+		// Create a no-op logger if none provided
+		loggerToUse = &noOpLogger{}
+	}
+	executor := execution.NewExecutor(loggerToUse)
 	
 	// Create pipeline adapter
 	pipeline := &pipelineAdapter{operations: b.operations}
@@ -498,12 +706,14 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 		restoreOps = coreResult.RestoreOps
 	}
 	
-	logInfo("batch execution completed", map[string]interface{}{
-		"success": coreResult.Success,
-		"duration": duration,
-		"operations_executed": len(coreResult.Operations),
-		"restore_operations": len(restoreOps),
-	})
+	if b.logger != nil {
+		b.logger.Info().
+			Bool("success", coreResult.Success).
+			Dur("duration", duration).
+			Int("operations_executed", len(coreResult.Operations)).
+			Int("restore_operations", len(restoreOps)).
+			Msg("batch execution completed")
+	}
 	
 	// Convert execution package results to interface{} slice
 	var operationResults []interface{}
@@ -588,57 +798,6 @@ func (b *BatchImpl) setOperationPaths(op interface{}, src, dst string) error {
 	return nil
 }
 
-// TODO: Implement ensureParentDirectories when adding auto parent directory creation
-// ensureParentDirectories analyzes a path and adds CreateDir operations for missing parent directories.
-/*
-func (b *BatchImpl) ensureParentDirectories(path string) []core.OperationID {
-	// Clean and normalize the path
-	cleanPath := filepath.Clean(path)
-	parentDir := filepath.Dir(cleanPath)
-
-	var dependencyIDs []core.OperationID
-
-	// If parent is root or current directory, no parent needed
-	if parentDir == "." || parentDir == "/" || parentDir == cleanPath {
-		return dependencyIDs
-	}
-
-	// TODO: Check if parent directory exists or is projected to exist
-	// For now, we'll create parent directories as needed
-
-	// Recursively ensure parent's parents exist
-	parentDeps := b.ensureParentDirectories(parentDir)
-	dependencyIDs = append(dependencyIDs, parentDeps...)
-
-	// Create operation for the parent directory
-	parentOp, err := b.createOperation("create_directory", parentDir)
-	if err != nil {
-		return dependencyIDs
-	}
-
-	// Set directory mode
-	_ = b.setOperationDetails(parentOp, map[string]interface{}{
-		"mode": "0755",
-	})
-
-	// Add dependencies from parent's parents
-	if depAdder, ok := parentOp.(interface{ AddDependency(core.OperationID) }); ok {
-		for _, depID := range parentDeps {
-			depAdder.AddDependency(depID)
-		}
-	}
-
-	// Add to batch
-	if err := b.add(parentOp); err == nil {
-		// Get operation ID
-		if idGetter, ok := parentOp.(interface{ ID() core.OperationID }); ok {
-			dependencyIDs = append(dependencyIDs, idGetter.ID())
-		}
-	}
-
-	return dependencyIDs
-}
-*/
 
 // operationAdapter wraps interface{} operations to implement execution.OperationInterface
 type operationAdapter struct {
@@ -805,23 +964,24 @@ func (pa *pipelineAdapter) Validate(ctx context.Context, fs interface{}) error {
 	return nil
 }
 
-// simpleLogger implements core.Logger for use with execution package
-type simpleLogger struct{}
+// noOpLogger implements core.Logger for when no logger is provided
+type noOpLogger struct{}
 
-func (l *simpleLogger) Trace() core.LogEvent { return &simpleLogEvent{} }
-func (l *simpleLogger) Debug() core.LogEvent { return &simpleLogEvent{} }
-func (l *simpleLogger) Info() core.LogEvent  { return &simpleLogEvent{} }
-func (l *simpleLogger) Warn() core.LogEvent  { return &simpleLogEvent{} }
-func (l *simpleLogger) Error() core.LogEvent { return &simpleLogEvent{} }
+func (l *noOpLogger) Trace() core.LogEvent { return &noOpLogEvent{} }
+func (l *noOpLogger) Debug() core.LogEvent { return &noOpLogEvent{} }
+func (l *noOpLogger) Info() core.LogEvent  { return &noOpLogEvent{} }
+func (l *noOpLogger) Warn() core.LogEvent  { return &noOpLogEvent{} }
+func (l *noOpLogger) Error() core.LogEvent { return &noOpLogEvent{} }
 
-// simpleLogEvent implements core.LogEvent
-type simpleLogEvent struct{}
+// noOpLogEvent implements core.LogEvent with no-op methods
+type noOpLogEvent struct{}
 
-func (e *simpleLogEvent) Str(key, val string) core.LogEvent             { return e }
-func (e *simpleLogEvent) Int(key string, val int) core.LogEvent         { return e }
-func (e *simpleLogEvent) Bool(key string, val bool) core.LogEvent       { return e }
-func (e *simpleLogEvent) Dur(key string, val interface{}) core.LogEvent { return e }
-func (e *simpleLogEvent) Interface(key string, val interface{}) core.LogEvent { return e }
-func (e *simpleLogEvent) Err(err error) core.LogEvent                   { return e }
-func (e *simpleLogEvent) Float64(key string, val float64) core.LogEvent { return e }
-func (e *simpleLogEvent) Msg(msg string)                                {}
+func (e *noOpLogEvent) Str(key, val string) core.LogEvent             { return e }
+func (e *noOpLogEvent) Int(key string, val int) core.LogEvent         { return e }
+func (e *noOpLogEvent) Bool(key string, val bool) core.LogEvent       { return e }
+func (e *noOpLogEvent) Dur(key string, val interface{}) core.LogEvent { return e }
+func (e *noOpLogEvent) Interface(key string, val interface{}) core.LogEvent { return e }
+func (e *noOpLogEvent) Err(err error) core.LogEvent                   { return e }
+func (e *noOpLogEvent) Float64(key string, val float64) core.LogEvent { return e }
+func (e *noOpLogEvent) Msg(msg string)                                {}
+

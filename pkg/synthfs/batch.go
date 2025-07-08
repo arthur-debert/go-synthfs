@@ -21,7 +21,10 @@ type Batch struct {
 func NewBatch() *Batch {
 	fs := filesystem.NewOSFileSystem(".")
 	registry := GetDefaultRegistry()
-	impl := batch.NewBatch(fs, registry).WithContext(context.Background())
+	logger := NewLoggerAdapter(Logger())
+	impl := batch.NewBatch(fs, registry).
+		WithContext(context.Background()).
+		WithLogger(logger)
 	return &Batch{impl: impl}
 }
 
@@ -40,6 +43,12 @@ func (b *Batch) WithContext(ctx context.Context) *Batch {
 // WithRegistry sets a custom operation registry for the batch.
 func (b *Batch) WithRegistry(registry core.OperationFactory) *Batch {
 	b.impl = b.impl.WithRegistry(registry)
+	return b
+}
+
+// WithLogger sets the logger for the batch.
+func (b *Batch) WithLogger(logger core.Logger) *Batch {
+	b.impl = b.impl.WithLogger(logger)
 	return b
 }
 
