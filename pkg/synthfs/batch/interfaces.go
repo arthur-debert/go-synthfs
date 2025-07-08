@@ -30,7 +30,6 @@ type Batch interface {
 	WithContext(ctx context.Context) Batch
 	WithRegistry(registry core.OperationFactory) Batch
 	WithLogger(logger core.Logger) Batch
-	WithOptions(opts BatchOptions) Batch
 
 	// Execution
 	Run() (interface{}, error)

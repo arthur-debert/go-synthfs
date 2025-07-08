@@ -1,4 +1,4 @@
-package batch_test
+THIS SHOULD BE A LINTER ERRORpackage batch_test
 
 import (
 	"testing"
