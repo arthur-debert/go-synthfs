@@ -52,6 +52,7 @@ type OperationInterface interface {
 type PipelineInterface interface {
 	Operations() []OperationInterface
 	Resolve() error
+	ResolvePrerequisites(resolver core.PrerequisiteResolver, fs interface{}) error
 	Validate(ctx context.Context, fs interface{}) error
 }
 
@@ -98,7 +99,25 @@ func (e *Executor) RunWithOptions(ctx context.Context, pipeline PipelineInterfac
 		EventBus: e.eventBus,
 	}
 
-	// Resolve dependencies first
+	// Resolve prerequisites if enabled
+	if opts.ResolvePrerequisites {
+		e.logger.Info().Msg("resolving operation prerequisites")
+		
+		// Create a prerequisite resolver - we need a dummy operation factory for this
+		// In a real implementation, this would be passed in or configured
+		resolver := NewPrerequisiteResolver(nil, e.logger)
+		
+		if err := pipeline.ResolvePrerequisites(resolver, fs); err != nil {
+			e.logger.Info().Err(err).Msg("prerequisite resolution failed")
+			result.Success = false
+			result.Errors = append(result.Errors, fmt.Errorf("prerequisite resolution failed: %w", err))
+			result.Duration = time.Since(start)
+			return result
+		}
+		e.logger.Info().Msg("prerequisite resolution completed successfully")
+	}
+
+	// Resolve dependencies 
 	e.logger.Info().Msg("resolving operation dependencies")
 	if err := pipeline.Resolve(); err != nil {
 		e.logger.Info().Err(err).Msg("dependency resolution failed")

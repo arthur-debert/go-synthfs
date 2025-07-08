@@ -22,6 +22,30 @@ func NewCopyOperation(id core.OperationID, srcPath string) *CopyOperation {
 	}
 }
 
+// Prerequisites returns the prerequisites for copying a file/directory
+func (op *CopyOperation) Prerequisites() []core.Prerequisite {
+	var prereqs []core.Prerequisite
+	
+	// Need source to exist
+	src, _ := op.GetPaths()
+	if src != "" {
+		prereqs = append(prereqs, core.NewSourceExistsPrerequisite(src))
+	}
+	
+	// Need destination parent directory to exist
+	_, dst := op.GetPaths()
+	if dst != "" {
+		if filepath.Dir(dst) != "." && filepath.Dir(dst) != "/" {
+			prereqs = append(prereqs, core.NewParentDirPrerequisite(dst))
+		}
+		
+		// Need no conflict with existing files at destination
+		prereqs = append(prereqs, core.NewNoConflictPrerequisite(dst))
+	}
+	
+	return prereqs
+}
+
 // Execute performs the copy operation.
 func (op *CopyOperation) Execute(ctx context.Context, fsys interface{}) error {
 	src, dst := op.GetPaths()
@@ -187,6 +211,30 @@ func NewMoveOperation(id core.OperationID, srcPath string) *MoveOperation {
 	return &MoveOperation{
 		BaseOperation: NewBaseOperation(id, "move", srcPath),
 	}
+}
+
+// Prerequisites returns the prerequisites for moving a file/directory
+func (op *MoveOperation) Prerequisites() []core.Prerequisite {
+	var prereqs []core.Prerequisite
+	
+	// Need source to exist
+	src, _ := op.GetPaths()
+	if src != "" {
+		prereqs = append(prereqs, core.NewSourceExistsPrerequisite(src))
+	}
+	
+	// Need destination parent directory to exist
+	_, dst := op.GetPaths()
+	if dst != "" {
+		if filepath.Dir(dst) != "." && filepath.Dir(dst) != "/" {
+			prereqs = append(prereqs, core.NewParentDirPrerequisite(dst))
+		}
+		
+		// Need no conflict with existing files at destination
+		prereqs = append(prereqs, core.NewNoConflictPrerequisite(dst))
+	}
+	
+	return prereqs
 }
 
 // Execute performs the move operation.

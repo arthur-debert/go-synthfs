@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
@@ -19,6 +20,21 @@ func NewCreateDirectoryOperation(id core.OperationID, path string) *CreateDirect
 	return &CreateDirectoryOperation{
 		BaseOperation: NewBaseOperation(id, "create_directory", path),
 	}
+}
+
+// Prerequisites returns the prerequisites for creating a directory
+func (op *CreateDirectoryOperation) Prerequisites() []core.Prerequisite {
+	var prereqs []core.Prerequisite
+	
+	// Need parent directory to exist
+	if filepath.Dir(op.description.Path) != "." && filepath.Dir(op.description.Path) != "/" {
+		prereqs = append(prereqs, core.NewParentDirPrerequisite(op.description.Path))
+	}
+	
+	// Need no conflict with existing files
+	prereqs = append(prereqs, core.NewNoConflictPrerequisite(op.description.Path))
+	
+	return prereqs
 }
 
 // Execute creates the directory. The filesystem interface is generic to avoid coupling.

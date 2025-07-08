@@ -23,6 +23,17 @@ func NewDeleteOperation(id core.OperationID, path string) *DeleteOperation {
 	}
 }
 
+// Prerequisites returns the prerequisites for deleting a file/directory
+func (op *DeleteOperation) Prerequisites() []core.Prerequisite {
+	var prereqs []core.Prerequisite
+	
+	// For delete operations, we need the source to exist
+	// Note: This is optional for idempotent delete operations
+	prereqs = append(prereqs, core.NewSourceExistsPrerequisite(op.description.Path))
+	
+	return prereqs
+}
+
 // Execute performs the deletion.
 func (op *DeleteOperation) Execute(ctx context.Context, fsys interface{}) error {
 	path := op.description.Path

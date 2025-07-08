@@ -17,6 +17,7 @@ type Operation interface {
 	Dependencies() []core.OperationID
 	Conflicts() []core.OperationID
 	AddDependency(depID core.OperationID)
+	Prerequisites() []core.Prerequisite
 
 	// Item management - returns interface{} to avoid coupling to specific types
 	GetItem() interface{}

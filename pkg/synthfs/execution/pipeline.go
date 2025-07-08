@@ -13,6 +13,7 @@ type Pipeline interface {
 	Add(ops ...interface{}) error
 	Operations() []interface{}
 	Resolve() error
+	ResolvePrerequisites(resolver core.PrerequisiteResolver, fs interface{}) error
 	Validate(ctx context.Context, fs interface{}) error
 }
 
@@ -272,6 +273,137 @@ func (mp *memPipeline) Resolve() error {
 	mp.logger.Info().
 		Int("resolved_operations", len(resolvedOps)).
 		Msg("dependency resolution completed successfully")
+
+	return nil
+}
+
+// ResolvePrerequisites resolves prerequisites for all operations in the pipeline
+func (mp *memPipeline) ResolvePrerequisites(resolver core.PrerequisiteResolver, fs interface{}) error {
+	mp.logger.Info().
+		Int("operations", len(mp.ops)).
+		Msg("starting prerequisite resolution")
+
+	if len(mp.ops) == 0 {
+		mp.logger.Info().Msg("no operations to resolve prerequisites for")
+		return nil
+	}
+
+	// Track already resolved prerequisites to avoid duplicates
+	resolvedPrereqs := make(map[string]bool)
+	newOps := make([]OperationInterface, 0)
+
+	for _, op := range mp.ops {
+		// Get prerequisites for this operation
+		var prereqs []core.Prerequisite
+		if prereqGetter, ok := op.(interface{ Prerequisites() []core.Prerequisite }); ok {
+			prereqs = prereqGetter.Prerequisites()
+		}
+
+		mp.logger.Debug().
+			Str("op_id", string(op.ID())).
+			Int("prerequisites", len(prereqs)).
+			Msg("processing operation prerequisites")
+
+		// Process each prerequisite
+		for _, prereq := range prereqs {
+			prereqKey := fmt.Sprintf("%s:%s", prereq.Type(), prereq.Path())
+			
+			// Skip if already resolved
+			if resolvedPrereqs[prereqKey] {
+				mp.logger.Debug().
+					Str("prereq_type", prereq.Type()).
+					Str("prereq_path", prereq.Path()).
+					Msg("prerequisite already resolved")
+				continue
+			}
+
+			// Check if prerequisite is already satisfied
+			if err := prereq.Validate(fs); err == nil {
+				mp.logger.Debug().
+					Str("prereq_type", prereq.Type()).
+					Str("prereq_path", prereq.Path()).
+					Msg("prerequisite already satisfied")
+				resolvedPrereqs[prereqKey] = true
+				continue
+			}
+
+			// Try to resolve the prerequisite
+			if resolver.CanResolve(prereq) {
+				mp.logger.Debug().
+					Str("prereq_type", prereq.Type()).
+					Str("prereq_path", prereq.Path()).
+					Msg("resolving prerequisite")
+
+				resolvedOps, err := resolver.Resolve(prereq)
+				if err != nil {
+					mp.logger.Debug().
+						Str("prereq_type", prereq.Type()).
+						Str("prereq_path", prereq.Path()).
+						Err(err).
+						Msg("failed to resolve prerequisite")
+					return fmt.Errorf("failed to resolve prerequisite %s for path %s: %w", prereq.Type(), prereq.Path(), err)
+				}
+
+				// Add resolved operations to the pipeline
+				for _, resolvedOp := range resolvedOps {
+					if resolvedOpInterface, ok := resolvedOp.(OperationInterface); ok {
+						newOps = append(newOps, resolvedOpInterface)
+						
+						// Add dependency from original operation to resolved operation
+						op.AddDependency(resolvedOpInterface.ID())
+						
+						mp.logger.Debug().
+							Str("resolved_op_id", string(resolvedOpInterface.ID())).
+							Str("dependent_op_id", string(op.ID())).
+							Msg("created prerequisite operation and dependency")
+					}
+				}
+
+				resolvedPrereqs[prereqKey] = true
+			} else {
+				mp.logger.Debug().
+					Str("prereq_type", prereq.Type()).
+					Str("prereq_path", prereq.Path()).
+					Msg("prerequisite not resolvable - will be validated later")
+			}
+		}
+	}
+
+	// Add new operations to the pipeline
+	if len(newOps) > 0 {
+		mp.logger.Info().
+			Int("new_operations", len(newOps)).
+			Msg("adding resolved prerequisite operations")
+
+		for _, newOp := range newOps {
+			// Check for duplicate IDs
+			if _, exists := mp.idIndex[newOp.ID()]; exists {
+				mp.logger.Warn().
+					Str("op_id", string(newOp.ID())).
+					Msg("prerequisite operation ID already exists - skipping")
+				continue
+			}
+
+			// Add operation to pipeline
+			index := len(mp.ops)
+			mp.ops = append(mp.ops, newOp)
+			mp.idIndex[newOp.ID()] = index
+
+			mp.logger.Debug().
+				Str("op_id", string(newOp.ID())).
+				Str("op_type", newOp.Describe().Type).
+				Str("path", newOp.Describe().Path).
+				Msg("added prerequisite operation")
+		}
+
+		// Mark as unresolved since we added new operations
+		mp.resolved = false
+	}
+
+	mp.logger.Info().
+		Int("resolved_prerequisites", len(resolvedPrereqs)).
+		Int("new_operations", len(newOps)).
+		Msg("prerequisite resolution completed")
 
 	return nil
 }
