@@ -1,4 +1,4 @@
-THIS SHOULD BE A LINTER ERRORTHIS SHOULD BE A LINTER ERRORpackage batch
+THIS SHOULD BE A LINTER ERRORTHIS SHOULD BE A LINTER ERRORTHIS SHOULD BE A LINTER ERRORpackage batch
 
 import (
 	"context"
@@ -28,24 +28,10 @@ type BatchImpl struct {
 
 }
 
-// Note: BatchOptions is now defined in options.go
-
 // NewBatch creates a new operation batch.
 // As of Phase 7, this implementation always uses prerequisite resolution instead of 
 // automatic parent directory creation for cleaner separation of concerns.
 func NewBatch(fs interface{}, registry core.OperationFactory) Batch {
-	return &BatchImpl{
-		operations: []interface{}{},
-		fs:         fs,
-		ctx:        context.Background(),
-		idCounter:  0,
-		registry:   registry,
-		logger:     nil, // Will be set by WithLogger method
-	}
-}
-
-// NewBatchWithOptions creates a new operation batch with specified options.
-func NewBatchWithOptions(fs interface{}, registry core.OperationFactory, opts *BatchOptions) Batch {
 	return &BatchImpl{
 		operations: []interface{}{},
 		fs:         fs,
