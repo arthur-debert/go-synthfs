@@ -8,25 +8,30 @@ import (
 
 // BatchOptions holds configuration options for batch execution
 type BatchOptions struct {
+	// Implementation selection (Phase 6: defaults to true)
+	UseSimpleBatch       bool // When true, use SimpleBatch + prerequisite resolution (default: true in Phase 6)
+	
 	// Execution options
 	Restorable           bool
 	MaxBackupSizeMB      int
 	ResolvePrerequisites bool
 }
 
-// DefaultBatchOptions returns the default batch options
+// DefaultBatchOptions returns the default batch options (Phase 6: SimpleBatch is default)
 func DefaultBatchOptions() *BatchOptions {
 	return &BatchOptions{
+		UseSimpleBatch:       true,  // Phase 6: Default to SimpleBatch
 		Restorable:           false,
 		MaxBackupSizeMB:      10,
 		ResolvePrerequisites: true, // Always enable prerequisite resolution
 	}
 }
 
-// WithSimpleBatch is deprecated and no-op. All batches now use prerequisite resolution.
+// WithSimpleBatch configures whether to use SimpleBatch implementation
 func (opts *BatchOptions) WithSimpleBatch(enabled bool) *BatchOptions {
-	// No-op for backward compatibility
-	return opts
+	newOpts := *opts
+	newOpts.UseSimpleBatch = enabled
+	return &newOpts
 }
 
 // WithRestorable configures backup/restore options
@@ -62,6 +67,7 @@ func (opts *BatchOptions) ToPipelineOptions() core.PipelineOptions {
 // ToRunOptions converts BatchOptions to a map for RunWithOptions
 func (opts *BatchOptions) ToRunOptions() map[string]interface{} {
 	return map[string]interface{}{
+		"use_simple_batch":      opts.UseSimpleBatch,
 		"restorable":            opts.Restorable,
 		"max_backup_size_mb":    opts.MaxBackupSizeMB,
 		"resolve_prerequisites": opts.ResolvePrerequisites,
@@ -74,6 +80,10 @@ func NewBatchWithOptions(fs interface{}, registry core.OperationFactory, opts *B
 		opts = DefaultBatchOptions()
 	}
 
-	// Phase 7: Always use the unified batch implementation with prerequisite resolution
-	return NewBatch(fs, registry)
+	// Phase 6: Use SimpleBatch when UseSimpleBatch is true (default), otherwise use legacy
+	if opts.UseSimpleBatch {
+		return NewSimpleBatch(fs, registry)
+	} else {
+		return NewBatch(fs, registry)
+	}
 }

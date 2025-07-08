@@ -9,7 +9,7 @@ import (
 type PipelineOptions struct {
 	Restorable           bool // Whether to enable reversible operations with backup
 	MaxBackupSizeMB      int  // Maximum backup size in MB (default: 10MB)
-	ResolvePrerequisites bool // Whether to resolve prerequisites like parent directories (default: true)
+	ResolvePrerequisites bool // Whether to resolve prerequisites like parent directories (default: false)
 }
 
 // OperationResult holds the outcome of a single operation's execution

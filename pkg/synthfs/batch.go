@@ -1,4 +1,4 @@
-THIS SHOULD BE A LINTER ERRORTHIS SHOULD BE A LINTER ERRORpackage synthfs
+package synthfs
 
 import (
 	"context"

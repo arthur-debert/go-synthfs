@@ -15,9 +15,9 @@ func NewBatchWithOptions(fs interface{}, registry core.OperationFactory, opts Ba
 	}
 }
 
-// DefaultBatchOptions returns the default options for backward compatibility
+// DefaultBatchOptions returns the default options (Phase 6: SimpleBatch is now default)
 func DefaultBatchOptions() BatchOptions {
 	return BatchOptions{
-		UseSimpleBatch: false, // Default to existing behavior for backward compatibility
+		UseSimpleBatch: true, // Phase 6: Default to new SimpleBatch behavior
 	}
 }
