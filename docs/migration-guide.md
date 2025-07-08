@@ -1,188 +1,243 @@
-# Migration Guide: Prerequisite-Based Execution
+# Migration Guide: Execution Refactoring (Phase 4-6)
 
-This guide explains how to migrate from the old hardcoded batch logic to the new prerequisite-based execution system.
+This document describes the migration path for the execution refactoring that introduces the SimpleBatch implementation and switches to prerequisite-driven operation handling.
 
-## Overview
+## Overview of Changes
 
-SynthFS has introduced a new execution model that uses **prerequisite resolution** instead of hardcoded parent directory creation logic. This provides better extensibility, testability, and maintainability.
+The execution refactoring introduces a new way of handling filesystem operations:
 
-## Migration Phases
+- **Old Approach**: Hardcoded parent directory creation in batch implementation
+- **New Approach**: Operations declare prerequisites, execution pipeline resolves them
 
-### Current State (Phase 5)
+## Phase 4: SimpleBatch Alternative (DONE)
 
-- **Old Batch** (default): Uses hardcoded parent directory creation logic
-- **SimpleBatch**: Uses prerequisite resolution instead of hardcoded logic  
-- **Migration Options**: Allow gradual transition
+### What's New
 
-### Key Differences
+- `SimpleBatch` implementation (`pkg/synthfs/batch/simple_batch.go`)
+- No hardcoded operation type logic
+- Relies on prerequisite resolution system
+- Clean separation of concerns
 
-| Feature | Old Batch | SimpleBatch |
-|---------|-----------|-------------|
-| Parent Directory Creation | Hardcoded in batch logic | Via prerequisite resolution |
-| Extensibility | Limited | High - add new prerequisite types |
-| Operation Types | Hardcoded strings | Declared by operations |
-| Dependency Management | Manual | Automatic via prerequisites |
-
-## Usage Examples
-
-### Current (Backward Compatible)
+### Usage
 
 ```go
-// Uses old hardcoded logic (default)
-batch := synthfs.NewBatch()
-batch.CreateFile("deep/path/file.txt", []byte("content"))
-result, err := batch.Run() // Parent dirs created via hardcoded logic
+// Create SimpleBatch directly
+fs := filesystem.NewOSFileSystem(".")
+registry := operations.NewFactory()
+batch := batch.NewSimpleBatch(fs, registry)
+
+// Create file - no auto-parent creation
+_, err := batch.CreateFile("subdir/file.txt", []byte("content"))
+
+// Run with prerequisite resolution
+result, err := batch.RunWithPrerequisites()
 ```
 
-### Opt-in to Prerequisite Resolution
+## Phase 5: Migration Path (DONE)
+
+### What's New
+
+- `BatchOptions` struct for controlling behavior
+- `NewBatchWithOptions()` factory method
+- `UseSimpleBatch` flag (default: false in Phase 5)
+
+### Migration Examples
 
 ```go
-// Option 1: Use existing batch with prerequisite resolution
+// Old way - still works
 batch := synthfs.NewBatch()
-batch.CreateFile("deep/path/file.txt", []byte("content"))
-result, err := batch.RunWithPrerequisites() // Uses prerequisite resolution
 
-// Option 2: Use simplified batch constructor
-batch := synthfs.NewSimpleBatch()
-batch.CreateFile("deep/path/file.txt", []byte("content"))
-result, err := batch.Run() // Prerequisite resolution enabled by default
-
-// Option 3: Use migration constructor
+// New way - explicit SimpleBatch
 batch := synthfs.NewBatchWithOptions(synthfs.BatchOptions{
     UseSimpleBatch: true,
 })
-batch.CreateFile("deep/path/file.txt", []byte("content"))
-result, err := batch.Run() // Uses SimpleBatch implementation
+
+// New way - explicit legacy behavior  
+batch := synthfs.NewBatchWithOptions(synthfs.BatchOptions{
+    UseSimpleBatch: false,
+})
 ```
 
-### Advanced Configuration
+## Phase 6: Switch Defaults (DONE)
+
+### What Changed
+
+- `NewBatch()` now defaults to `UseSimpleBatch: true`
+- Added `NewBatchWithLegacyBehavior()` for temporary backward compatibility
+- Deprecation notices on old methods
+
+### Breaking Changes
+
+**BEHAVIOR CHANGE**: `synthfs.NewBatch()` now uses SimpleBatch by default.
+
+**Migration Required**: If you need the old behavior:
 
 ```go
-// Full control over pipeline options
-batch := synthfs.NewBatch()
-batch.CreateFile("deep/path/file.txt", []byte("content"))
+// Option 1: Use legacy function (deprecated)
+batch := synthfs.NewBatchWithLegacyBehavior()
 
-opts := synthfs.PipelineOptions{
-    Restorable:           true,
-    MaxBackupSizeMB:      20,
-    ResolvePrerequisites: true, // Enable prerequisite resolution
+// Option 2: Explicit options (recommended)
+batch := synthfs.NewBatchWithOptions(synthfs.BatchOptions{
+    UseSimpleBatch: false,
+})
+```
+
+### Benefits of New Approach
+
+1. **Extensibility**: New operation types just implement `Prerequisites()`
+2. **Testability**: Each component has single responsibility
+3. **Maintainability**: No hardcoded operation knowledge in batch
+4. **Flexibility**: Operations can declare complex prerequisites
+
+## Prerequisites System
+
+### How It Works
+
+Operations declare what they need:
+
+```go
+func (op *CreateFileOperation) Prerequisites() []core.Prerequisite {
+    var prereqs []core.Prerequisite
+    
+    // Need parent directory to exist
+    if filepath.Dir(op.path) != "." {
+        prereqs = append(prereqs, core.NewParentDirPrerequisite(op.path))
+    }
+    
+    // Need no conflict with existing files
+    prereqs = append(prereqs, core.NewNoConflictPrerequisite(op.path))
+    
+    return prereqs
 }
-result, err := batch.RunWithOptions(opts)
 ```
 
-## Migration Timeline
-
-### Phase 5: Migration Path (Current)
-- ✅ SimpleBatch implementation available
-- ✅ `NewBatchWithOptions()` for gradual migration
-- ✅ `RunWithPrerequisites()` methods
-- ✅ `ResolvePrerequisites` flag in `PipelineOptions`
-
-### Phase 6: Switch Defaults (Future)
-- 🔄 `UseSimpleBatch` will default to `true`
-- 🔄 Old batch methods will be deprecated
-- 🔄 All internal usage will switch to new pattern
-
-### Phase 7: Cleanup (Major Version)
-- ⏳ Remove old batch implementation
-- ⏳ Remove compatibility flags
-- ⏳ Simplify codebase
-
-## Recommended Migration Strategy
-
-### For New Code
-Use `NewSimpleBatch()` or `NewBatchWithOptions(synthfs.BatchOptions{UseSimpleBatch: true})`:
+Execution pipeline resolves them:
 
 ```go
-batch := synthfs.NewSimpleBatch()
-// ... add operations
-result, err := batch.Run() // Prerequisite resolution enabled by default
-```
-
-### For Existing Code
-Gradually migrate using opt-in methods:
-
-```go
-// Step 1: Test with prerequisite resolution
-batch := synthfs.NewBatch()
-// ... add operations
-result, err := batch.RunWithPrerequisites() // Test new behavior
-
-// Step 2: Once validated, switch to SimpleBatch
-batch := synthfs.NewSimpleBatch()
-// ... add operations  
+// SimpleBatch enables prerequisite resolution by default
 result, err := batch.Run()
+
+// Or explicitly
+result, err := batch.RunWithPrerequisites()
 ```
 
-### For Libraries
-Provide migration options to your users:
+### Available Prerequisites
+
+- `core.ParentDirPrerequisite`: Parent directory must exist
+- `core.NoConflictPrerequisite`: Path must not conflict with existing files
+- `core.SourceExistsPrerequisite`: Source path must exist (for copy/move/delete)
+
+## Common Migration Scenarios
+
+### Scenario 1: Creating Nested Files
+
+**Old code:**
+```go
+batch := synthfs.NewBatch()
+batch.CreateFile("deep/nested/file.txt", content) // Auto-creates parents
+```
+
+**New code (Phase 6):**
+```go
+batch := synthfs.NewBatch() // Now uses SimpleBatch by default
+batch.CreateFile("deep/nested/file.txt", content)
+batch.Run() // Prerequisite resolution creates parents automatically
+```
+
+### Scenario 2: Complex Directory Structures
+
+**Old code:**
+```go
+batch := synthfs.NewBatch()
+batch.CreateFile("a/b/c/file1.txt", content1)
+batch.CreateFile("a/b/d/file2.txt", content2)
+// Parent directories created automatically
+```
+
+**New code:**
+```go
+batch := synthfs.NewBatch()
+batch.CreateFile("a/b/c/file1.txt", content1)
+batch.CreateFile("a/b/d/file2.txt", content2)
+batch.Run() // Prerequisites resolved: creates a/, a/b/, a/b/c/, a/b/d/
+```
+
+### Scenario 3: Need Old Behavior
+
+**Temporary workaround:**
+```go
+batch := synthfs.NewBatchWithLegacyBehavior() // DEPRECATED
+// or
+batch := synthfs.NewBatchWithOptions(synthfs.BatchOptions{
+    UseSimpleBatch: false,
+})
+```
+
+## Testing Your Migration
+
+### Unit Tests
+
+Verify your operations work with both implementations:
 
 ```go
-type Config struct {
-    UseSimpleBatch bool
-}
-
-func CreateBatch(cfg Config) *synthfs.Batch {
-    return synthfs.NewBatchWithOptions(synthfs.BatchOptions{
-        UseSimpleBatch: cfg.UseSimpleBatch,
+func TestOperationWithBothBatches(t *testing.T) {
+    // Test with SimpleBatch
+    simpleBatch := synthfs.NewBatchWithOptions(synthfs.BatchOptions{
+        UseSimpleBatch: true,
     })
+    
+    // Test with legacy batch
+    legacyBatch := synthfs.NewBatchWithOptions(synthfs.BatchOptions{
+        UseSimpleBatch: false,
+    })
+    
+    // Both should produce same end result
 }
 ```
 
-## Breaking Changes
+### Integration Tests
 
-### None in Phase 5
-- All existing code continues to work unchanged
-- New functionality is opt-in only
-- Default behavior is preserved
+Test prerequisite resolution:
 
-### Future Breaking Changes (Phase 6+)
-- Default will switch to `UseSimpleBatch: true`
-- Deprecation warnings for old methods
-- Eventually old implementation will be removed
-
-## Benefits of Migration
-
-### For Users
-- **Better Error Messages**: Prerequisites provide clearer validation errors
-- **More Extensible**: Add custom prerequisite types
-- **Testable**: Mock prerequisite resolution
-
-### For Maintainers
-- **Less Hardcoded Logic**: No more operation type strings
-- **Single Responsibility**: Each component has clear purpose
-- **Easier to Add Features**: New operations just implement `Prerequisites()`
+```go
+func TestPrerequisiteResolution(t *testing.T) {
+    batch := synthfs.NewBatch() // Uses SimpleBatch
+    batch.CreateFile("deep/path/file.txt", content)
+    
+    result, err := batch.Run()
+    // Should succeed - prerequisites resolved automatically
+}
+```
 
 ## Troubleshooting
 
-### Prerequisites Not Resolved
-```go
-// Ensure prerequisite resolution is enabled
-batch.RunWithPrerequisites()
-// or
-batch.RunWithOptions(synthfs.PipelineOptions{ResolvePrerequisites: true})
-```
+### "Path already exists" errors
 
-### Missing Parent Directories
-```go
-// Old behavior (hardcoded parent creation)
-batch.Run()
+**Problem**: Files exist but SimpleBatch can't detect them
+**Solution**: Check filesystem interface implementation
 
-// New behavior (prerequisite resolution)
-batch.RunWithPrerequisites()
-```
+### "Parent directory not found" errors  
 
-### Performance Differences
-- Prerequisite resolution adds small overhead for validation
-- Benefit: Better error messages and extensibility
-- Cached validation results minimize impact
+**Problem**: Prerequisite resolution disabled
+**Solution**: Use `RunWithPrerequisites()` or ensure `ResolvePrerequisites: true`
 
-## Next Steps
+### Performance differences
 
-1. **Try SimpleBatch**: Test `NewSimpleBatch()` in non-critical code
-2. **Use RunWithPrerequisites**: Test prerequisite resolution with existing batches
-3. **Monitor Behavior**: Ensure prerequisite resolution works as expected
-4. **Plan Migration**: Identify when to switch defaults in your codebase
-5. **Provide Feedback**: Report any issues or unexpected behavior
+**Problem**: Different execution order between old/new batch
+**Solution**: Review operation dependencies and prerequisites
 
-For questions or issues, please check the documentation or file an issue.
+## Timeline
+
+- **Phase 4 (DONE)**: SimpleBatch implementation available
+- **Phase 5 (DONE)**: Migration path with `UseSimpleBatch: false` default
+- **Phase 6 (DONE)**: Switch to `UseSimpleBatch: true` default, deprecation notices
+- **Phase 7 (Future)**: Remove legacy implementation entirely
+
+## Getting Help
+
+If you encounter issues during migration:
+
+1. Check that operations implement `Prerequisites()` correctly
+2. Verify filesystem interface supports required operations
+3. Test with both `UseSimpleBatch: true` and `UseSimpleBatch: false`
+4. Review prerequisite resolution logs
