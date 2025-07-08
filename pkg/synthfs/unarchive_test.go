@@ -415,7 +415,8 @@ func TestBatchUnarchive(t *testing.T) {
 		}
 
 		// Create a new batch with the file already in the filesystem
-		batch := NewBatch().WithFileSystem(fs)
+		registry := GetDefaultRegistry()
+	batch := NewBatch(fs, registry).WithFileSystem(fs)
 
 		// Add unarchive operation
 		op, err := batch.Unarchive(archivePath, "batch_extracted/")
@@ -467,7 +468,8 @@ func TestBatchUnarchive(t *testing.T) {
 		}
 
 		// Create new batch for this test
-		batch := NewBatch().WithFileSystem(fs)
+		registry := GetDefaultRegistry()
+	batch := NewBatch(fs, registry).WithFileSystem(fs)
 
 		// Add unarchive operation with patterns
 		_, err := batch.UnarchiveWithPatterns(archivePath, "pattern_extracted/", "*.txt", "docs/**")

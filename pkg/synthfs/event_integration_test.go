@@ -15,7 +15,8 @@ func TestEventIntegration(t *testing.T) {
 		fs := NewTestFileSystem()
 
 		// Create batch and executor
-		batch := NewBatch().WithFileSystem(fs).WithContext(ctx)
+		registry := GetDefaultRegistry()
+		batch := NewBatch(fs, registry).WithContext(ctx)
 		executor := NewExecutor()
 
 		// Track events
@@ -51,17 +52,13 @@ func TestEventIntegration(t *testing.T) {
 			t.Fatalf("Failed to add CreateDir operation: %v", err)
 		}
 
-		// Execute the batch
-		pipeline := NewMemPipeline()
-		ops := batch.Operations()
-		err = pipeline.Add(ops...)
+		// Execute the batch directly
+		result, err := batch.Run()
 		if err != nil {
-			t.Fatalf("Failed to add operations to pipeline: %v", err)
+			t.Fatalf("Batch execution failed: %v", err)
 		}
-
-		result := executor.Run(ctx, pipeline, fs)
-		if !result.Success {
-			t.Fatalf("Batch execution failed: %v", result.Errors)
+		if !result.IsSuccess() {
+			t.Fatalf("Batch execution failed: %v", result.GetError())
 		}
 
 		// Wait a bit for async events to be processed
@@ -134,7 +131,8 @@ func TestEventIntegration(t *testing.T) {
 		ctx := context.Background()
 		fs := NewTestFileSystem()
 
-		batch := NewBatch().WithFileSystem(fs).WithContext(ctx)
+		registry := GetDefaultRegistry()
+		batch := NewBatch(fs, registry).WithContext(ctx)
 		executor := NewExecutor()
 
 		// Track events
@@ -160,16 +158,9 @@ func TestEventIntegration(t *testing.T) {
 			t.Fatalf("Failed to add CreateFile operation with invalid path: %v", err)
 		}
 
-		pipeline := NewMemPipeline()
-		ops := batch.Operations()
-		err = pipeline.Add(ops...)
-		if err != nil {
-			t.Fatalf("Failed to add operations to pipeline: %v", err)
-		}
-
-		result := executor.Run(ctx, pipeline, fs)
-		// The batch should fail because source doesn't exist
-		if result.Success {
+		result, err := batch.Run()
+		// The batch should fail because of invalid path
+		if err == nil && result.IsSuccess() {
 			t.Skip("Expected batch to fail, but it succeeded")
 		}
 

@@ -43,6 +43,7 @@ type OperationInterface interface {
 	Describe() core.OperationDesc
 	Dependencies() []core.OperationID
 	Conflicts() []core.OperationID
+	Prerequisites() []core.Prerequisite
 	AddDependency(depID core.OperationID)
 	ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
 	ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error

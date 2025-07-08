@@ -718,6 +718,13 @@ func (oa *operationAdapter) Conflicts() []core.OperationID {
 	return []core.OperationID{}
 }
 
+func (oa *operationAdapter) Prerequisites() []core.Prerequisite {
+	if op, ok := oa.op.(interface{ Prerequisites() []core.Prerequisite }); ok {
+		return op.Prerequisites()
+	}
+	return []core.Prerequisite{}
+}
+
 func (oa *operationAdapter) AddDependency(dep core.OperationID) {
 	if op, ok := oa.op.(interface{ AddDependency(core.OperationID) }); ok {
 		op.AddDependency(dep)

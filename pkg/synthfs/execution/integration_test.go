@@ -8,6 +8,108 @@ import (
 	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
 )
 
+// factoryWrapper adapts operations.Factory to core.OperationFactory
+type factoryWrapper struct {
+	factory *operations.Factory
+}
+
+func (fw *factoryWrapper) CreateOperation(id core.OperationID, opType string, path string) (interface{}, error) {
+	op, err := fw.factory.CreateOperation(id, opType, path)
+	if err != nil {
+		return nil, err
+	}
+	// Wrap the operation to make it compatible with OperationInterface
+	return &operationWrapper{op: op}, nil
+}
+
+func (fw *factoryWrapper) SetItemForOperation(op interface{}, item interface{}) error {
+	// Convert the interface{} to operations.Operation if possible
+	if opsOp, ok := op.(operations.Operation); ok {
+		return fw.factory.SetItemForOperation(opsOp, item)
+	}
+	// If it's not an operations.Operation, we can't set the item
+	return nil
+}
+
+// operationWrapper wraps operations.Operation to implement OperationInterface
+type operationWrapper struct {
+	op interface{}
+}
+
+func (ow *operationWrapper) ID() core.OperationID {
+	if op, ok := ow.op.(interface{ ID() core.OperationID }); ok {
+		return op.ID()
+	}
+	return ""
+}
+
+func (ow *operationWrapper) Describe() core.OperationDesc {
+	if op, ok := ow.op.(interface{ Describe() core.OperationDesc }); ok {
+		return op.Describe()
+	}
+	return core.OperationDesc{}
+}
+
+func (ow *operationWrapper) Dependencies() []core.OperationID {
+	if op, ok := ow.op.(interface{ Dependencies() []core.OperationID }); ok {
+		return op.Dependencies()
+	}
+	return []core.OperationID{}
+}
+
+func (ow *operationWrapper) Conflicts() []core.OperationID {
+	if op, ok := ow.op.(interface{ Conflicts() []core.OperationID }); ok {
+		return op.Conflicts()
+	}
+	return []core.OperationID{}
+}
+
+func (ow *operationWrapper) Prerequisites() []core.Prerequisite {
+	if op, ok := ow.op.(interface{ Prerequisites() []core.Prerequisite }); ok {
+		return op.Prerequisites()
+	}
+	return []core.Prerequisite{}
+}
+
+func (ow *operationWrapper) AddDependency(depID core.OperationID) {
+	if op, ok := ow.op.(interface{ AddDependency(core.OperationID) }); ok {
+		op.AddDependency(depID)
+	}
+}
+
+func (ow *operationWrapper) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Not needed for this test
+	return nil
+}
+
+func (ow *operationWrapper) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Not needed for this test
+	return nil
+}
+
+func (ow *operationWrapper) ReverseOps(ctx context.Context, fsys interface{}, budget *core.BackupBudget) ([]interface{}, *core.BackupData, error) {
+	// Not needed for this test
+	return nil, nil, nil
+}
+
+func (ow *operationWrapper) Rollback(ctx context.Context, fsys interface{}) error {
+	// Not needed for this test
+	return nil
+}
+
+func (ow *operationWrapper) GetItem() interface{} {
+	if op, ok := ow.op.(interface{ GetItem() interface{} }); ok {
+		return op.GetItem()
+	}
+	return nil
+}
+
+func (ow *operationWrapper) SetDescriptionDetail(key string, value interface{}) {
+	if op, ok := ow.op.(interface{ SetDescriptionDetail(string, interface{}) }); ok {
+		op.SetDescriptionDetail(key, value)
+	}
+}
+
 func TestPrerequisiteResolutionIntegration(t *testing.T) {
 	// Create a mock filesystem
 	fs := &mockFileSystem{
@@ -20,10 +122,11 @@ func TestPrerequisiteResolutionIntegration(t *testing.T) {
 
 	// Create factory and pipeline
 	factory := operations.NewFactory()
+	factoryAdapter := &factoryWrapper{factory: factory}
 	pipeline := NewMemPipeline(logger)
 
 	// Create a file operation that requires parent directories
-	op, err := factory.CreateOperation(
+	op, err := factoryAdapter.CreateOperation(
 		core.OperationID("test-create-file"),
 		"create_file",
 		"parent/child/file.txt",
@@ -32,13 +135,16 @@ func TestPrerequisiteResolutionIntegration(t *testing.T) {
 		t.Fatalf("Failed to create operation: %v", err)
 	}
 
+	// Wrap the operation to implement OperationInterface
+	wrappedOp := &operationWrapper{op: op}
+
 	// Add to pipeline
-	if err := pipeline.Add(op); err != nil {
+	if err := pipeline.Add(wrappedOp); err != nil {
 		t.Fatalf("Failed to add operation to pipeline: %v", err)
 	}
 
 	// Create prerequisite resolver
-	resolver := NewPrerequisiteResolver(factory, logger)
+	resolver := NewPrerequisiteResolver(factoryAdapter, logger)
 
 	// Resolve prerequisites
 	if err := pipeline.ResolvePrerequisites(resolver, fs); err != nil {

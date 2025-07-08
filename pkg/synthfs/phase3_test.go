@@ -477,7 +477,8 @@ func TestExecutor_RunWithOptions_Restorable(t *testing.T) {
 func TestBatch_RunRestorable(t *testing.T) {
 	ctx := context.Background()
 	fs := NewTestFileSystem()
-	batch := NewBatch().WithFileSystem(fs).WithContext(ctx)
+	registry := GetDefaultRegistry()
+	batch := NewBatch(fs, registry).WithFileSystem(fs).WithContext(ctx)
 
 	// Add a simple operation
 	_, err := batch.CreateFile("test.txt", []byte("content"))
@@ -511,7 +512,8 @@ func TestBatch_RunRestorable(t *testing.T) {
 func TestBatch_RunRestorableWithBudget(t *testing.T) {
 	ctx := context.Background()
 	fs := NewTestFileSystem()
-	batch := NewBatch().WithFileSystem(fs).WithContext(ctx)
+	registry := GetDefaultRegistry()
+	batch := NewBatch(fs, registry).WithFileSystem(fs).WithContext(ctx)
 
 	// Add a simple operation
 	_, err := batch.CreateFile("test.txt", []byte("content"))

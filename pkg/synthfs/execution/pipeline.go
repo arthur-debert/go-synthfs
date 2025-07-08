@@ -17,20 +17,6 @@ type Pipeline interface {
 	Validate(ctx context.Context, fs interface{}) error
 }
 
-// OperationInterface defines the operation interface for execution pipeline
-type OperationInterface interface {
-	ID() core.OperationID
-	Describe() core.OperationDesc
-	Dependencies() []core.OperationID
-	Conflicts() []core.OperationID
-	Prerequisites() []core.Prerequisite
-	ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
-	ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
-	ReverseOps(ctx context.Context, fsys interface{}, budget *core.BackupBudget) ([]interface{}, *core.BackupData, error)
-	Rollback(ctx context.Context, fsys interface{}) error
-	GetItem() interface{}
-}
-
 // memPipeline is an in-memory implementation of Pipeline
 type memPipeline struct {
 	ops      []OperationInterface

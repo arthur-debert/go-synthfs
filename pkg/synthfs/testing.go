@@ -199,7 +199,8 @@ type TestBatchHelper struct {
 // NewTestBatchHelper creates a new batch test helper
 func NewTestBatchHelper(t *testing.T) *TestBatchHelper {
 	fs := NewTestFileSystem()
-	batch := NewBatch().WithFileSystem(fs)
+	registry := GetDefaultRegistry()
+	batch := NewBatch(fs, registry)
 	return &TestBatchHelper{
 		t:     t,
 		batch: batch,
@@ -232,8 +233,8 @@ func (tbh *TestBatchHelper) AssertSuccess() *Result {
 	if err != nil {
 		tbh.t.Fatalf("Expected batch to succeed, but got error: %v", err)
 	}
-	if !result.Success {
-		tbh.t.Fatalf("Expected batch to succeed, but Success=false. Errors: %v", result.Errors)
+	if !result.IsSuccess() {
+		tbh.t.Fatalf("Expected batch to succeed, but Success=false. Error: %v", result.GetError())
 	}
 	return result
 }
@@ -241,7 +242,7 @@ func (tbh *TestBatchHelper) AssertSuccess() *Result {
 // AssertFailure asserts that the batch fails
 func (tbh *TestBatchHelper) AssertFailure() *Result {
 	result, err := tbh.Run()
-	if err == nil && result.Success {
+	if err == nil && result.IsSuccess() {
 		tbh.t.Fatalf("Expected batch to fail, but it succeeded")
 	}
 	return result
@@ -291,8 +292,8 @@ func (tph *TestPipelineHelper) ExecuteWithOptions(ctx context.Context, opts Pipe
 // AssertSuccess asserts that the pipeline executes successfully
 func (tph *TestPipelineHelper) AssertSuccess(ctx context.Context) *Result {
 	result := tph.Execute(ctx)
-	if !result.Success {
-		tph.t.Fatalf("Expected pipeline to succeed, but Success=false. Errors: %v", result.Errors)
+	if !result.IsSuccess() {
+		tph.t.Fatalf("Expected pipeline to succeed, but Success=false. Error: %v", result.GetError())
 	}
 	return result
 }
@@ -300,7 +301,7 @@ func (tph *TestPipelineHelper) AssertSuccess(ctx context.Context) *Result {
 // AssertFailure asserts that the pipeline fails
 func (tph *TestPipelineHelper) AssertFailure(ctx context.Context) *Result {
 	result := tph.Execute(ctx)
-	if result.Success {
+	if result.IsSuccess() {
 		tph.t.Fatalf("Expected pipeline to fail, but it succeeded")
 	}
 	return result

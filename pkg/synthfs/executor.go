@@ -22,17 +22,6 @@ type OperationResult struct {
 	BackupSizeMB float64
 }
 
-// Result holds the overall outcome of running a pipeline of operations
-type Result struct {
-	Success    bool
-	Operations []OperationResult
-	Duration   time.Duration
-	Errors     []error
-	Rollback   func(context.Context) error
-	Budget     *BackupBudget
-	RestoreOps []Operation
-}
-
 // DefaultPipelineOptions returns sensible defaults for pipeline execution
 func DefaultPipelineOptions() PipelineOptions {
 	return execution.DefaultPipelineOptions()
@@ -72,15 +61,8 @@ func (e *Executor) RunWithOptions(ctx context.Context, pipeline Pipeline, fs Fil
 
 // convertResult converts core.Result to main package Result
 func (e *Executor) convertResult(coreResult *core.Result) *Result {
-	result := &Result{
-		Success:  coreResult.Success,
-		Duration: coreResult.Duration,
-		Errors:   coreResult.Errors,
-		Budget:   coreResult.Budget,
-		Rollback: coreResult.Rollback,
-	}
-
-	// Convert operation results
+	// Create operations list
+	operations := make([]interface{}, 0, len(coreResult.Operations))
 	for _, coreOpResult := range coreResult.Operations {
 		opResult := OperationResult{
 			OperationID:  coreOpResult.OperationID,
@@ -98,17 +80,31 @@ func (e *Executor) convertResult(coreResult *core.Result) *Result {
 			opResult.Operation = wrapper.op
 		}
 
-		result.Operations = append(result.Operations, opResult)
+		operations = append(operations, opResult)
 	}
 
 	// Convert restore operations
+	restoreOps := make([]interface{}, 0, len(coreResult.RestoreOps))
 	for _, coreRestoreOp := range coreResult.RestoreOps {
-		if op, ok := coreRestoreOp.(Operation); ok {
-			result.RestoreOps = append(result.RestoreOps, op)
-		}
+		restoreOps = append(restoreOps, coreRestoreOp)
 	}
 
-	return result
+	// Get first error if any
+	var firstErr error
+	if len(coreResult.Errors) > 0 {
+		firstErr = coreResult.Errors[0]
+	}
+
+	// Create the result using the simplified structure
+	return &Result{
+		success:    coreResult.Success,
+		operations: operations,
+		restoreOps: restoreOps,
+		duration:   coreResult.Duration,
+		err:        firstErr,
+		budget:     coreResult.Budget,
+		rollback:   coreResult.Rollback,
+	}
 }
 
 // pipelineWrapper wraps Pipeline to implement execution.PipelineInterface
@@ -116,9 +112,21 @@ type pipelineWrapper struct {
 	pipeline Pipeline
 }
 
-func (pw *pipelineWrapper) Operations() []execution.OperationInterface {
+func (pw *pipelineWrapper) Add(ops ...interface{}) error {
+	// Convert operations and add to pipeline
+	for _, op := range ops {
+		if opTyped, ok := op.(Operation); ok {
+			if err := pw.pipeline.Add(opTyped); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (pw *pipelineWrapper) Operations() []interface{} {
 	ops := pw.pipeline.Operations()
-	var result []execution.OperationInterface
+	var result []interface{}
 	for _, op := range ops {
 		result = append(result, &operationWrapper{op: op})
 	}
@@ -162,6 +170,14 @@ func (ow *operationWrapper) Dependencies() []core.OperationID {
 
 func (ow *operationWrapper) Conflicts() []core.OperationID {
 	return ow.op.Conflicts()
+}
+
+func (ow *operationWrapper) Prerequisites() []core.Prerequisite {
+	// Check if operation implements Prerequisites method
+	if prereqOp, ok := ow.op.(interface{ Prerequisites() []core.Prerequisite }); ok {
+		return prereqOp.Prerequisites()
+	}
+	return []core.Prerequisite{}
 }
 
 func (ow *operationWrapper) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
