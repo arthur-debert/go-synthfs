@@ -2,7 +2,6 @@ package synthfs
 
 import (
 	"fmt"
-
 )
 
 // --- Error Types ---

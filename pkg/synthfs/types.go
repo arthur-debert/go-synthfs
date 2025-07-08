@@ -2,10 +2,10 @@ package synthfs
 
 import (
 	"context"
-	"fmt"
 	"io/fs"
 	"time"
 
+	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/validation"
 )
@@ -30,27 +30,13 @@ type FsItem interface {
 
 // --- Operation Types ---
 
-type OperationID string
+// Type aliases for core types
+type OperationID = core.OperationID
+type OperationDesc = core.OperationDesc
+type BackupData = core.BackupData
 
 // ChecksumRecord is now defined in the validation package
 type ChecksumRecord = validation.ChecksumRecord
-
-type OperationDesc struct {
-	Type    string
-	Path    string
-	Details map[string]interface{}
-}
-
-type BackupData struct {
-	OperationID   OperationID
-	BackupType    string
-	OriginalPath  string
-	BackupContent []byte
-	BackupMode    fs.FileMode
-	BackupTime    time.Time
-	SizeMB        float64
-	Metadata      map[string]interface{}
-}
 
 type BackedUpItem struct {
 	RelativePath string
@@ -61,42 +47,32 @@ type BackedUpItem struct {
 	ModTime      time.Time
 }
 
-type BackupBudget struct {
-	TotalMB     float64
-	RemainingMB float64
-	UsedMB      float64
-}
+// BackupBudget is now defined in the core package
+type BackupBudget = core.BackupBudget
 
-type Operation interface {
-	ID() OperationID
-	Dependencies() []OperationID
-	Conflicts() []OperationID
+// Executable defines execution capabilities for operations
+type Executable interface {
 	Execute(ctx context.Context, fsys FileSystem) error
 	Validate(ctx context.Context, fsys FileSystem) error
+}
+
+// Operation is the main interface that composes all operation capabilities
+type Operation interface {
+	core.OperationMetadata // ID(), Describe()
+	core.DependencyAware   // Dependencies(), Conflicts()
+	Executable             // Execute(), Validate()
+	core.ExecutableV2      // ExecuteV2(), ValidateV2() - new methods
 	Rollback(ctx context.Context, fsys FileSystem) error
-	Describe() OperationDesc
 	GetItem() FsItem
 	GetChecksum(path string) *ChecksumRecord
 	GetAllChecksums() map[string]*ChecksumRecord
-	ReverseOps(ctx context.Context, fsys FileSystem, budget *BackupBudget) ([]Operation, *BackupData, error)
+	ReverseOps(ctx context.Context, fsys FileSystem, budget *core.BackupBudget) ([]Operation, *core.BackupData, error)
+
+	// Batch building methods
+	SetDescriptionDetail(key string, value interface{})
+	AddDependency(depID OperationID)
+	SetPaths(src, dst string)
 }
 
-// ValidationError represents an error during operation validation.
-type ValidationError struct {
-	Operation Operation
-	Reason    string
-	Cause     error
-}
-
-func (e *ValidationError) Error() string {
-	if e.Cause != nil {
-		return fmt.Sprintf("validation error for operation %s (%s): %s: %v",
-			e.Operation.ID(), e.Operation.Describe().Path, e.Reason, e.Cause)
-	}
-	return fmt.Sprintf("validation error for operation %s (%s): %s",
-		e.Operation.ID(), e.Operation.Describe().Path, e.Reason)
-}
-
-func (e *ValidationError) Unwrap() error {
-	return e.Cause
-}
+// ValidationError is now defined in the core package
+type ValidationError = core.ValidationError

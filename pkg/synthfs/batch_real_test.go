@@ -295,7 +295,7 @@ func TestBatchValidation(t *testing.T) {
 			t.Error("Expected validation error for non-existent source")
 		}
 
-		if !strings.Contains(err.Error(), "copy source does not exist") {
+		if !strings.Contains(err.Error(), "source does not exist") {
 			t.Errorf("Expected source existence error, got: %v", err)
 		}
 
@@ -316,7 +316,7 @@ func TestBatchValidation(t *testing.T) {
 			t.Error("Expected validation error for non-existent source")
 		}
 
-		if !strings.Contains(err.Error(), "move source does not exist") {
+		if !strings.Contains(err.Error(), "source does not exist") {
 			t.Errorf("Expected source existence error, got: %v", err)
 		}
 

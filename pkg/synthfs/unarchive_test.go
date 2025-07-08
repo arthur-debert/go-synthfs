@@ -12,6 +12,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 func TestUnarchiveItem(t *testing.T) {
@@ -69,14 +72,20 @@ func TestUnarchiveItem(t *testing.T) {
 
 func TestUnarchiveValidation(t *testing.T) {
 	ctx := context.Background()
-	fs := NewOSFileSystem(".")
+	fs := filesystem.NewOSFileSystem(".")
 
 	t.Run("validates archive path", func(t *testing.T) {
-		op := NewSimpleOperation("test", "unarchive", "")
+		registry := GetDefaultRegistry()
+		op, err := registry.CreateOperation(core.OperationID("test"), "unarchive", "")
+		if err != nil {
+			t.Fatalf("Failed to create operation: %v", err)
+		}
 		item := NewUnarchive("", "extract/")
-		op.SetItem(item)
+		if err := registry.SetItemForOperation(op.(Operation), item); err != nil {
+			t.Fatalf("Failed to set item: %v", err)
+		}
 
-		err := op.Validate(ctx, fs)
+		err = op.(Operation).Validate(ctx, fs)
 		if err == nil {
 			t.Error("Expected validation error for empty archive path")
 		}
@@ -88,11 +97,17 @@ func TestUnarchiveValidation(t *testing.T) {
 	})
 
 	t.Run("validates extract path", func(t *testing.T) {
-		op := NewSimpleOperation("test", "unarchive", "test.tar.gz")
+		registry := GetDefaultRegistry()
+		op, err := registry.CreateOperation(core.OperationID("test"), "unarchive", "test.tar.gz")
+		if err != nil {
+			t.Fatalf("Failed to create operation: %v", err)
+		}
 		item := NewUnarchive("test.tar.gz", "")
-		op.SetItem(item)
+		if err := registry.SetItemForOperation(op.(Operation), item); err != nil {
+			t.Fatalf("Failed to set item: %v", err)
+		}
 
-		err := op.Validate(ctx, fs)
+		err = op.(Operation).Validate(ctx, fs)
 		if err == nil {
 			t.Error("Expected validation error for empty extract path")
 		}
@@ -103,11 +118,17 @@ func TestUnarchiveValidation(t *testing.T) {
 	})
 
 	t.Run("validates archive format", func(t *testing.T) {
-		op := NewSimpleOperation("test", "unarchive", "test.unknown")
+		registry := GetDefaultRegistry()
+		op, err := registry.CreateOperation(core.OperationID("test"), "unarchive", "test.unknown")
+		if err != nil {
+			t.Fatalf("Failed to create operation: %v", err)
+		}
 		item := NewUnarchive("test.unknown", "extract/")
-		op.SetItem(item)
+		if err := registry.SetItemForOperation(op.(Operation), item); err != nil {
+			t.Fatalf("Failed to set item: %v", err)
+		}
 
-		err := op.Validate(ctx, fs)
+		err = op.(Operation).Validate(ctx, fs)
 		if err == nil {
 			t.Error("Expected validation error for unsupported format")
 		}
@@ -121,7 +142,7 @@ func TestUnarchiveValidation(t *testing.T) {
 		supportedFormats := []string{"test.tar.gz", "test.tgz", "test.zip"}
 
 		// Phase I, Milestone 1: Create dummy archive files since we now validate existence
-		testFS := NewOSFileSystem(".")
+		testFS := filesystem.NewOSFileSystem(".")
 		for _, format := range supportedFormats {
 			// Create a minimal dummy archive file for testing
 			err := testFS.WriteFile(format, []byte("dummy archive content"), 0644)
@@ -132,11 +153,17 @@ func TestUnarchiveValidation(t *testing.T) {
 		}
 
 		for _, format := range supportedFormats {
-			op := NewSimpleOperation("test", "unarchive", format)
+			registry := GetDefaultRegistry()
+			op, err := registry.CreateOperation(core.OperationID("test"), "unarchive", format)
+			if err != nil {
+				t.Fatalf("Failed to create operation: %v", err)
+			}
 			item := NewUnarchive(format, "extract/")
-			op.SetItem(item)
+			if err := registry.SetItemForOperation(op.(Operation), item); err != nil {
+				t.Fatalf("Failed to set item: %v", err)
+			}
 
-			err := op.Validate(ctx, testFS)
+			err = op.(Operation).Validate(ctx, testFS)
 			if err != nil {
 				t.Errorf("Expected no validation error for %s, got: %v", format, err)
 			}
@@ -144,11 +171,17 @@ func TestUnarchiveValidation(t *testing.T) {
 	})
 
 	t.Run("validates item type", func(t *testing.T) {
-		op := NewSimpleOperation("test", "unarchive", "test.tar.gz")
+		registry := GetDefaultRegistry()
+		op, err := registry.CreateOperation(core.OperationID("test"), "unarchive", "test.tar.gz")
+		if err != nil {
+			t.Fatalf("Failed to create operation: %v", err)
+		}
 		item := NewFile("test.tar.gz") // Wrong item type
-		op.SetItem(item)
+		if err := registry.SetItemForOperation(op.(Operation), item); err != nil {
+			t.Fatalf("Failed to set item: %v", err)
+		}
 
-		err := op.Validate(ctx, fs)
+		err = op.(Operation).Validate(ctx, fs)
 		if err == nil {
 			t.Error("Expected validation error for wrong item type")
 		}
@@ -159,86 +192,11 @@ func TestUnarchiveValidation(t *testing.T) {
 	})
 }
 
-func TestUnarchivePatternMatching(t *testing.T) {
-	op := &SimpleOperation{}
-
-	tests := []struct {
-		name     string
-		filePath string
-		patterns []string
-		expected bool
-	}{
-		{
-			name:     "no patterns matches all",
-			filePath: "any/file.txt",
-			patterns: []string{},
-			expected: true,
-		},
-		{
-			name:     "simple wildcard match",
-			filePath: "file.txt",
-			patterns: []string{"*.txt"},
-			expected: true,
-		},
-		{
-			name:     "simple wildcard no match",
-			filePath: "file.jpg",
-			patterns: []string{"*.txt"},
-			expected: false,
-		},
-		{
-			name:     "directory pattern match",
-			filePath: "docs/readme.txt",
-			patterns: []string{"docs/**"},
-			expected: true,
-		},
-		{
-			name:     "directory pattern no match",
-			filePath: "src/main.go",
-			patterns: []string{"docs/**"},
-			expected: false,
-		},
-		{
-			name:     "complex pattern match",
-			filePath: "docs/guide.html",
-			patterns: []string{"docs/*.html"},
-			expected: true,
-		},
-		{
-			name:     "multiple patterns first match",
-			filePath: "test.txt",
-			patterns: []string{"*.txt", "*.html"},
-			expected: true,
-		},
-		{
-			name:     "multiple patterns second match",
-			filePath: "index.html",
-			patterns: []string{"*.txt", "*.html"},
-			expected: true,
-		},
-		{
-			name:     "multiple patterns no match",
-			filePath: "image.jpg",
-			patterns: []string{"*.txt", "*.html"},
-			expected: false,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			result := op.matchesPatterns(test.filePath, test.patterns)
-			if result != test.expected {
-				t.Errorf("Expected %v for file '%s' with patterns %v, got %v",
-					test.expected, test.filePath, test.patterns, result)
-			}
-		})
-	}
-}
 
 func TestUnarchiveIntegration(t *testing.T) {
 	// Create temporary directory for test
 	tempDir := t.TempDir()
-	fs := NewOSFileSystem(tempDir)
+	fs := filesystem.NewOSFileSystem(tempDir)
 	ctx := context.Background()
 
 	t.Run("extract tar.gz archive", func(t *testing.T) {
@@ -262,12 +220,18 @@ func TestUnarchiveIntegration(t *testing.T) {
 		}
 
 		// Create unarchive operation
-		op := NewSimpleOperation("test", "unarchive", archivePath)
+		registry := GetDefaultRegistry()
+		op, err := registry.CreateOperation(core.OperationID("test"), "unarchive", archivePath)
+		if err != nil {
+			t.Fatalf("Failed to create operation: %v", err)
+		}
 		item := NewUnarchive(archivePath, extractPath)
-		op.SetItem(item)
+		if err := registry.SetItemForOperation(op.(Operation), item); err != nil {
+			t.Fatalf("Failed to set item: %v", err)
+		}
 
 		// Execute unarchive
-		err = op.Execute(ctx, fs)
+		err = op.(Operation).Execute(ctx, fs)
 		if err != nil {
 			t.Fatalf("Unarchive failed: %v", err)
 		}
@@ -331,12 +295,18 @@ func TestUnarchiveIntegration(t *testing.T) {
 		}
 
 		// Create unarchive operation
-		op := NewSimpleOperation("test", "unarchive", archivePath)
+		registry := GetDefaultRegistry()
+		op, err := registry.CreateOperation(core.OperationID("test"), "unarchive", archivePath)
+		if err != nil {
+			t.Fatalf("Failed to create operation: %v", err)
+		}
 		item := NewUnarchive(archivePath, extractPath)
-		op.SetItem(item)
+		if err := registry.SetItemForOperation(op.(Operation), item); err != nil {
+			t.Fatalf("Failed to set item: %v", err)
+		}
 
 		// Execute unarchive
-		err = op.Execute(ctx, fs)
+		err = op.(Operation).Execute(ctx, fs)
 		if err != nil {
 			t.Fatalf("Unarchive failed: %v", err)
 		}
@@ -391,12 +361,18 @@ func TestUnarchiveIntegration(t *testing.T) {
 		}
 
 		// Create unarchive operation with patterns
-		op := NewSimpleOperation("test", "unarchive", archivePath)
+		registry := GetDefaultRegistry()
+		op, err := registry.CreateOperation(core.OperationID("test"), "unarchive", archivePath)
+		if err != nil {
+			t.Fatalf("Failed to create operation: %v", err)
+		}
 		item := NewUnarchive(archivePath, extractPath).WithPatterns("*.txt", "docs/**")
-		op.SetItem(item)
+		if err := registry.SetItemForOperation(op.(Operation), item); err != nil {
+			t.Fatalf("Failed to set item: %v", err)
+		}
 
 		// Execute unarchive
-		err = op.Execute(ctx, fs)
+		err = op.(Operation).Execute(ctx, fs)
 		if err != nil {
 			t.Fatalf("Unarchive with patterns failed: %v", err)
 		}
@@ -424,7 +400,7 @@ func TestUnarchiveIntegration(t *testing.T) {
 func TestBatchUnarchive(t *testing.T) {
 	t.Run("batch unarchive operation", func(t *testing.T) {
 		tempDir := t.TempDir()
-		fs := NewOSFileSystem(tempDir)
+		fs := filesystem.NewOSFileSystem(tempDir)
 
 		// Create test archive first
 		testFiles := map[string][]byte{
@@ -474,7 +450,7 @@ func TestBatchUnarchive(t *testing.T) {
 
 	t.Run("batch unarchive with patterns", func(t *testing.T) {
 		tempDir := t.TempDir()
-		fs := NewOSFileSystem(tempDir)
+		fs := filesystem.NewOSFileSystem(tempDir)
 
 		// Create test archive with multiple files
 		testFiles := map[string][]byte{

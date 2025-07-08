@@ -1,0 +1,38 @@
+Architecture Overview
+====================
+
+The SynthFS library uses a wrapper/adapter pattern to avoid Go's circular dependency limitations while maintaining clean separation of concerns.
+
+Package Structure
+-----------------
+
+Root Package (pkg/synthfs/)
+- Public API with concrete types
+- Thin wrappers delegating to domain packages
+- Type adapters for interface conversions
+
+Domain Packages:
+- execution/: Core execution engine with generic interfaces
+- batch/: Batch operation implementation
+- operations/: Individual operation implementations
+- targets/: Filesystem item types (File, Directory, Symlink)
+
+Why Wrappers?
+-------------
+
+Go prohibits circular imports between packages. The wrapper pattern solves this:
+
+1. Domain packages use generic interfaces (interface{})
+2. Root package provides concrete type definitions
+3. Wrappers adapt between concrete and generic types
+4. Clean dependency flow: root → domain packages
+
+Example:
+- batch.go (wrapper, 343 lines) → batch/batch.go (implementation, 975 lines)
+- pipeline.go (wrapper, 84 lines) → execution/pipeline.go (implementation, 431 lines)
+
+Benefits:
+- Modular design with single responsibility
+- Testable components
+- No circular dependencies
+- Backward compatibility maintained

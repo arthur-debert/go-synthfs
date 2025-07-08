@@ -4,683 +4,354 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"path/filepath"
-	"strings"
+	"time"
 
-	"github.com/arthur-debert/synthfs/pkg/synthfs/targets"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/batch"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
-// computeFileChecksum computes MD5 checksum for a file
-func (b *Batch) computeFileChecksum(filePath string) (*ChecksumRecord, error) {
-	// Phase I, Milestone 3: Basic checksumming for copy/move operations
-	return ComputeFileChecksum(b.fs, filePath)
-}
-
 // Batch represents a collection of filesystem operations that can be validated and executed as a unit.
-// It provides an imperative API with validate-as-you-go and automatic dependency resolution.
+// This is a wrapper around the batch package implementation to maintain the public API.
 type Batch struct {
-	operations  []Operation
-	fs          FullFileSystem // Use FullFileSystem to have access to Stat method
-	ctx         context.Context
-	idCounter   int
-	pathTracker *PathStateTracker // Phase II: Track projected path state
+	impl batch.Batch
 }
 
 // NewBatch creates a new operation batch with default filesystem and context.
 func NewBatch() *Batch {
-	fs := NewOSFileSystem(".") // Use current directory as default root
-	return &Batch{
-		operations:  []Operation{},
-		fs:          fs,
-		ctx:         context.Background(),
-		idCounter:   0,
-		pathTracker: NewPathStateTracker(fs), // Phase II: Initialize path state tracker
-	}
+	fs := filesystem.NewOSFileSystem(".")
+	registry := GetDefaultRegistry()
+	logger := NewLoggerAdapter(Logger())
+	impl := batch.NewBatch(fs, registry).
+		WithContext(context.Background()).
+		WithLogger(logger)
+	return &Batch{impl: impl}
 }
 
 // WithFileSystem sets the filesystem for the batch operations.
 func (b *Batch) WithFileSystem(fs FullFileSystem) *Batch {
-	b.fs = fs
-	b.pathTracker.fs = fs // Keep pathTracker's filesystem in sync
+	b.impl = b.impl.WithFileSystem(fs)
 	return b
 }
 
 // WithContext sets the context for the batch operations.
 func (b *Batch) WithContext(ctx context.Context) *Batch {
-	b.ctx = ctx
+	b.impl = b.impl.WithContext(ctx)
+	return b
+}
+
+// WithRegistry sets a custom operation registry for the batch.
+func (b *Batch) WithRegistry(registry core.OperationFactory) *Batch {
+	b.impl = b.impl.WithRegistry(registry)
+	return b
+}
+
+// WithLogger sets the logger for the batch.
+func (b *Batch) WithLogger(logger core.Logger) *Batch {
+	b.impl = b.impl.WithLogger(logger)
 	return b
 }
 
 // Operations returns all operations currently in the batch.
 func (b *Batch) Operations() []Operation {
-	// Return a copy to prevent external modification
-	opsCopy := make([]Operation, len(b.operations))
-	copy(opsCopy, b.operations)
-	return opsCopy
-}
-
-// add adds an operation to the batch and validates it against the projected filesystem state
-func (b *Batch) add(op Operation) error {
-	// First validate the operation itself (basic validation)
-	if err := op.Validate(b.ctx, b.fs); err != nil {
-		// For create operations, if the error is "file already exists" and the file
-		// is scheduled for deletion, we should give a more specific error
-		if validationErr, ok := err.(*ValidationError); ok {
-			if validationErr.Reason == "file already exists" {
-				if b.pathTracker.IsDeleted(op.Describe().Path) {
-					return fmt.Errorf("validation error for operation %s (%s): path was scheduled for deletion", 
-						op.ID(), op.Describe().Path)
-				}
-			}
-		}
-		return err
-	}
-
-	// Phase II: Validate against projected state and update it.
-	if err := b.pathTracker.UpdateState(op); err != nil {
-		return err
-	}
-
-	// Auto-resolve dependencies (ensure parent directories exist)
-	// This will need to be updated to use the PathStateTracker as well.
-	var opPath string
-	if simpleOp, ok := op.(*SimpleOperation); ok {
-		if simpleOp.dstPath != "" {
-			opPath = simpleOp.dstPath
-		} else {
-			opPath = simpleOp.description.Path
-		}
-	} else {
-		opPath = op.Describe().Path
-	}
-
-	if parentDeps := b.ensureParentDirectories(opPath); len(parentDeps) > 0 {
-		if simpleOp, ok := op.(*SimpleOperation); ok {
-			for _, depID := range parentDeps {
-				simpleOp.AddDependency(depID)
-			}
+	opsInterface := b.impl.Operations()
+	var operations []Operation
+	for _, op := range opsInterface {
+		if opTyped, ok := op.(Operation); ok {
+			operations = append(operations, opTyped)
 		}
 	}
-
-	b.operations = append(b.operations, op)
-	return nil
+	return operations
 }
 
 // CreateDir adds a directory creation operation to the batch.
-// It validates the operation immediately and resolves dependencies automatically.
 func (b *Batch) CreateDir(path string, mode ...fs.FileMode) (Operation, error) {
-	fileMode := fs.FileMode(0755) // Default directory mode
-	if len(mode) > 0 {
-		fileMode = mode[0]
+	op, err := b.impl.CreateDir(path, mode...)
+	if err != nil {
+		return nil, err
 	}
-
-	// Create the operation directly to avoid circular import
-	opID := b.generateID("create_dir", path)
-	op := NewSimpleOperation(opID, "create_directory", path)
-
-	// Set the FsItem for this create operation
-	dirItem := NewDirectory(path).WithMode(fileMode)
-	op.SetItem(dirItem)
-	op.SetDescriptionDetail("mode", fileMode.String())
-
-	// Add to batch first (which validates against projected state)
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("validation failed for CreateDir(%s): %w", path, err)
+	if opTyped, ok := op.(Operation); ok {
+		return opTyped, nil
 	}
-
-	Logger().Info().
-		Str("op_id", string(op.ID())).
-		Str("path", path).
-		Str("mode", fileMode.String()).
-		Msg("CreateDir operation added to batch")
-
-	return op, nil
+	return nil, fmt.Errorf("unexpected operation type: %T", op)
 }
 
 // CreateFile adds a file creation operation to the batch.
-// It validates the operation immediately and resolves dependencies automatically.
 func (b *Batch) CreateFile(path string, content []byte, mode ...fs.FileMode) (Operation, error) {
-	fileMode := fs.FileMode(0644) // Default file mode
-	if len(mode) > 0 {
-		fileMode = mode[0]
+	op, err := b.impl.CreateFile(path, content, mode...)
+	if err != nil {
+		return nil, err
 	}
-
-	// Create the operation directly to avoid circular import
-	opID := b.generateID("create_file", path)
-	op := NewSimpleOperation(opID, "create_file", path)
-
-	// Set the FsItem for this create operation
-	fileItem := NewFile(path).WithContent(content).WithMode(fileMode)
-	op.SetItem(fileItem)
-	op.SetDescriptionDetail("content_length", len(content))
-	op.SetDescriptionDetail("mode", fileMode.String())
-
-	// Add to batch first (which validates against projected state)
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("validation failed for CreateFile(%s): %w", path, err)
+	if opTyped, ok := op.(Operation); ok {
+		return opTyped, nil
 	}
-
-	Logger().Info().
-		Str("op_id", string(op.ID())).
-		Str("path", path).
-		Int("content_length", len(content)).
-		Str("mode", fileMode.String()).
-		Msg("CreateFile operation added to batch")
-
-	return op, nil
+	return nil, fmt.Errorf("unexpected operation type: %T", op)
 }
 
 // Copy adds a copy operation to the batch.
-// It validates the operation immediately and resolves dependencies automatically.
 func (b *Batch) Copy(src, dst string) (Operation, error) {
-	// Create the operation directly to avoid circular import
-	opID := b.generateID("copy", src+"_to_"+dst)
-	op := NewSimpleOperation(opID, "copy", src)
-	op.SetDescriptionDetail("destination", dst)
-	op.SetPaths(src, dst)
-
-	// Add to batch first (which validates the operation)
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("validation failed for Copy(%s, %s): %w", src, dst, err)
+	op, err := b.impl.Copy(src, dst)
+	if err != nil {
+		return nil, err
 	}
-
-	// Phase I, Milestone 3: Compute checksum for source file (after validation)
-	if checksum, err := b.computeFileChecksum(src); err == nil && checksum != nil {
-		op.SetChecksum(src, checksum)
-		op.SetDescriptionDetail("source_checksum", checksum.MD5)
-		Logger().Debug().
-			Str("op_id", string(op.ID())).
-			Str("src", src).
-			Str("checksum", checksum.MD5).
-			Msg("Computed source checksum for copy operation")
+	if opTyped, ok := op.(Operation); ok {
+		return opTyped, nil
 	}
-
-	Logger().Info().
-		Str("op_id", string(op.ID())).
-		Str("src", src).
-		Str("dst", dst).
-		Msg("Copy operation added to batch")
-
-	return op, nil
+	return nil, fmt.Errorf("unexpected operation type: %T", op)
 }
 
 // Move adds a move operation to the batch.
-// It validates the operation immediately and resolves dependencies automatically.
 func (b *Batch) Move(src, dst string) (Operation, error) {
-	// Create the operation directly to avoid circular import
-	opID := b.generateID("move", src+"_to_"+dst)
-	op := NewSimpleOperation(opID, "move", src)
-	op.SetDescriptionDetail("destination", dst)
-	op.SetPaths(src, dst)
-
-	// Add to batch first (which validates the operation)
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("validation failed for Move(%s, %s): %w", src, dst, err)
+	op, err := b.impl.Move(src, dst)
+	if err != nil {
+		return nil, err
 	}
-
-	// Phase I, Milestone 3: Compute checksum for source file (after validation)
-	if checksum, err := b.computeFileChecksum(src); err == nil && checksum != nil {
-		op.SetChecksum(src, checksum)
-		op.SetDescriptionDetail("source_checksum", checksum.MD5)
-		Logger().Debug().
-			Str("op_id", string(op.ID())).
-			Str("src", src).
-			Str("checksum", checksum.MD5).
-			Msg("Computed source checksum for move operation")
+	if opTyped, ok := op.(Operation); ok {
+		return opTyped, nil
 	}
-
-	Logger().Info().
-		Str("op_id", string(op.ID())).
-		Str("src", src).
-		Str("dst", dst).
-		Msg("Move operation added to batch")
-
-	return op, nil
+	return nil, fmt.Errorf("unexpected operation type: %T", op)
 }
 
 // Delete adds a delete operation to the batch.
-// It validates the operation immediately.
 func (b *Batch) Delete(path string) (Operation, error) {
-	// Create the operation directly to avoid circular import
-	opID := b.generateID("delete", path)
-	op := NewSimpleOperation(opID, "delete", path)
-
-	// We'll validate when adding to batch
-
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("failed to add Delete(%s): %w", path, err)
+	op, err := b.impl.Delete(path)
+	if err != nil {
+		return nil, err
 	}
-
-	// Add to batch (no dependency resolution needed for delete)
-	Logger().Info().
-		Str("op_id", string(op.ID())).
-		Str("path", path).
-		Msg("Delete operation added to batch")
-
-	return op, nil
+	if opTyped, ok := op.(Operation); ok {
+		return opTyped, nil
+	}
+	return nil, fmt.Errorf("unexpected operation type: %T", op)
 }
 
 // CreateSymlink adds a symbolic link creation operation to the batch.
-// It validates the operation immediately and resolves dependencies automatically.
 func (b *Batch) CreateSymlink(target, linkPath string) (Operation, error) {
-	// Create the operation
-	opID := b.generateID("create_symlink", linkPath)
-	op := NewSimpleOperation(opID, "create_symlink", linkPath)
-
-	// Set the SymlinkItem for this create operation
-	symlinkItem := NewSymlink(linkPath, target)
-	op.SetItem(symlinkItem)
-	op.SetDescriptionDetail("target", target)
-
-	// Validate immediately
-	if err := op.Validate(b.ctx, b.fs); err != nil {
-		return nil, fmt.Errorf("validation failed for CreateSymlink(%s, %s): %w", target, linkPath, err)
+	op, err := b.impl.CreateSymlink(target, linkPath)
+	if err != nil {
+		return nil, err
 	}
-
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("failed to add CreateSymlink(%s, %s): %w", target, linkPath, err)
+	if opTyped, ok := op.(Operation); ok {
+		return opTyped, nil
 	}
-
-	Logger().Info().
-		Str("op_id", string(op.ID())).
-		Str("target", target).
-		Str("link_path", linkPath).
-		Msg("CreateSymlink operation added to batch")
-
-	return op, nil
+	return nil, fmt.Errorf("unexpected operation type: %T", op)
 }
 
 // CreateArchive adds an archive creation operation to the batch.
-// It validates the operation immediately and resolves dependencies automatically.
 func (b *Batch) CreateArchive(archivePath string, format ArchiveFormat, sources ...string) (Operation, error) {
-	// Validate inputs
-	if len(sources) == 0 {
-		return nil, fmt.Errorf("validation failed for CreateArchive(%s): must specify at least one source", archivePath)
+	op, err := b.impl.CreateArchive(archivePath, format, sources...)
+	if err != nil {
+		return nil, err
 	}
-
-	// Create the operation
-	opID := b.generateID("create_archive", archivePath)
-	op := NewSimpleOperation(opID, "create_archive", archivePath)
-
-	// Set the ArchiveItem for this create operation
-	archiveItem := NewArchive(archivePath, format, sources)
-	op.SetItem(archiveItem)
-	op.SetDescriptionDetail("format", targets.ArchiveFormat(format).String())
-	op.SetDescriptionDetail("source_count", len(sources))
-
-	// Validate immediately
-	if err := op.Validate(b.ctx, b.fs); err != nil {
-		return nil, fmt.Errorf("validation failed for CreateArchive(%s): %w", archivePath, err)
+	if opTyped, ok := op.(Operation); ok {
+		return opTyped, nil
 	}
-
-	// Phase I, Milestone 3: Compute checksums for all source files
-	for _, source := range sources {
-		if checksum, err := b.computeFileChecksum(source); err != nil {
-			return nil, fmt.Errorf("validation failed for CreateArchive(%s): failed to compute checksum for source %s: %w", archivePath, source, err)
-		} else if checksum != nil {
-			op.SetChecksum(source, checksum)
-		}
-	}
-	op.SetDescriptionDetail("sources_checksummed", len(sources))
-
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("failed to add CreateArchive(%s): %w", archivePath, err)
-	}
-
-	Logger().Info().
-		Str("op_id", string(op.ID())).
-		Str("archive_path", archivePath).
-		Str("format", targets.ArchiveFormat(format).String()).
-		Int("source_count", len(sources)).
-		Msg("CreateArchive operation added to batch")
-
-	return op, nil
+	return nil, fmt.Errorf("unexpected operation type: %T", op)
 }
 
 // Unarchive adds an unarchive operation to the batch.
-// It validates the operation immediately and resolves dependencies automatically.
 func (b *Batch) Unarchive(archivePath, extractPath string) (Operation, error) {
-	// Create the operation
-	opID := b.generateID("unarchive", archivePath+"_to_"+extractPath)
-	op := NewSimpleOperation(opID, "unarchive", archivePath)
-
-	// Set the UnarchiveItem for this operation
-	unarchiveItem := NewUnarchive(archivePath, extractPath)
-	op.SetItem(unarchiveItem)
-	op.SetDescriptionDetail("extract_path", extractPath)
-
-	// Validate immediately
-	if err := op.Validate(b.ctx, b.fs); err != nil {
-		return nil, fmt.Errorf("validation failed for Unarchive(%s, %s): %w", archivePath, extractPath, err)
+	op, err := b.impl.Unarchive(archivePath, extractPath)
+	if err != nil {
+		return nil, err
 	}
-
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("failed to add Unarchive(%s, %s): %w", archivePath, extractPath, err)
+	if opTyped, ok := op.(Operation); ok {
+		return opTyped, nil
 	}
-
-	Logger().Info().
-		Str("op_id", string(op.ID())).
-		Str("archive_path", archivePath).
-		Str("extract_path", extractPath).
-		Msg("Unarchive operation added to batch")
-
-	return op, nil
+	return nil, fmt.Errorf("unexpected operation type: %T", op)
 }
 
 // UnarchiveWithPatterns adds an unarchive operation with pattern filtering to the batch.
-// It validates the operation immediately and resolves dependencies automatically.
 func (b *Batch) UnarchiveWithPatterns(archivePath, extractPath string, patterns ...string) (Operation, error) {
-	// Create the operation
-	opID := b.generateID("unarchive", archivePath+"_to_"+extractPath)
-	op := NewSimpleOperation(opID, "unarchive", archivePath)
-
-	// Set the UnarchiveItem for this operation with patterns
-	unarchiveItem := NewUnarchive(archivePath, extractPath).WithPatterns(patterns...)
-	op.SetItem(unarchiveItem)
-	op.SetDescriptionDetail("extract_path", extractPath)
-	op.SetDescriptionDetail("patterns", patterns)
-	op.SetDescriptionDetail("pattern_count", len(patterns))
-
-	// Validate immediately
-	if err := op.Validate(b.ctx, b.fs); err != nil {
-		return nil, fmt.Errorf("validation failed for UnarchiveWithPatterns(%s, %s): %w", archivePath, extractPath, err)
+	op, err := b.impl.UnarchiveWithPatterns(archivePath, extractPath, patterns...)
+	if err != nil {
+		return nil, err
 	}
-
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("failed to add UnarchiveWithPatterns(%s, %s): %w", archivePath, extractPath, err)
+	if opTyped, ok := op.(Operation); ok {
+		return opTyped, nil
 	}
-
-	Logger().Info().
-		Str("op_id", string(op.ID())).
-		Str("archive_path", archivePath).
-		Str("extract_path", extractPath).
-		Strs("patterns", patterns).
-		Msg("UnarchiveWithPatterns operation added to batch")
-
-	return op, nil
+	return nil, fmt.Errorf("unexpected operation type: %T", op)
 }
 
-// Run runs all operations in the batch using the existing infrastructure.
+// Run runs all operations in the batch.
 func (b *Batch) Run() (*Result, error) {
-	return b.RunWithOptions(DefaultPipelineOptions())
+	batchResult, err := b.impl.Run()
+	if err != nil {
+		return nil, err
+	}
+	return ConvertBatchResult(batchResult), nil
 }
 
-// RunWithOptions runs all operations in the batch with specified options (Phase III).
+// RunWithOptions runs all operations in the batch with specified options.
 func (b *Batch) RunWithOptions(opts PipelineOptions) (*Result, error) {
-	Logger().Info().
-		Int("operation_count", len(b.operations)).
-		Bool("restorable", opts.Restorable).
-		Int("max_backup_mb", opts.MaxBackupSizeMB).
-		Msg("executing batch")
-
-	// Resolve implicit dependencies before execution
-	if err := b.resolveImplicitDependencies(); err != nil {
-		return nil, fmt.Errorf("failed to resolve implicit dependencies: %w", err)
+	// Convert PipelineOptions to interface{} map for batch package
+	optsMap := map[string]interface{}{
+		"restorable":        opts.Restorable,
+		"max_backup_size_mb": opts.MaxBackupSizeMB,
 	}
-
-	// Create executor and pipeline
-	executor := NewExecutor()
-	pipeline := NewMemPipeline()
-
-	// Add all operations to pipeline
-	if err := pipeline.Add(b.operations...); err != nil {
-		return nil, fmt.Errorf("failed to add operations to pipeline: %w", err)
+	
+	batchResult, err := b.impl.RunWithOptions(optsMap)
+	if err != nil {
+		return nil, err
 	}
-
-	// Run using Phase III infrastructure
-	result := executor.RunWithOptions(b.ctx, pipeline, b.fs, opts)
-
-	Logger().Info().
-		Bool("success", result.Success).
-		Int("operations_executed", len(result.Operations)).
-		Int("restore_operations", len(result.RestoreOps)).
-		Dur("duration", result.Duration).
-		Msg("batch run completed")
-
-	return result, nil
+	return ConvertBatchResult(batchResult), nil
 }
 
-// RunRestorable runs all operations with backup enabled using the default 10MB budget (Phase III).
-// This is a convenience method for the common case of wanting restorable execution.
+// RunRestorable runs all operations with backup enabled using the default 10MB budget.
 func (b *Batch) RunRestorable() (*Result, error) {
-	return b.RunWithOptions(PipelineOptions{
-		Restorable:      true,
-		MaxBackupSizeMB: 10,
-	})
+	batchResult, err := b.impl.RunRestorable()
+	if err != nil {
+		return nil, err
+	}
+	return ConvertBatchResult(batchResult), nil
 }
 
-// RunRestorableWithBudget runs all operations with backup enabled using a custom budget (Phase III).
+// RunRestorableWithBudget runs all operations with backup enabled using a custom budget.
 func (b *Batch) RunRestorableWithBudget(maxBackupMB int) (*Result, error) {
-	return b.RunWithOptions(PipelineOptions{
-		Restorable:      true,
-		MaxBackupSizeMB: maxBackupMB,
-	})
+	batchResult, err := b.impl.RunRestorableWithBudget(maxBackupMB)
+	if err != nil {
+		return nil, err
+	}
+	return ConvertBatchResult(batchResult), nil
 }
 
-// generateID creates a unique operation ID based on type and path.
-func (b *Batch) generateID(opType, path string) OperationID {
-	b.idCounter++
-	cleanPath := strings.ReplaceAll(path, "/", "_")
-	cleanPath = strings.ReplaceAll(cleanPath, "\\", "_")
-	return OperationID(fmt.Sprintf("batch_%d_%s_%s", b.idCounter, opType, cleanPath))
-}
-
-// ensureParentDirectories analyzes a path and adds CreateDir operations for missing parent directories.
-// Returns the operation IDs of any auto-generated parent directory operations.
-func (b *Batch) ensureParentDirectories(path string) []OperationID {
-	// Clean and normalize the path
-	cleanPath := filepath.Clean(path)
-	parentDir := filepath.Dir(cleanPath)
-
-	var dependencyIDs []OperationID
-
-	// If parent is root or current directory, no parent needed
-	if parentDir == "." || parentDir == "/" || parentDir == cleanPath {
-		return dependencyIDs
+// ConvertBatchResult converts a batch package result to main package Result
+func ConvertBatchResult(batchResult interface{}) *Result {
+	// Extract fields from the batch result interface
+	type resultGetter interface {
+		IsSuccess() bool
+		GetOperations() []interface{}
+		GetRestoreOps() []interface{} 
+		GetDuration() interface{}
+		GetError() error
+		GetBudget() interface{}
+		GetRollback() interface{}
 	}
-
-	// Phase II: Check if parent directory is projected to exist
-	parentState, err := b.pathTracker.GetState(parentDir)
-	if err == nil && parentState.WillExist {
-		if parentState.CreatedBy != "" {
-			// If it was created by a previous operation in this batch, we depend on it.
-			dependencyIDs = append(dependencyIDs, parentState.CreatedBy)
-		}
-		// If it exists (either on disk or projected), we don't need to do anything else.
-		return dependencyIDs
+	
+	r, ok := batchResult.(resultGetter)
+	if !ok {
+		return nil
 	}
-
-	// Recursively ensure parent's parents exist
-	parentDeps := b.ensureParentDirectories(parentDir)
-	dependencyIDs = append(dependencyIDs, parentDeps...)
-
-	// Create operation for the parent directory
-	parentOpID := b.generateID("create_dir_auto", parentDir)
-	parentOp := NewSimpleOperation(parentOpID, "create_directory", parentDir)
-	parentDirItem := NewDirectory(parentDir).WithMode(0755)
-	parentOp.SetItem(parentDirItem)
-	parentOp.SetDescriptionDetail("mode", "0755")
-
-	// Add dependencies from parent's parents
-	for _, depID := range parentDeps {
-		parentOp.AddDependency(depID)
-	}
-
-	// Validate the auto-generated parent operation and add it to the batch
-	if err := b.add(parentOp); err != nil {
-		// Log error but don't fail - might be resolved at execution time
-		Logger().Warn().
-			Err(err).
-			Str("path", parentDir).
-			Msg("validation warning for auto-generated parent directory")
-		// Even if it fails validation (e.g., conflict), other operations might depend on its ID.
-		// We'll still add the ID to dependencies. The conflict will be reported when the batch is run.
-	}
-
-	dependencyIDs = append(dependencyIDs, parentOp.ID())
-
-	Logger().Info().
-		Str("op_id", string(parentOp.ID())).
-		Str("path", parentDir).
-		Str("reason", "auto-generated for parent directory").
-		Msg("CreateDir operation auto-added to batch")
-
-	return dependencyIDs
-}
-
-// resolveImplicitDependencies analyzes all operations and adds dependencies to prevent conflicts.
-// This ensures operations that depend on the same files are executed in the correct order.
-func (b *Batch) resolveImplicitDependencies() error {
-	Logger().Info().
-		Int("operations", len(b.operations)).
-		Msg("resolving implicit dependencies between operations")
-
-	// Build maps of operations by the files they read/write/delete
-	fileReaders := make(map[string][]int)    // path -> operation indices that read this file
-	fileWriters := make(map[string][]int)    // path -> operation indices that write/create this file
-	fileMovers := make(map[string][]int)     // path -> operation indices that move/delete this file
-	symlinkTargets := make(map[string][]int) // target path -> operation indices that create symlinks to this target
-
-	for i, op := range b.operations {
-		desc := op.Describe()
-
-		switch desc.Type {
-		case "create_file", "create_directory":
-			fileWriters[desc.Path] = append(fileWriters[desc.Path], i)
-
-		case "copy":
-			// Copy reads source and writes destination
-			if simpleOp, ok := op.(*SimpleOperation); ok {
-				srcPath := simpleOp.GetSrcPath()
-				dstPath := simpleOp.GetDstPath()
-				if srcPath != "" {
-					fileReaders[srcPath] = append(fileReaders[srcPath], i)
-				}
-				if dstPath != "" {
-					fileWriters[dstPath] = append(fileWriters[dstPath], i)
-				}
-			}
-
-		case "move":
-			// Move reads source and writes destination, then deletes source
-			if simpleOp, ok := op.(*SimpleOperation); ok {
-				srcPath := simpleOp.GetSrcPath()
-				dstPath := simpleOp.GetDstPath()
-				if srcPath != "" {
-					fileReaders[srcPath] = append(fileReaders[srcPath], i)
-					fileMovers[srcPath] = append(fileMovers[srcPath], i)
-				}
-				if dstPath != "" {
-					fileWriters[dstPath] = append(fileWriters[dstPath], i)
-				}
-			}
-
-		case "delete":
-			fileMovers[desc.Path] = append(fileMovers[desc.Path], i)
-
-		case "create_symlink":
-			// Symlink creation depends on the target existing
-			if target, ok := desc.Details["target"]; ok {
-				if targetPath, ok := target.(string); ok {
-					symlinkTargets[targetPath] = append(symlinkTargets[targetPath], i)
-					// A symlink operation "reads" its target path, so it must happen
-					// before the target is moved or deleted.
-					fileReaders[targetPath] = append(fileReaders[targetPath], i)
-				}
-			}
-			fileWriters[desc.Path] = append(fileWriters[desc.Path], i)
-
-		case "create_archive":
-			// Archive reads all source files
-			if archiveItem := op.GetItem(); archiveItem != nil {
-				if archive, ok := archiveItem.(*ArchiveItem); ok {
-					for _, source := range archive.Sources() {
-						fileReaders[source] = append(fileReaders[source], i)
+	
+	// Convert operations from []interface{} to []OperationResult
+	var operationResults []OperationResult
+	for _, op := range r.GetOperations() {
+		// The operations are core.OperationResult from execution package
+		if coreOpResult, ok := op.(*core.OperationResult); ok {
+			// Extract the actual operation from the result
+			if actualOp := coreOpResult.Operation; actualOp != nil {
+				// Try to get the original operation from adapters
+				var origOp Operation
+				if adapter, ok := actualOp.(interface{ GetOriginalOperation() interface{} }); ok {
+					if o, ok := adapter.GetOriginalOperation().(Operation); ok {
+						origOp = o
 					}
+				} else if mainOp, ok := actualOp.(Operation); ok {
+					origOp = mainOp
 				}
-			}
-			fileWriters[desc.Path] = append(fileWriters[desc.Path], i)
-
-		case "unarchive":
-			// Unarchive reads archive file and writes extracted files
-			fileReaders[desc.Path] = append(fileReaders[desc.Path], i)
-			// Note: We can't easily predict all extracted files without opening the archive,
-			// so we'll rely on explicit dependencies and validation at execution time
-		}
-	}
-
-	// Now add dependencies to ensure correct ordering
-	dependenciesAdded := 0
-
-	// Rule 1: Operations that move/delete files must come after operations that read those files
-	for filePath, movers := range fileMovers {
-		if readers, hasReaders := fileReaders[filePath]; hasReaders {
-			for _, moverIdx := range movers {
-				for _, readerIdx := range readers {
-					if readerIdx != moverIdx {
-						// Reader must come before mover
-						if simpleOp, ok := b.operations[moverIdx].(*SimpleOperation); ok {
-							readerID := b.operations[readerIdx].ID()
-							// Check if dependency already exists
-							exists := false
-							for _, dep := range simpleOp.Dependencies() {
-								if dep == readerID {
-									exists = true
-									break
-								}
-							}
-							if !exists {
-								simpleOp.AddDependency(readerID)
-								dependenciesAdded++
-								Logger().Info().
-									Str("operation", string(simpleOp.ID())).
-									Str("depends_on", string(readerID)).
-									Str("reason", fmt.Sprintf("mover depends on reader of %s", filePath)).
-									Msg("added implicit dependency")
-							}
-						}
+				
+				if origOp != nil {
+					opResult := OperationResult{
+						OperationID: coreOpResult.OperationID,
+						Operation:   origOp,
+						Status:      coreOpResult.Status,
+						Error:       coreOpResult.Error,
+						Duration:    coreOpResult.Duration,
+						BackupData:  coreOpResult.BackupData,
+						BackupSizeMB: coreOpResult.BackupSizeMB,
 					}
+					operationResults = append(operationResults, opResult)
 				}
 			}
-		}
-	}
-
-	// Rule 2: Operations that create symlinks must come after operations that create their targets
-	for targetPath, symlinkCreators := range symlinkTargets {
-		if writers, hasWriters := fileWriters[targetPath]; hasWriters {
-			for _, symlinkIdx := range symlinkCreators {
-				for _, writerIdx := range writers {
-					if writerIdx != symlinkIdx {
-						// Writer must come before symlink creator
-						if simpleOp, ok := b.operations[symlinkIdx].(*SimpleOperation); ok {
-							writerID := b.operations[writerIdx].ID()
-							// Check if dependency already exists
-							exists := false
-							for _, dep := range simpleOp.Dependencies() {
-								if dep == writerID {
-									exists = true
-									break
-								}
-							}
-							if !exists {
-								simpleOp.AddDependency(writerID)
-								dependenciesAdded++
-								Logger().Info().
-									Str("operation", string(simpleOp.ID())).
-									Str("depends_on", string(writerID)).
-									Str("reason", fmt.Sprintf("symlink depends on target creation %s", targetPath)).
-									Msg("added implicit dependency")
-							}
-						}
+		} else if coreOpResult, ok := op.(core.OperationResult); ok {
+			// Handle non-pointer version
+			if actualOp := coreOpResult.Operation; actualOp != nil {
+				// Try to get the original operation from adapters
+				var origOp Operation
+				if adapter, ok := actualOp.(interface{ GetOriginalOperation() interface{} }); ok {
+					if o, ok := adapter.GetOriginalOperation().(Operation); ok {
+						origOp = o
 					}
+				} else if mainOp, ok := actualOp.(Operation); ok {
+					origOp = mainOp
+				}
+				
+				if origOp != nil {
+					opResult := OperationResult{
+						OperationID: coreOpResult.OperationID,
+						Operation:   origOp,
+						Status:      coreOpResult.Status,
+						Error:       coreOpResult.Error,
+						Duration:    coreOpResult.Duration,
+						BackupData:  coreOpResult.BackupData,
+						BackupSizeMB: coreOpResult.BackupSizeMB,
+					}
+					operationResults = append(operationResults, opResult)
 				}
 			}
 		}
 	}
-
-	Logger().Info().
-		Int("dependencies_added", dependenciesAdded).
-		Msg("implicit dependency resolution completed")
-
-	return nil
+	
+	// Convert restore operations
+	var restoreOps []Operation
+	for _, op := range r.GetRestoreOps() {
+		if mainOp, ok := op.(Operation); ok {
+			restoreOps = append(restoreOps, mainOp)
+		}
+	}
+	
+	// Extract duration
+	var duration time.Duration
+	if d, ok := r.GetDuration().(time.Duration); ok {
+		duration = d
+	}
+	
+	// Extract budget
+	var budget *BackupBudget
+	if b := r.GetBudget(); b != nil {
+		if bg, ok := b.(*core.BackupBudget); ok {
+			budget = (*BackupBudget)(bg)
+		}
+	}
+	
+	// Convert rollback function signature
+	var rollback func(context.Context) error
+	if rb := r.GetRollback(); rb != nil {
+		// Try func(context.Context) error first
+		if rbFunc, ok := rb.(func(context.Context) error); ok {
+			rollback = rbFunc
+		} else if rbFunc, ok := rb.(func() error); ok {
+			// Fall back to func() error
+			rollback = func(ctx context.Context) error {
+				return rbFunc()
+			}
+		}
+	}
+	
+	// Create result
+	result := &Result{
+		Success:    r.IsSuccess(),
+		Operations: operationResults,
+		RestoreOps: restoreOps,
+		Duration:   duration,
+		Errors:     []error{},
+		Budget:     budget,
+		Rollback:   rollback,
+	}
+	
+	// Add error if present
+	if err := r.GetError(); err != nil {
+		result.Errors = append(result.Errors, err)
+	}
+	
+	// If the batch failed, mark operations as failed
+	if !r.IsSuccess() && len(result.Errors) > 0 {
+		for i := range result.Operations {
+			if result.Operations[i].Status == StatusSuccess {
+				result.Operations[i].Status = StatusFailure
+				result.Operations[i].Error = result.Errors[0]
+			}
+		}
+	}
+	
+	return result
 }

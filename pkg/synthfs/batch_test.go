@@ -166,12 +166,22 @@ func TestBatchWithTestFileSystem(t *testing.T) {
 }
 
 func TestBatchIDGeneration(t *testing.T) {
-	batch := synthfs.NewBatch()
+	testFS := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch().WithFileSystem(testFS)
 
 	// Create multiple operations and check ID uniqueness
-	op1, _ := batch.CreateDir("dir1")
-	op2, _ := batch.CreateDir("dir2")
-	op3, _ := batch.CreateFile("file1.txt", []byte("content"))
+	op1, err := batch.CreateDir("dir1")
+	if err != nil {
+		t.Fatalf("Failed to create dir1: %v", err)
+	}
+	op2, err := batch.CreateDir("dir2")
+	if err != nil {
+		t.Fatalf("Failed to create dir2: %v", err)
+	}
+	op3, err := batch.CreateFile("file1.txt", []byte("content"))
+	if err != nil {
+		t.Fatalf("Failed to create file1.txt: %v", err)
+	}
 
 	id1 := op1.ID()
 	id2 := op2.ID()
