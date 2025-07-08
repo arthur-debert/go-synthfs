@@ -1,4 +1,4 @@
-package synthfs
+THIS SHOULD BE A LINTER ERRORTHIS SHOULD BE A LINTER ERRORpackage synthfs
 
 import (
 	"context"
@@ -11,49 +11,59 @@ import (
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
-// BatchOptions represents configuration options for batch creation
-type BatchOptions struct {
-	UseSimpleBatch bool // When true, use SimpleBatch + prerequisite resolution (default: false in Phase 5, will be true in Phase 6)
-}
-
 // Batch represents a collection of filesystem operations that can be validated and executed as a unit.
 // This is a wrapper around the batch package implementation to maintain the public API.
 type Batch struct {
 	impl batch.Batch
 }
 
-// NewBatch creates a new operation batch with default filesystem and context.
-func NewBatch() *Batch {
-	// Phase 5: UseSimpleBatch defaults to false for backward compatibility
+// BatchOptions configures batch creation behavior
+type BatchOptions struct {
+	UseSimpleBatch bool // Whether to use SimpleBatch instead of traditional Batch (default: false, will change to true in future versions)
+}
+
+// NewSimpleBatch creates a new operation batch using the SimpleBatch implementation.
+// This implementation relies on prerequisite resolution instead of automatic parent directory creation.
+// This is the recommended approach for new code.
+func NewSimpleBatch() *Batch {
+	return NewBatchWithOptions(BatchOptions{UseSimpleBatch: true})
+}
+
+// NewLegacyBatch creates a new operation batch using the legacy implementation.
+// DEPRECATED: This method is provided for backward compatibility only.
+// Use NewBatch() or NewSimpleBatch() for new code, as they provide better
+// extensibility through prerequisite resolution.
+func NewLegacyBatch() *Batch {
 	return NewBatchWithOptions(BatchOptions{UseSimpleBatch: false})
 }
 
-// NewBatchWithOptions creates a new operation batch with specified options.
+// NewBatch creates a new operation batch with default filesystem and context.
+// This uses prerequisite resolution for dependency management instead of automatic 
+// parent directory creation, providing better extensibility and testability.
+// Now defaults to SimpleBatch implementation (Phase 6: Switch Defaults).
+func NewBatch() *Batch {
+	return NewBatchWithOptions(BatchOptions{UseSimpleBatch: true})
+}
+
+// NewBatchWithOptions creates a new operation batch with custom options.
 func NewBatchWithOptions(opts BatchOptions) *Batch {
 	fs := filesystem.NewOSFileSystem(".")
 	registry := GetDefaultRegistry()
 	logger := NewLoggerAdapter(Logger())
 	
-	// Use batch package factory
-	batchOpts := batch.BatchOptions{UseSimpleBatch: opts.UseSimpleBatch}
-	impl := batch.NewBatchWithOptions(fs, registry, batchOpts).
-		WithContext(context.Background()).
-		WithLogger(logger)
+	var impl batch.Batch
+	if opts.UseSimpleBatch {
+		// Use SimpleBatch implementation with prerequisite resolution enabled by default
+		impl = batch.NewSimpleBatch(fs, registry).
+			WithContext(context.Background()).
+			WithLogger(logger)
+	} else {
+		// Use traditional batch implementation
+		impl = batch.NewBatch(fs, registry).
+			WithContext(context.Background()).
+			WithLogger(logger)
+	}
 	
-	return &Batch{impl: impl}
-}
-
-// NewBatchWithSimpleBatch creates a new operation batch with SimpleBatch behavior enabled.
-// This disables automatic parent directory creation and relies on prerequisite resolution.
-// This is the recommended way to create batches for new code as it provides cleaner separation
-// of concerns and more predictable behavior.
-func NewBatchWithSimpleBatch() *Batch {
-	fs := filesystem.NewOSFileSystem(".")
-	registry := GetDefaultRegistry()
-	logger := NewLoggerAdapter(Logger())
-	impl := batch.NewBatchWithSimpleBatch(fs, registry).
-		WithContext(context.Background()).
-		WithLogger(logger)
 	return &Batch{impl: impl}
 }
 
@@ -78,14 +88,6 @@ func (b *Batch) WithRegistry(registry core.OperationFactory) *Batch {
 // WithLogger sets the logger for the batch.
 func (b *Batch) WithLogger(logger core.Logger) *Batch {
 	b.impl = b.impl.WithLogger(logger)
-	return b
-}
-
-// WithSimpleBatch enables SimpleBatch behavior that relies on prerequisite resolution
-// instead of hardcoded parent directory creation logic.
-// This method allows migration of existing code to the new behavior.
-func (b *Batch) WithSimpleBatch(enabled bool) *Batch {
-	b.impl = b.impl.WithSimpleBatch(enabled)
 	return b
 }
 
@@ -222,8 +224,9 @@ func (b *Batch) Run() (*Result, error) {
 func (b *Batch) RunWithOptions(opts PipelineOptions) (*Result, error) {
 	// Convert PipelineOptions to interface{} map for batch package
 	optsMap := map[string]interface{}{
-		"restorable":        opts.Restorable,
-		"max_backup_size_mb": opts.MaxBackupSizeMB,
+		"restorable":            opts.Restorable,
+		"max_backup_size_mb":    opts.MaxBackupSizeMB,
+		"resolve_prerequisites": true, // Always enable prerequisite resolution
 	}
 	
 	batchResult, err := b.impl.RunWithOptions(optsMap)
