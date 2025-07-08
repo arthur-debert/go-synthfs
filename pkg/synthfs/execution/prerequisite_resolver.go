@@ -1,4 +1,4 @@
-THIS SHOULD BE A LINTER ERRORpackage execution
+package execution
 
 import (
 	"fmt"
@@ -133,8 +133,4 @@ func replaceAll(s, old, new string) string {
 	return result
 }
 
-// NewPrerequisiteResolver creates a new prerequisite resolver with factory and logger
-// This function is referenced in batch.go for compatibility
-func NewPrerequisiteResolver(opFactory core.OperationFactory, logger core.Logger) core.PrerequisiteResolver {
-	return NewDefaultPrerequisiteResolver(opFactory)
-}
+// Note: NewPrerequisiteResolver is defined above and should be used to create prerequisite resolvers

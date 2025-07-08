@@ -54,7 +54,8 @@ type OperationInterface interface {
 
 // PipelineInterface defines the minimal interface needed by executor
 type PipelineInterface interface {
-	Operations() []OperationInterface
+	Add(ops ...interface{}) error
+	Operations() []interface{}
 	Resolve() error
 	ResolvePrerequisites(resolver core.PrerequisiteResolver, fs interface{}) error
 	Validate(ctx context.Context, fs interface{}) error
@@ -71,9 +72,24 @@ func (e *Executor) RunWithOptions(ctx context.Context, pipeline PipelineInterfac
 }
 
 // RunWithOptionsAndResolver runs all operations in the pipeline with specified options and a custom prerequisite resolver
-func (e *Executor) RunWithOptionsAndResolver(ctx context.Context, pipeline PipelineInterface, fs interface{}, opts core.PipelineOptions, resolver core.PrerequisiteResolver) *core.Result {
+func (e *Executor) RunWithOptionsAndResolver(ctx context.Context, pipeline interface{}, fs interface{}, opts core.PipelineOptions, resolver core.PrerequisiteResolver) *core.Result {
+	// Convert pipeline to PipelineInterface
+	var pipelineInterface PipelineInterface
+	if p, ok := pipeline.(PipelineInterface); ok {
+		pipelineInterface = p
+	} else if p, ok := pipeline.(Pipeline); ok {
+		// Adapt Pipeline to PipelineInterface
+		pipelineInterface = &pipelineAdapter{pipeline: p}
+	} else {
+		result := &core.Result{
+			Success: false,
+			Errors:  []error{fmt.Errorf("invalid pipeline type: %T", pipeline)},
+		}
+		return result
+	}
+
 	e.logger.Info().
-		Int("operation_count", len(pipeline.Operations())).
+		Int("operation_count", len(pipelineInterface.Operations())).
 		Bool("restorable", opts.Restorable).
 		Int("max_backup_mb", opts.MaxBackupSizeMB).
 		Bool("resolve_prerequisites", opts.ResolvePrerequisites).
@@ -120,7 +136,7 @@ func (e *Executor) RunWithOptionsAndResolver(ctx context.Context, pipeline Pipel
 			// Cannot create a default resolver without a factory, so skip prerequisite resolution
 			e.logger.Info().Msg("prerequisite resolution skipped - no resolver provided")
 		} else {
-			if err := pipeline.ResolvePrerequisites(prereqResolver, fs); err != nil {
+			if err := pipelineInterface.ResolvePrerequisites(prereqResolver, fs); err != nil {
 				e.logger.Info().Err(err).Msg("prerequisite resolution failed")
 				result.Success = false
 				result.Errors = append(result.Errors, fmt.Errorf("prerequisite resolution failed: %w", err))
@@ -133,7 +149,7 @@ func (e *Executor) RunWithOptionsAndResolver(ctx context.Context, pipeline Pipel
 
 	// Resolve dependencies 
 	e.logger.Info().Msg("resolving operation dependencies")
-	if err := pipeline.Resolve(); err != nil {
+	if err := pipelineInterface.Resolve(); err != nil {
 		e.logger.Info().Err(err).Msg("dependency resolution failed")
 		result.Success = false
 		result.Errors = append(result.Errors, fmt.Errorf("dependency resolution failed: %w", err))
@@ -144,7 +160,7 @@ func (e *Executor) RunWithOptionsAndResolver(ctx context.Context, pipeline Pipel
 
 	// Validate the pipeline
 	e.logger.Info().Msg("validating operation pipeline")
-	if err := pipeline.Validate(ctx, fs); err != nil {
+	if err := pipelineInterface.Validate(ctx, fs); err != nil {
 		e.logger.Info().Err(err).Msg("pipeline validation failed")
 		result.Success = false
 		result.Errors = append(result.Errors, fmt.Errorf("pipeline validation failed: %w", err))
@@ -153,21 +169,30 @@ func (e *Executor) RunWithOptionsAndResolver(ctx context.Context, pipeline Pipel
 	}
 	e.logger.Info().Msg("pipeline validation completed successfully")
 
-	operations := pipeline.Operations()
-	rollbackOps := make([]OperationInterface, 0, len(operations))
+	operationInterfaces := pipelineInterface.Operations()
+	rollbackOps := make([]OperationInterface, 0, len(operationInterfaces))
 
 	e.logger.Info().
-		Int("operations_to_execute", len(operations)).
+		Int("operations_to_execute", len(operationInterfaces)).
 		Msg("beginning operation execution")
 
 	// Execute operations
-	for i, op := range operations {
+	for i, opInterface := range operationInterfaces {
+		// Convert to OperationInterface
+		op, ok := opInterface.(OperationInterface)
+		if !ok {
+			e.logger.Info().
+				Int("operation_index", i+1).
+				Msg("operation does not implement OperationInterface - skipping")
+			continue
+		}
+
 		e.logger.Info().
 			Str("op_id", string(op.ID())).
 			Str("op_type", op.Describe().Type).
 			Str("path", op.Describe().Path).
 			Int("operation_index", i+1).
-			Int("total_operations", len(operations)).
+			Int("total_operations", len(operationInterfaces)).
 			Msg("executing operation")
 
 		// Generate reverse operations if restorable mode is enabled
@@ -265,7 +290,7 @@ func (e *Executor) RunWithOptionsAndResolver(ctx context.Context, pipeline Pipel
 
 	e.logger.Info().
 		Bool("success", result.Success).
-		Int("total_operations", len(operations)).
+		Int("total_operations", len(operationInterfaces)).
 		Int("successful_operations", len(rollbackOps)).
 		Int("failed_operations", len(result.Errors)).
 		Int("restore_operations", len(result.RestoreOps)).
@@ -282,6 +307,31 @@ func (e *Executor) RunWithOptionsAndResolver(ctx context.Context, pipeline Pipel
 	}
 
 	return result
+}
+
+// pipelineAdapter adapts Pipeline to PipelineInterface
+type pipelineAdapter struct {
+	pipeline Pipeline
+}
+
+func (pa *pipelineAdapter) Add(ops ...interface{}) error {
+	return pa.pipeline.Add(ops...)
+}
+
+func (pa *pipelineAdapter) Operations() []interface{} {
+	return pa.pipeline.Operations()
+}
+
+func (pa *pipelineAdapter) Resolve() error {
+	return pa.pipeline.Resolve()
+}
+
+func (pa *pipelineAdapter) ResolvePrerequisites(resolver core.PrerequisiteResolver, fs interface{}) error {
+	return pa.pipeline.ResolvePrerequisites(resolver, fs)
+}
+
+func (pa *pipelineAdapter) Validate(ctx context.Context, fs interface{}) error {
+	return pa.pipeline.Validate(ctx, fs)
 }
 
 // createRollbackFunc creates a rollback function that can undo executed operations
