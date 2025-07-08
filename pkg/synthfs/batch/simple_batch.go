@@ -4,16 +4,17 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"reflect"
+	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/execution"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/targets"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/validation"
 )
 
-// SimpleBatchImpl is a simplified batch implementation that doesn't handle prerequisites
-// like parent directories. It relies on the pipeline to resolve prerequisites.
+// SimpleBatchImpl is a simplified batch implementation that doesn't handle prerequisites automatically.
+// It delegates prerequisite resolution to the execution pipeline.
 type SimpleBatchImpl struct {
 	operations []interface{}
 	fs         interface{} // Filesystem interface
@@ -23,7 +24,7 @@ type SimpleBatchImpl struct {
 	logger     core.Logger
 }
 
-// NewSimpleBatch creates a new simplified operation batch.
+// NewSimpleBatch creates a new simple operation batch that doesn't auto-create parent directories.
 func NewSimpleBatch(fs interface{}, registry core.OperationFactory) Batch {
 	return &SimpleBatchImpl{
 		operations: []interface{}{},
@@ -67,51 +68,6 @@ func (b *SimpleBatchImpl) WithLogger(logger core.Logger) Batch {
 	return b
 }
 
-// add adds an operation to the batch - simplified version without parent directory handling
-func (b *SimpleBatchImpl) add(op interface{}) error {
-	// Just validate the operation - no parent directory creation or conflict checking
-	if err := b.validateOperation(op); err != nil {
-		return err
-	}
-
-	b.operations = append(b.operations, op)
-	return nil
-}
-
-// validateOperation validates an operation - same as BatchImpl
-func (b *SimpleBatchImpl) validateOperation(op interface{}) error {
-	// Try to validate the operation
-	// First check if it has a Validate method that accepts interface{}
-	type validator interface {
-		Validate(ctx context.Context, fsys interface{}) error
-	}
-
-	validated := false
-	if v, ok := op.(validator); ok {
-		if err := v.Validate(b.ctx, b.fs); err != nil {
-			return err
-		}
-		validated = true
-	}
-
-	// If not validated yet, try ValidateV2 which operations should have
-	if !validated {
-		type validatorV2 interface {
-			ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
-		}
-
-		if v, ok := op.(validatorV2); ok {
-			// Create a minimal ExecutionContext for validation
-			execCtx := &core.ExecutionContext{}
-			if err := v.ValidateV2(b.ctx, execCtx, b.fs); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
 // CreateDir adds a directory creation operation to the batch.
 func (b *SimpleBatchImpl) CreateDir(path string, mode ...fs.FileMode) (interface{}, error) {
 	fileMode := fs.FileMode(0755) // Default directory mode
@@ -138,11 +94,8 @@ func (b *SimpleBatchImpl) CreateDir(path string, mode ...fs.FileMode) (interface
 		return nil, err
 	}
 
-	// Add to batch (which validates)
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("validation failed for CreateDir(%s): %w", path, err)
-	}
-
+	// Add to batch (no validation, no parent directory creation)
+	b.operations = append(b.operations, op)
 	return op, nil
 }
 
@@ -174,11 +127,8 @@ func (b *SimpleBatchImpl) CreateFile(path string, content []byte, mode ...fs.Fil
 		return nil, err
 	}
 
-	// Add to batch
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("validation failed for CreateFile(%s): %w", path, err)
-	}
-
+	// Add to batch (no validation, no parent directory creation)
+	b.operations = append(b.operations, op)
 	return op, nil
 }
 
@@ -204,28 +154,8 @@ func (b *SimpleBatchImpl) Copy(src, dst string) (interface{}, error) {
 		return nil, err
 	}
 
-	// Add to batch
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("validation failed for Copy(%s, %s): %w", src, dst, err)
-	}
-
-	// Compute checksum for source file (after validation passes)
-	if fs, ok := b.fs.(filesystem.FullFileSystem); ok {
-		if checksum, err := validation.ComputeFileChecksum(fs, src); err == nil && checksum != nil {
-			// Set checksum on operation
-			type checksumSetter interface {
-				SetChecksum(path string, checksum *validation.ChecksumRecord)
-			}
-			if setter, ok := op.(checksumSetter); ok {
-				setter.SetChecksum(src, checksum)
-			}
-			// Set source_checksum in details
-			_ = b.setOperationDetails(op, map[string]interface{}{
-				"source_checksum": checksum.MD5,
-			})
-		}
-	}
-
+	// Add to batch (no validation, no parent directory creation)
+	b.operations = append(b.operations, op)
 	return op, nil
 }
 
@@ -251,28 +181,8 @@ func (b *SimpleBatchImpl) Move(src, dst string) (interface{}, error) {
 		return nil, err
 	}
 
-	// Add to batch
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("validation failed for Move(%s, %s): %w", src, dst, err)
-	}
-
-	// Compute checksum for source file (after validation passes)
-	if fs, ok := b.fs.(filesystem.FullFileSystem); ok {
-		if checksum, err := validation.ComputeFileChecksum(fs, src); err == nil && checksum != nil {
-			// Set checksum on operation
-			type checksumSetter interface {
-				SetChecksum(path string, checksum *validation.ChecksumRecord)
-			}
-			if setter, ok := op.(checksumSetter); ok {
-				setter.SetChecksum(src, checksum)
-			}
-			// Set source_checksum in details
-			_ = b.setOperationDetails(op, map[string]interface{}{
-				"source_checksum": checksum.MD5,
-			})
-		}
-	}
-
+	// Add to batch (no validation, no parent directory creation)
+	b.operations = append(b.operations, op)
 	return op, nil
 }
 
@@ -284,11 +194,8 @@ func (b *SimpleBatchImpl) Delete(path string) (interface{}, error) {
 		return nil, err
 	}
 
-	// Add to batch
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("failed to add Delete(%s): %w", path, err)
-	}
-
+	// Add to batch (no validation, no parent directory creation)
+	b.operations = append(b.operations, op)
 	return op, nil
 }
 
@@ -313,11 +220,8 @@ func (b *SimpleBatchImpl) CreateSymlink(target, linkPath string) (interface{}, e
 		return nil, err
 	}
 
-	// Add to batch
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("validation failed for CreateSymlink(%s, %s): %w", target, linkPath, err)
-	}
-
+	// Add to batch (no validation, no parent directory creation)
+	b.operations = append(b.operations, op)
 	return op, nil
 }
 
@@ -337,42 +241,20 @@ func (b *SimpleBatchImpl) CreateArchive(archivePath string, format interface{}, 
 
 	// Set operation details
 	if err := b.setOperationDetails(op, map[string]interface{}{
-		"format":  format,
-		"sources": sources,
+		"format":       format,
+		"sources":      sources,
+		"source_count": len(sources),
 	}); err != nil {
 		return nil, err
 	}
 
-	// Compute checksums for source files (after validation passes)
-	if fs, ok := b.fs.(filesystem.FullFileSystem); ok {
-		for _, source := range sources {
-			if checksum, err := validation.ComputeFileChecksum(fs, source); err == nil && checksum != nil {
-				// Set checksum on operation
-				type checksumSetter interface {
-					SetChecksum(path string, checksum *validation.ChecksumRecord)
-				}
-				if setter, ok := op.(checksumSetter); ok {
-					setter.SetChecksum(source, checksum)
-				}
-			}
-		}
-	}
-
-	// Add to batch
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("validation failed for CreateArchive(%s): %w", archivePath, err)
-	}
-
+	// Add to batch (no validation, no parent directory creation)
+	b.operations = append(b.operations, op)
 	return op, nil
 }
 
 // Unarchive adds an unarchive operation to the batch.
 func (b *SimpleBatchImpl) Unarchive(archivePath, extractPath string) (interface{}, error) {
-	return b.UnarchiveWithPatterns(archivePath, extractPath)
-}
-
-// UnarchiveWithPatterns adds an unarchive operation with patterns to the batch.
-func (b *SimpleBatchImpl) UnarchiveWithPatterns(archivePath, extractPath string, patterns ...string) (interface{}, error) {
 	// Create the operation
 	op, err := b.createOperation("unarchive", archivePath)
 	if err != nil {
@@ -380,7 +262,7 @@ func (b *SimpleBatchImpl) UnarchiveWithPatterns(archivePath, extractPath string,
 	}
 
 	// Create and set the unarchive item for this operation
-	unarchiveItem := targets.NewUnarchive(archivePath, extractPath, patterns...)
+	unarchiveItem := targets.NewUnarchive(archivePath, extractPath)
 	if err := b.registry.SetItemForOperation(op, unarchiveItem); err != nil {
 		return nil, fmt.Errorf("failed to set item for Unarchive operation: %w", err)
 	}
@@ -388,118 +270,323 @@ func (b *SimpleBatchImpl) UnarchiveWithPatterns(archivePath, extractPath string,
 	// Set operation details
 	if err := b.setOperationDetails(op, map[string]interface{}{
 		"extract_path": extractPath,
-		"patterns":     patterns,
 	}); err != nil {
 		return nil, err
 	}
 
-	// Add to batch
-	if err := b.add(op); err != nil {
-		return nil, fmt.Errorf("validation failed for Unarchive(%s, %s): %w", archivePath, extractPath, err)
-	}
-
+	// Add to batch (no validation, no parent directory creation)
+	b.operations = append(b.operations, op)
 	return op, nil
 }
 
-// Run executes all operations in the batch with default options.
+// UnarchiveWithPatterns adds an unarchive operation with pattern filtering to the batch.
+func (b *SimpleBatchImpl) UnarchiveWithPatterns(archivePath, extractPath string, patterns ...string) (interface{}, error) {
+	// Create the operation
+	op, err := b.createOperation("unarchive", archivePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create and set the unarchive item for this operation with patterns
+	unarchiveItem := targets.NewUnarchive(archivePath, extractPath).WithPatterns(patterns...)
+	if err := b.registry.SetItemForOperation(op, unarchiveItem); err != nil {
+		return nil, fmt.Errorf("failed to set item for UnarchiveWithPatterns operation: %w", err)
+	}
+
+	// Set operation details
+	if err := b.setOperationDetails(op, map[string]interface{}{
+		"extract_path":  extractPath,
+		"patterns":      patterns,
+		"pattern_count": len(patterns),
+	}); err != nil {
+		return nil, err
+	}
+
+	// Add to batch (no validation, no parent directory creation)
+	b.operations = append(b.operations, op)
+	return op, nil
+}
+
+// Run runs all operations in the batch using default options with prerequisites enabled.
 func (b *SimpleBatchImpl) Run() (interface{}, error) {
-	return b.RunWithOptions(core.PipelineOptions{})
+	// SimpleBatch enables prerequisite resolution by default
+	defaultOpts := map[string]interface{}{
+		"restorable":            false,
+		"max_backup_size_mb":    0,
+		"resolve_prerequisites": true,
+	}
+	return b.RunWithOptions(defaultOpts)
 }
 
-// RunWithOptions executes all operations in the batch with specified options.
+// RunWithOptions runs all operations in the batch with specified options.
 func (b *SimpleBatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
-	// Convert options to PipelineOptions
-	pipelineOpts, ok := opts.(core.PipelineOptions)
-	if !ok {
-		pipelineOpts = core.PipelineOptions{}
+	startTime := time.Now()
+
+	// Extract options and convert to core.PipelineOptions
+	pipelineOpts := core.PipelineOptions{
+		Restorable:           false,
+		MaxBackupSizeMB:      10,
+		ResolvePrerequisites: true, // SimpleBatch defaults to enabling prerequisites
 	}
 
-	// Create execution pipeline
-	logger := b.logger
-	if logger == nil {
-		logger = &noOpLogger{}
+	if optsMap, ok := opts.(map[string]interface{}); ok {
+		if r, ok := optsMap["restorable"].(bool); ok {
+			pipelineOpts.Restorable = r
+		}
+		if mb, ok := optsMap["max_backup_size_mb"].(int); ok {
+			pipelineOpts.MaxBackupSizeMB = mb
+		}
+		if rp, ok := optsMap["resolve_prerequisites"].(bool); ok {
+			pipelineOpts.ResolvePrerequisites = rp
+		}
 	}
 
-	pipeline := execution.NewMemPipeline(logger)
-	
-	// Add operations to pipeline
-	if err := pipeline.Add(b.operations...); err != nil {
-		return nil, fmt.Errorf("failed to add operations to pipeline: %w", err)
+	// Log the start of execution
+	if b.logger != nil {
+		b.logger.Info().
+			Int("operation_count", len(b.operations)).
+			Bool("restorable", pipelineOpts.Restorable).
+			Int("max_backup_mb", pipelineOpts.MaxBackupSizeMB).
+			Bool("resolve_prerequisites", pipelineOpts.ResolvePrerequisites).
+			Msg("executing simple batch")
 	}
 
-	// Create executor with our operations
-	executor := execution.NewExecutor(pipeline, logger)
-	
-	// Execute operations
-	result := executor.RunWithOptions(b.fs, pipelineOpts)
-	
-	return NewResult(result), nil
+	// If no operations, return successful empty result
+	if len(b.operations) == 0 {
+		duration := time.Since(startTime)
+		if b.logger != nil {
+			b.logger.Info().
+				Bool("success", true).
+				Dur("duration", duration).
+				Int("operations_executed", 0).
+				Msg("simple batch execution completed")
+		}
+
+		batchResult := NewResult(true, b.operations, []interface{}{}, duration, nil)
+		return batchResult, nil
+	}
+
+	// Create executor and pipeline using execution package
+	loggerToUse := b.logger
+	if loggerToUse == nil {
+		// Create a no-op logger if none provided
+		loggerToUse = &noOpLogger{}
+	}
+	executor := execution.NewExecutor(loggerToUse)
+
+	// Create pipeline adapter
+	pipeline := &simplePipelineAdapter{operations: b.operations, registry: b.registry}
+
+	// Create prerequisite resolver if prerequisite resolution is enabled
+	var prereqResolver core.PrerequisiteResolver
+	if pipelineOpts.ResolvePrerequisites {
+		prereqResolver = execution.NewPrerequisiteResolver(b.registry, loggerToUse)
+		if b.logger != nil {
+			b.logger.Info().Msg("created prerequisite resolver for simple batch")
+		}
+	}
+
+	// Execute using the execution package with prerequisite resolver
+	coreResult := executor.RunWithOptionsAndResolver(b.ctx, pipeline, b.fs, pipelineOpts, prereqResolver)
+
+	duration := time.Since(startTime)
+
+	// Convert core.Result back to our interface{} result
+	var executionError error
+	if !coreResult.Success && len(coreResult.Errors) > 0 {
+		executionError = coreResult.Errors[0] // Take first error
+	}
+
+	// Extract restore operations
+	var restoreOps []interface{}
+	if coreResult.RestoreOps != nil {
+		restoreOps = coreResult.RestoreOps
+	}
+
+	if b.logger != nil {
+		b.logger.Info().
+			Bool("success", coreResult.Success).
+			Dur("duration", duration).
+			Int("operations_executed", len(coreResult.Operations)).
+			Int("restore_operations", len(restoreOps)).
+			Msg("simple batch execution completed")
+	}
+
+	// Convert execution package results to interface{} slice
+	var operationResults []interface{}
+	for _, opResult := range coreResult.Operations {
+		operationResults = append(operationResults, opResult)
+	}
+
+	// Convert to batch result interface
+	batchResult := NewResultWithBudgetAndRollback(
+		coreResult.Success,
+		operationResults,
+		restoreOps,
+		duration,
+		executionError,
+		coreResult.Budget,
+		coreResult.Rollback,
+	)
+
+	return batchResult, nil
 }
 
-// RunRestorable executes all operations in the batch with restoration enabled.
+// RunRestorable runs all operations with backup enabled using the default 10MB budget.
 func (b *SimpleBatchImpl) RunRestorable() (interface{}, error) {
-	return b.RunRestorableWithBudget(core.DefaultMaxBackupMB)
+	return b.RunRestorableWithBudget(10)
 }
 
-// RunRestorableWithBudget executes all operations in the batch with restoration and custom budget.
+// RunRestorableWithBudget runs all operations with backup enabled using a custom budget.
 func (b *SimpleBatchImpl) RunRestorableWithBudget(maxBackupMB int) (interface{}, error) {
-	opts := core.PipelineOptions{
-		Restorable:      true,
-		MaxBackupSizeMB: maxBackupMB,
+	opts := map[string]interface{}{
+		"restorable":            true,
+		"max_backup_size_mb":    maxBackupMB,
+		"resolve_prerequisites": true,
 	}
 	return b.RunWithOptions(opts)
 }
 
-// RunWithPrerequisites executes all operations in the batch with prerequisite resolution enabled.
+// RunWithPrerequisites runs all operations with prerequisite resolution enabled.
 func (b *SimpleBatchImpl) RunWithPrerequisites() (interface{}, error) {
-	return b.RunWithPrerequisitesAndBudget(core.DefaultMaxBackupMB)
-}
-
-// RunWithPrerequisitesAndBudget executes all operations with prerequisite resolution and custom budget.
-func (b *SimpleBatchImpl) RunWithPrerequisitesAndBudget(maxBackupMB int) (interface{}, error) {
-	opts := core.PipelineOptions{
-		Restorable:           true,
-		MaxBackupSizeMB:     maxBackupMB,
-		ResolvePrerequisites: true,
+	opts := map[string]interface{}{
+		"resolve_prerequisites": true,
+		"restorable":            false,
+		"max_backup_size_mb":    0,
 	}
 	return b.RunWithOptions(opts)
 }
 
-// Helper methods (same as BatchImpl)
+// RunWithPrerequisitesAndBudget runs all operations with prerequisite resolution and backup enabled.
+func (b *SimpleBatchImpl) RunWithPrerequisitesAndBudget(maxBackupMB int) (interface{}, error) {
+	opts := map[string]interface{}{
+		"resolve_prerequisites": true,
+		"restorable":            true,
+		"max_backup_size_mb":    maxBackupMB,
+	}
+	return b.RunWithOptions(opts)
+}
+
+// Helper methods
+
+// generateID creates a unique operation ID based on type and path.
 func (b *SimpleBatchImpl) generateID(opType, path string) core.OperationID {
 	b.idCounter++
-	return core.OperationID(fmt.Sprintf("%s_%d_%s", opType, b.idCounter, path))
+	cleanPath := cleanPathForID(path)
+	return core.OperationID(fmt.Sprintf("simple_batch_%d_%s_%s", b.idCounter, opType, cleanPath))
 }
 
+// createOperation is a helper method to create operations using the registry
 func (b *SimpleBatchImpl) createOperation(opType, path string) (interface{}, error) {
-	id := b.generateID(opType, path)
-	return b.registry.CreateOperation(id, opType, path)
+	opID := b.generateID(opType, path)
+	return b.registry.CreateOperation(opID, opType, path)
 }
 
+// setOperationDetails sets details on an operation through interface assertion
 func (b *SimpleBatchImpl) setOperationDetails(op interface{}, details map[string]interface{}) error {
 	type detailSetter interface {
 		SetDescriptionDetail(key string, value interface{})
 	}
 
-	if setter, ok := op.(detailSetter); ok {
-		for key, value := range details {
-			setter.SetDescriptionDetail(key, value)
-		}
-		return nil
+	setter, ok := op.(detailSetter)
+	if !ok {
+		return fmt.Errorf("operation does not support setting details")
 	}
 
-	return fmt.Errorf("operation does not support setting details")
+	for key, value := range details {
+		setter.SetDescriptionDetail(key, value)
+	}
+
+	return nil
 }
 
+// setOperationPaths sets paths on an operation through interface assertion
 func (b *SimpleBatchImpl) setOperationPaths(op interface{}, src, dst string) error {
 	type pathSetter interface {
 		SetPaths(src, dst string)
 	}
 
-	if setter, ok := op.(pathSetter); ok {
-		setter.SetPaths(src, dst)
-		return nil
+	setter, ok := op.(pathSetter)
+	if !ok {
+		return fmt.Errorf("operation does not support setting paths")
 	}
 
-	return fmt.Errorf("operation does not support setting paths")
+	setter.SetPaths(src, dst)
+	return nil
 }
+
+// cleanPathForID removes invalid characters from paths for IDs
+func cleanPathForID(path string) string {
+	result := ""
+	for _, char := range path {
+		if char == '/' || char == '\\' {
+			result += "_"
+		} else if char == ':' {
+			result += "_"
+		} else {
+			result += string(char)
+		}
+	}
+	return result
+}
+
+// simplePipelineAdapter adapts operations to the execution pipeline interface
+type simplePipelineAdapter struct {
+	operations []interface{}
+	registry   core.OperationFactory
+}
+
+func (spa *simplePipelineAdapter) Operations() []execution.OperationInterface {
+	var adaptedOps []execution.OperationInterface
+	for _, op := range spa.operations {
+		if adaptedOp, ok := op.(execution.OperationInterface); ok {
+			adaptedOps = append(adaptedOps, adaptedOp)
+		}
+	}
+	return adaptedOps
+}
+
+func (spa *simplePipelineAdapter) Resolve() error {
+	// Simple batch doesn't need dependency resolution - operations are added in order
+	return nil
+}
+
+func (spa *simplePipelineAdapter) ResolvePrerequisites(resolver core.PrerequisiteResolver, fs interface{}) error {
+	// Create a memory pipeline for prerequisite resolution
+	pipeline := execution.NewMemPipeline(&noOpLogger{})
+	
+	// Add all operations to the pipeline
+	for _, op := range spa.operations {
+		if err := pipeline.Add(op); err != nil {
+			return fmt.Errorf("failed to add operation to pipeline: %w", err)
+		}
+	}
+	
+	// Resolve prerequisites
+	return pipeline.ResolvePrerequisites(resolver, fs)
+}
+
+func (spa *simplePipelineAdapter) Validate(ctx context.Context, fs interface{}) error {
+	// Simple batch doesn't do validation - delegate to execution pipeline
+	return nil
+}
+
+// noOpLogger is a no-operation logger implementation
+type noOpLogger struct{}
+
+func (l *noOpLogger) Info() core.LogEvent  { return &noOpLogEvent{} }
+func (l *noOpLogger) Debug() core.LogEvent { return &noOpLogEvent{} }
+func (l *noOpLogger) Warn() core.LogEvent  { return &noOpLogEvent{} }
+func (l *noOpLogger) Error() core.LogEvent { return &noOpLogEvent{} }
+func (l *noOpLogger) Trace() core.LogEvent { return &noOpLogEvent{} }
+
+type noOpLogEvent struct{}
+
+func (e *noOpLogEvent) Str(key, val string) core.LogEvent                   { return e }
+func (e *noOpLogEvent) Int(key string, val int) core.LogEvent               { return e }
+func (e *noOpLogEvent) Err(err error) core.LogEvent                         { return e }
+func (e *noOpLogEvent) Float64(key string, val float64) core.LogEvent       { return e }
+func (e *noOpLogEvent) Bool(key string, val bool) core.LogEvent             { return e }
+func (e *noOpLogEvent) Dur(key string, val interface{}) core.LogEvent       { return e }
+func (e *noOpLogEvent) Interface(key string, val interface{}) core.LogEvent { return e }
+func (e *noOpLogEvent) Msg(msg string)                                      {}

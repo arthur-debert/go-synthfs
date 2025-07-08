@@ -5,14 +5,16 @@ import (
 	"path/filepath"
 )
 
-// ParentDirPrerequisite represents a requirement for parent directory to exist
+// ParentDirPrerequisite represents a prerequisite that a parent directory must exist
 type ParentDirPrerequisite struct {
 	path string
 }
 
 // NewParentDirPrerequisite creates a new parent directory prerequisite
-func NewParentDirPrerequisite(path string) *ParentDirPrerequisite {
-	return &ParentDirPrerequisite{path: filepath.Dir(path)}
+func NewParentDirPrerequisite(filePath string) *ParentDirPrerequisite {
+	return &ParentDirPrerequisite{
+		path: filepath.Dir(filePath),
+	}
 }
 
 // Type returns the prerequisite type
@@ -27,37 +29,42 @@ func (p *ParentDirPrerequisite) Path() string {
 
 // Validate checks if the parent directory exists
 func (p *ParentDirPrerequisite) Validate(fsys interface{}) error {
-	// Skip validation for root directory
+	// Skip validation for root and current directory
 	if p.path == "." || p.path == "/" {
 		return nil
 	}
-	
+
 	// Try to get Stat method from filesystem
-	type statFS interface {
+	type statter interface {
 		Stat(name string) (interface{}, error)
 	}
-	
-	fs, ok := fsys.(statFS)
-	if !ok {
-		return fmt.Errorf("filesystem does not support Stat operation")
+
+	if stat, ok := fsys.(statter); ok {
+		if info, err := stat.Stat(p.path); err != nil {
+			return fmt.Errorf("parent directory %s does not exist", p.path)
+		} else {
+			// Check if it's actually a directory
+			if dirChecker, ok := info.(interface{ IsDir() bool }); ok {
+				if !dirChecker.IsDir() {
+					return fmt.Errorf("parent path %s exists but is not a directory", p.path)
+				}
+			}
+		}
 	}
-	
-	_, err := fs.Stat(p.path)
-	if err != nil {
-		return fmt.Errorf("parent directory %s does not exist", p.path)
-	}
-	
+
 	return nil
 }
 
-// NoConflictPrerequisite represents a requirement for no existing conflicting item
+// NoConflictPrerequisite represents a prerequisite that no file should exist at the target path
 type NoConflictPrerequisite struct {
 	path string
 }
 
 // NewNoConflictPrerequisite creates a new no-conflict prerequisite
 func NewNoConflictPrerequisite(path string) *NoConflictPrerequisite {
-	return &NoConflictPrerequisite{path: path}
+	return &NoConflictPrerequisite{
+		path: path,
+	}
 }
 
 // Type returns the prerequisite type
@@ -70,36 +77,32 @@ func (p *NoConflictPrerequisite) Path() string {
 	return p.path
 }
 
-// Validate checks if there's no conflicting item at the path
+// Validate checks if there's no existing file at the target path
 func (p *NoConflictPrerequisite) Validate(fsys interface{}) error {
 	// Try to get Stat method from filesystem
-	type statFS interface {
+	type statter interface {
 		Stat(name string) (interface{}, error)
 	}
-	
-	fs, ok := fsys.(statFS)
-	if !ok {
-		return fmt.Errorf("filesystem does not support Stat operation")
+
+	if stat, ok := fsys.(statter); ok {
+		if _, err := stat.Stat(p.path); err == nil {
+			return fmt.Errorf("file already exists at %s", p.path)
+		}
 	}
-	
-	_, err := fs.Stat(p.path)
-	if err == nil {
-		return fmt.Errorf("item already exists at path %s", p.path)
-	}
-	
-	// If the error is "file not found", that's what we want
-	// For other errors, we should return them as validation failures
+
 	return nil
 }
 
-// SourceExistsPrerequisite represents a requirement for source file to exist
+// SourceExistsPrerequisite represents a prerequisite that a source file must exist
 type SourceExistsPrerequisite struct {
 	path string
 }
 
 // NewSourceExistsPrerequisite creates a new source exists prerequisite
 func NewSourceExistsPrerequisite(path string) *SourceExistsPrerequisite {
-	return &SourceExistsPrerequisite{path: path}
+	return &SourceExistsPrerequisite{
+		path: path,
+	}
 }
 
 // Type returns the prerequisite type
@@ -115,19 +118,15 @@ func (p *SourceExistsPrerequisite) Path() string {
 // Validate checks if the source file exists
 func (p *SourceExistsPrerequisite) Validate(fsys interface{}) error {
 	// Try to get Stat method from filesystem
-	type statFS interface {
+	type statter interface {
 		Stat(name string) (interface{}, error)
 	}
-	
-	fs, ok := fsys.(statFS)
-	if !ok {
-		return fmt.Errorf("filesystem does not support Stat operation")
+
+	if stat, ok := fsys.(statter); ok {
+		if _, err := stat.Stat(p.path); err != nil {
+			return fmt.Errorf("source file %s does not exist", p.path)
+		}
 	}
-	
-	_, err := fs.Stat(p.path)
-	if err != nil {
-		return fmt.Errorf("source file %s does not exist", p.path)
-	}
-	
+
 	return nil
 }
