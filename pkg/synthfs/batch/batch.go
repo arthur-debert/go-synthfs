@@ -372,6 +372,12 @@ func (b *BatchImpl) Unarchive(archivePath, extractPath string) (interface{}, err
 		return nil, err
 	}
 
+	// Create and set the unarchive item for this operation
+	unarchiveItem := targets.NewUnarchive(archivePath, extractPath)
+	if err := b.registry.SetItemForOperation(op, unarchiveItem); err != nil {
+		return nil, fmt.Errorf("failed to set item for Unarchive operation: %w", err)
+	}
+
 	// Set operation details
 	if err := b.setOperationDetails(op, map[string]interface{}{
 		"extract_path": extractPath,
@@ -393,6 +399,12 @@ func (b *BatchImpl) UnarchiveWithPatterns(archivePath, extractPath string, patte
 	op, err := b.createOperation("unarchive", archivePath)
 	if err != nil {
 		return nil, err
+	}
+
+	// Create and set the unarchive item for this operation with patterns
+	unarchiveItem := targets.NewUnarchive(archivePath, extractPath).WithPatterns(patterns...)
+	if err := b.registry.SetItemForOperation(op, unarchiveItem); err != nil {
+		return nil, fmt.Errorf("failed to set item for UnarchiveWithPatterns operation: %w", err)
 	}
 
 	// Set operation details

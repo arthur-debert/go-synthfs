@@ -2,6 +2,7 @@ package operations
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
@@ -76,4 +77,16 @@ func executeWithEvents(op Operation, ctx context.Context, execCtx *core.Executio
 	}
 
 	return err
+}
+
+// validateV2Helper is a helper for implementing ValidateV2 that delegates to Validate
+func validateV2Helper(op Operation, ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Convert context
+	context, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
+	}
+	
+	// Call the operation's Validate method
+	return op.Validate(context, fsys)
 }

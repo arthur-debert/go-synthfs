@@ -161,5 +161,7 @@ func (op *BaseOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionCont
 	}
 
 	// For now, delegate to the original method
+	// Note: This calls BaseOperation.Validate, not the overridden method!
+	// Concrete operations should override ValidateV2 to call their own Validate method.
 	return op.Validate(context, fsys)
 }

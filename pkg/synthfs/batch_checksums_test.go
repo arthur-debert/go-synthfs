@@ -265,7 +265,7 @@ func TestBatchChecksumming(t *testing.T) {
 		// Try to copy non-existent file (should fail during source existence validation first)
 		_, err := batch.Copy("nonexistent.txt", "dest.txt")
 		if err == nil {
-			t.Error("Expected error for non-existent source file")
+			t.Fatal("Expected error for non-existent source file")
 		}
 
 		// Should be a source existence error, not a checksum error

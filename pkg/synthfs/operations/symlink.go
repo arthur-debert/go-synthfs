@@ -77,6 +77,11 @@ func (op *CreateSymlinkOperation) ExecuteV2(ctx interface{}, execCtx *core.Execu
 	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
 }
 
+// ValidateV2 checks if the symlink can be created using ExecutionContext.
+func (op *CreateSymlinkOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return validateV2Helper(op, ctx, execCtx, fsys)
+}
+
 // Validate checks if the symlink can be created.
 func (op *CreateSymlinkOperation) Validate(ctx context.Context, fsys interface{}) error {
 	// First do base validation

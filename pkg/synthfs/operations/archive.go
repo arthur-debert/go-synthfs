@@ -264,6 +264,11 @@ func (op *CreateArchiveOperation) ExecuteV2(ctx interface{}, execCtx *core.Execu
 	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
 }
 
+// ValidateV2 checks if the archive can be created using ExecutionContext.
+func (op *CreateArchiveOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return validateV2Helper(op, ctx, execCtx, fsys)
+}
+
 // Validate checks if the archive can be created.
 func (op *CreateArchiveOperation) Validate(ctx context.Context, fsys interface{}) error {
 	// First do base validation
@@ -577,6 +582,11 @@ func (op *UnarchiveOperation) ExecuteV2(ctx interface{}, execCtx *core.Execution
 
 	// Call the operation's Execute method with proper event handling
 	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
+}
+
+// ValidateV2 checks if the unarchive operation can be performed using ExecutionContext.
+func (op *UnarchiveOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return validateV2Helper(op, ctx, execCtx, fsys)
 }
 
 // Validate checks if the unarchive operation can be performed.

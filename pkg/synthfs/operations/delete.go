@@ -77,6 +77,11 @@ func (op *DeleteOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionCon
 	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
 }
 
+// ValidateV2 checks if the delete operation can be performed using ExecutionContext.
+func (op *DeleteOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return validateV2Helper(op, ctx, execCtx, fsys)
+}
+
 // Validate checks if the deletion can be performed.
 func (op *DeleteOperation) Validate(ctx context.Context, fsys interface{}) error {
 	// First do base validation

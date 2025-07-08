@@ -88,6 +88,11 @@ func (op *CreateFileOperation) ExecuteV2(ctx interface{}, execCtx *core.Executio
 	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
 }
 
+// ValidateV2 checks if the create file operation can be performed using ExecutionContext.
+func (op *CreateFileOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return validateV2Helper(op, ctx, execCtx, fsys)
+}
+
 // Validate checks if the file can be created.
 func (op *CreateFileOperation) Validate(ctx context.Context, fsys interface{}) error {
 	// First do base validation

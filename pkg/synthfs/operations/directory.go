@@ -68,6 +68,11 @@ func (op *CreateDirectoryOperation) ExecuteV2(ctx interface{}, execCtx *core.Exe
 	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
 }
 
+// ValidateV2 checks if the directory creation can be performed using ExecutionContext.
+func (op *CreateDirectoryOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return validateV2Helper(op, ctx, execCtx, fsys)
+}
+
 // Validate checks if the directory can be created.
 func (op *CreateDirectoryOperation) Validate(ctx context.Context, fsys interface{}) error {
 	// First do base validation

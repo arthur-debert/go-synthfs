@@ -155,6 +155,11 @@ func (op *CopyOperation) Validate(ctx context.Context, fsys interface{}) error {
 	return nil
 }
 
+// ValidateV2 checks if the copy operation can be performed using ExecutionContext.
+func (op *CopyOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return validateV2Helper(op, ctx, execCtx, fsys)
+}
+
 // Rollback removes the copied file/directory.
 func (op *CopyOperation) Rollback(ctx context.Context, fsys interface{}) error {
 	_, dst := op.GetPaths()
@@ -236,6 +241,11 @@ func (op *MoveOperation) Validate(ctx context.Context, fsys interface{}) error {
 	// Use same validation as copy
 	copyOp := &CopyOperation{BaseOperation: op.BaseOperation}
 	return copyOp.Validate(ctx, fsys)
+}
+
+// ValidateV2 checks if the move operation can be performed using ExecutionContext.
+func (op *MoveOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return validateV2Helper(op, ctx, execCtx, fsys)
 }
 
 // Rollback attempts to restore the moved file to its original location.
