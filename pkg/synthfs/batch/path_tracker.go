@@ -100,6 +100,12 @@ func (w *operationWrapper) Conflicts() []core.OperationID {
 	return nil
 }
 
+func (w *operationWrapper) AddDependency(depID core.OperationID) {
+	if op, ok := w.op.(interface{ AddDependency(core.OperationID) }); ok {
+		op.AddDependency(depID)
+	}
+}
+
 func (w *operationWrapper) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	// Not needed for state tracking
 	return fmt.Errorf("ExecuteV2 not implemented for operation wrapper")
@@ -125,18 +131,6 @@ func (w *operationWrapper) GetItem() interface{} {
 		return op.GetItem()
 	}
 	return nil
-}
-
-func (w *operationWrapper) SetDescriptionDetail(key string, value interface{}) {
-	if op, ok := w.op.(interface{ SetDescriptionDetail(string, interface{}) }); ok {
-		op.SetDescriptionDetail(key, value)
-	}
-}
-
-func (w *operationWrapper) AddDependency(depID core.OperationID) {
-	if op, ok := w.op.(interface{ AddDependency(core.OperationID) }); ok {
-		op.AddDependency(depID)
-	}
 }
 
 func (w *operationWrapper) SetDescriptionDetail(key string, value interface{}) {

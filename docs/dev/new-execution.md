@@ -110,11 +110,11 @@ type NoConflictPrerequisite struct {
 
 **Goal**: New simplified batch that doesn't handle prerequisites
 
-1. Create `batch/simple_batch.go` as new implementation
-2. No parent dir logic, just creates operations
-3. Add `NewSimpleBatch()` constructor
-4. Existing `NewBatch()` returns current implementation
-5. **Tests**: New tests for SimpleBatch, old batch tests unchanged
+1. Create `batch/simple_batch.go` as new implementation (DONE - integrated into BatchImpl)
+2. No parent dir logic, just creates operations (DONE)
+3. Add `NewSimpleBatch()` constructor (DONE - NewBatchWithSimpleBatch)
+4. Existing `NewBatch()` returns current implementation (DONE)
+5. **Tests**: New tests for SimpleBatch, old batch tests unchanged (DONE)
 
 ### Phase 5: Migration Path (No Breaking Changes) (DONE)
 
@@ -135,14 +135,14 @@ type NoConflictPrerequisite struct {
 3. Update all internal usage to new pattern (DONE)
 4. **Tests**: Update tests to use new pattern primarily (DONE)
 
-### Phase 7: Cleanup (Major Version)
+### Phase 7: Cleanup (Major Version) (IN PROGRESS)
 
 **Goal**: Remove old implementation
 
-1. Remove old batch implementation
-2. Remove compatibility flags
-3. Simplify codebase
-4. **Tests**: Remove old test paths
+1. Remove old batch implementation (IN PROGRESS - legacy code deprecated but not removed)
+2. Remove compatibility flags (IN PROGRESS - flags still present for backward compatibility)
+3. Simplify codebase (IN PROGRESS)
+4. **Tests**: Remove old test paths (IN PROGRESS)
 
 ## Circular Import Prevention Strategy
 
