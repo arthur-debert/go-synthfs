@@ -16,8 +16,8 @@ import (
 
 // BatchImpl represents a collection of operations that can be validated and executed as a unit.
 // This implementation uses interface{} types to avoid circular dependencies.
-// As of Phase 7, this implementation always uses prerequisite resolution instead of 
-// automatic parent directory creation for cleaner separation of concerns.
+// As of Phase 7, this implementation always uses prerequisite resolution for 
+// automatic dependency management, providing clean separation of concerns.
 type BatchImpl struct {
 	operations []interface{}
 	fs         interface{} // Filesystem interface
@@ -25,12 +25,11 @@ type BatchImpl struct {
 	idCounter  int
 	registry   core.OperationFactory
 	logger     core.Logger
-
 }
 
 // NewBatch creates a new operation batch.
-// As of Phase 7, this implementation always uses prerequisite resolution instead of 
-// automatic parent directory creation for cleaner separation of concerns.
+// As of Phase 7, this implementation always uses prerequisite resolution for 
+// automatic dependency management instead of hardcoded parent directory creation.
 func NewBatch(fs interface{}, registry core.OperationFactory) Batch {
 	return &BatchImpl{
 		operations: []interface{}{},
@@ -40,14 +39,6 @@ func NewBatch(fs interface{}, registry core.OperationFactory) Batch {
 		registry:   registry,
 		logger:     nil, // Will be set by WithLogger method
 	}
-}
-
-// NewBatchWithSimpleBatch creates a new operation batch with prerequisite resolution.
-// This constructor is now equivalent to NewBatch() as of Phase 7.
-// 
-// NOTE: This constructor is kept for API compatibility but is now equivalent to NewBatch().
-func NewBatchWithSimpleBatch(fs interface{}, registry core.OperationFactory) Batch {
-	return NewBatch(fs, registry)
 }
 
 // Operations returns all operations currently in the batch.
@@ -82,51 +73,10 @@ func (b *BatchImpl) WithLogger(logger core.Logger) Batch {
 	return b
 }
 
-// WithSimpleBatch sets a hint for using simple batch behavior (deprecated).
-// This is a no-op for backward compatibility. Use NewBatchWithOptions instead.
-func (b *BatchImpl) WithSimpleBatch(enabled bool) Batch {
-	// This is a no-op for backward compatibility
-	// The actual implementation selection is done at creation time via NewBatchWithOptions
-	return b
-}
-
-
-
-// RunWithPrerequisites runs all operations with prerequisite resolution enabled.
-func (b *BatchImpl) RunWithPrerequisites() (interface{}, error) {
-	opts := map[string]interface{}{
-		"restorable":            false,
-		"max_backup_size_mb":    0,
-		"resolve_prerequisites": true,
-	}
-	return b.RunWithOptions(opts)
-}
-
-// RunWithPrerequisitesAndBudget runs all operations with prerequisite resolution and backup enabled.
-func (b *BatchImpl) RunWithPrerequisitesAndBudget(maxBackupMB int) (interface{}, error) {
-	opts := map[string]interface{}{
-		"restorable":            true,
-		"max_backup_size_mb":    maxBackupMB,
-		"resolve_prerequisites": true,
-	}
-	return b.RunWithOptions(opts)
-}
-
-// RunWithSimpleBatch runs all operations with prerequisite resolution enabled.
-// This method is now equivalent to RunWithPrerequisites() as of Phase 7.
-func (b *BatchImpl) RunWithSimpleBatch() (interface{}, error) {
-	return b.RunWithPrerequisites()
-}
-
-// RunWithSimpleBatchAndBudget runs all operations with prerequisite resolution and backup enabled.
-// This method is now equivalent to RunWithPrerequisitesAndBudget() as of Phase 7.
-func (b *BatchImpl) RunWithSimpleBatchAndBudget(maxBackupMB int) (interface{}, error) {
-	return b.RunWithPrerequisitesAndBudget(maxBackupMB)
-}
-
 // add adds an operation to the batch with basic validation
 func (b *BatchImpl) add(op interface{}) error {
 	// Basic validation - no path conflict checking or parent directory creation
+	// Prerequisites are handled by the execution pipeline
 	if err := b.validateOperation(op); err != nil {
 		return err
 	}
@@ -489,10 +439,11 @@ func (b *BatchImpl) UnarchiveWithPatterns(archivePath, extractPath string, patte
 
 // Run runs all operations in the batch using default options.
 func (b *BatchImpl) Run() (interface{}, error) {
-	// Use default pipeline options
+	// Use default pipeline options with prerequisite resolution always enabled
 	defaultOpts := map[string]interface{}{
-		"restorable":        false,
-		"max_backup_size_mb": 0,
+		"restorable":            false,
+		"max_backup_size_mb":    0,
+		"resolve_prerequisites": true, // Always enabled in Phase 7
 	}
 	return b.RunWithOptions(defaultOpts)
 }
@@ -505,7 +456,7 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 	pipelineOpts := core.PipelineOptions{
 		Restorable:           false,
 		MaxBackupSizeMB:      10,
-		ResolvePrerequisites: true, // Phase 6: Enable prerequisite resolution by default
+		ResolvePrerequisites: true, // Always enabled in Phase 7
 	}
 	
 	if optsMap, ok := opts.(map[string]interface{}); ok {
@@ -515,11 +466,9 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 		if mb, ok := optsMap["max_backup_size_mb"].(int); ok {
 			pipelineOpts.MaxBackupSizeMB = mb
 		}
-		if rp, ok := optsMap["resolve_prerequisites"].(bool); ok {
-			pipelineOpts.ResolvePrerequisites = rp
-		}
+		// Note: resolve_prerequisites is always true in Phase 7, ignore input
 	}
-
+	
 	// Log the start of execution
 	if b.logger != nil {
 		b.logger.Info().
@@ -529,7 +478,7 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 			Bool("resolve_prerequisites", pipelineOpts.ResolvePrerequisites).
 			Msg("executing batch")
 	}
-
+	
 	// If no operations, return successful empty result
 	if len(b.operations) == 0 {
 		duration := time.Since(startTime)
@@ -540,11 +489,11 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 				Int("operations_executed", 0).
 				Msg("batch execution completed")
 		}
-
+		
 		batchResult := NewResult(true, b.operations, []interface{}{}, duration, nil)
 		return batchResult, nil
 	}
-
+	
 	// Create executor and pipeline using execution package
 	loggerToUse := b.logger
 	if loggerToUse == nil {
@@ -552,36 +501,34 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 		loggerToUse = &noOpLogger{}
 	}
 	executor := execution.NewExecutor(loggerToUse)
-
+	
 	// Create pipeline adapter
 	pipeline := &pipelineAdapter{operations: b.operations}
-
-	// Create prerequisite resolver - always enable prerequisite resolution
-	var prereqResolver core.PrerequisiteResolver
-	if pipelineOpts.ResolvePrerequisites {
-		prereqResolver = execution.NewPrerequisiteResolver(b.registry, loggerToUse)
-		if b.logger != nil {
-			b.logger.Info().Msg("created prerequisite resolver")
-		}
+	
+	// Create prerequisite resolver (always enabled in Phase 7)
+	prereqResolver := execution.NewPrerequisiteResolver(b.registry, loggerToUse)
+	if b.logger != nil {
+		b.logger.Info().Msg("created prerequisite resolver with operation factory")
 	}
-
+	
 	// Execute using the execution package with prerequisite resolver
 	coreResult := executor.RunWithOptionsAndResolver(b.ctx, pipeline, b.fs, pipelineOpts, prereqResolver)
-
+	
 	duration := time.Since(startTime)
-
+	
+	
 	// Convert core.Result back to our interface{} result
 	var executionError error
 	if !coreResult.Success && len(coreResult.Errors) > 0 {
 		executionError = coreResult.Errors[0] // Take first error
 	}
-
-	// Extract restore operations
+	
+	// Extract restore operations 
 	var restoreOps []interface{}
 	if coreResult.RestoreOps != nil {
 		restoreOps = coreResult.RestoreOps
 	}
-
+	
 	if b.logger != nil {
 		b.logger.Info().
 			Bool("success", coreResult.Success).
@@ -590,13 +537,13 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 			Int("restore_operations", len(restoreOps)).
 			Msg("batch execution completed")
 	}
-
+	
 	// Convert execution package results to interface{} slice
 	var operationResults []interface{}
 	for _, opResult := range coreResult.Operations {
 		operationResults = append(operationResults, opResult)
 	}
-
+	
 	// Convert to batch result interface
 	batchResult := NewResultWithBudgetAndRollback(
 		coreResult.Success,
@@ -607,7 +554,7 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 		coreResult.Budget,
 		coreResult.Rollback,
 	)
-
+	
 	return batchResult, nil
 }
 
@@ -626,24 +573,15 @@ func (b *BatchImpl) RunRestorableWithBudget(maxBackupMB int) (interface{}, error
 }
 
 // RunWithPrerequisites runs all operations with prerequisite resolution enabled.
-// This enables automatic parent directory creation via prerequisite resolution.
+// Note: As of Phase 7, prerequisite resolution is always enabled, so this is equivalent to Run().
 func (b *BatchImpl) RunWithPrerequisites() (interface{}, error) {
-	opts := map[string]interface{}{
-		"resolve_prerequisites": true,
-		"restorable":            false,
-		"max_backup_size_mb":    0,
-	}
-	return b.RunWithOptions(opts)
+	return b.Run()
 }
 
 // RunWithPrerequisitesAndBudget runs all operations with prerequisite resolution and backup enabled.
+// Note: As of Phase 7, prerequisite resolution is always enabled.
 func (b *BatchImpl) RunWithPrerequisitesAndBudget(maxBackupMB int) (interface{}, error) {
-	opts := map[string]interface{}{
-		"resolve_prerequisites": true,
-		"restorable":            true,
-		"max_backup_size_mb":    maxBackupMB,
-	}
-	return b.RunWithOptions(opts)
+	return b.RunRestorableWithBudget(maxBackupMB)
 }
 
 // Helper methods
@@ -874,7 +812,6 @@ func (l *noOpLogger) Info() core.LogEvent  { return &noOpLogEvent{} }
 func (l *noOpLogger) Warn() core.LogEvent  { return &noOpLogEvent{} }
 func (l *noOpLogger) Error() core.LogEvent { return &noOpLogEvent{} }
 
-// noOpLogEvent implements core.LogEvent with no-op methods
 type noOpLogEvent struct{}
 
 func (e *noOpLogEvent) Str(key, val string) core.LogEvent             { return e }
