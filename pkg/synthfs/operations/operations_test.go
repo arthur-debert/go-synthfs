@@ -86,7 +86,7 @@ func TestValidationError_Error(t *testing.T) {
 	t.Run("Error without cause", func(t *testing.T) {
 		err := &core.ValidationError{
 			OperationID:   op.ID(),
-			OperationDesc: op.(synthfs.Operation).Describe(),
+			OperationDesc: op.Describe(),
 			Reason:        "test reason",
 			Cause:         nil,
 		}
@@ -101,7 +101,7 @@ func TestValidationError_Error(t *testing.T) {
 		cause := errors.New("underlying error")
 		err := &core.ValidationError{
 			OperationID:   op.ID(),
-			OperationDesc: op.(synthfs.Operation).Describe(),
+			OperationDesc: op.Describe(),
 			Reason:        "test reason",
 			Cause:         cause,
 		}

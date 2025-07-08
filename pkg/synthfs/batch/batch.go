@@ -490,7 +490,7 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 	executor := execution.NewExecutor(loggerToUse)
 	
 	// Create pipeline adapter
-	pipeline := &pipelineAdapter{operations: b.operations}
+	pipeline := &pipelineAdapter{operations: b.operations, logger: loggerToUse}
 	
 	// Create prerequisite resolver (always enabled)
 	prereqResolver := execution.NewPrerequisiteResolver(b.registry, loggerToUse)
@@ -611,41 +611,45 @@ func (b *BatchImpl) setOperationPaths(op interface{}, src, dst string) error {
 type pipelineAdapter struct {
 	operations []interface{}
 	pipeline   execution.Pipeline
+	logger     core.Logger
 }
 
-func (pa *pipelineAdapter) Operations() []execution.OperationInterface {
-	// Create a new pipeline if we don't have one
-	if pa.pipeline == nil {
-		pa.pipeline = execution.NewMemPipeline(&noOpLogger{})
-		
-		// Add all operations to the pipeline
-		for _, op := range pa.operations {
-			pa.pipeline.Add(op)
-		}
+func (pa *pipelineAdapter) Add(ops ...interface{}) error {
+	// This adapter doesn't support adding operations after creation
+	return fmt.Errorf("pipelineAdapter does not support Add after creation")
+}
+
+func (pa *pipelineAdapter) Operations() []interface{} {
+	// If we have a pipeline, return its operations (which includes resolved prerequisites)
+	if pa.pipeline != nil {
+		return pa.pipeline.Operations()
 	}
-	
-	// Return operations from the pipeline
-	ops := pa.pipeline.Operations()
-	result := make([]execution.OperationInterface, len(ops))
-	for i, op := range ops {
-		if execOp, ok := op.(execution.OperationInterface); ok {
-			result[i] = execOp
-		} else {
-			// Wrap in adapter
-			result[i] = &operationAdapter{op: op}
-		}
-	}
-	return result
+	// Otherwise return the original operations
+	return pa.operations
 }
 
 func (pa *pipelineAdapter) Resolve() error {
 	if pa.pipeline == nil {
-		pa.pipeline = execution.NewMemPipeline(&noOpLogger{})
+		// Use logger if available, otherwise use no-op logger
+		logger := pa.logger
+		if logger == nil {
+			logger = &noOpLogger{}
+		}
+		pa.pipeline = execution.NewMemPipeline(logger)
 		
-		// Add all operations to the pipeline
+		// Add all operations to the pipeline, wrapping them if needed
 		for _, op := range pa.operations {
-			if err := pa.pipeline.Add(op); err != nil {
-				return err
+			// Check if operation already implements OperationInterface
+			if _, ok := op.(execution.OperationInterface); ok {
+				if err := pa.pipeline.Add(op); err != nil {
+					return err
+				}
+			} else {
+				// Wrap in operationAdapter
+				wrapped := &operationAdapter{op: op}
+				if err := pa.pipeline.Add(wrapped); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -654,12 +658,26 @@ func (pa *pipelineAdapter) Resolve() error {
 
 func (pa *pipelineAdapter) ResolvePrerequisites(resolver core.PrerequisiteResolver, fs interface{}) error {
 	if pa.pipeline == nil {
-		pa.pipeline = execution.NewMemPipeline(&noOpLogger{})
+		// Use logger if available, otherwise use no-op logger
+		logger := pa.logger
+		if logger == nil {
+			logger = &noOpLogger{}
+		}
+		pa.pipeline = execution.NewMemPipeline(logger)
 		
-		// Add all operations to the pipeline
+		// Add all operations to the pipeline, wrapping them if needed
 		for _, op := range pa.operations {
-			if err := pa.pipeline.Add(op); err != nil {
-				return err
+			// Check if operation already implements OperationInterface
+			if _, ok := op.(execution.OperationInterface); ok {
+				if err := pa.pipeline.Add(op); err != nil {
+					return err
+				}
+			} else {
+				// Wrap in operationAdapter
+				wrapped := &operationAdapter{op: op}
+				if err := pa.pipeline.Add(wrapped); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -668,12 +686,26 @@ func (pa *pipelineAdapter) ResolvePrerequisites(resolver core.PrerequisiteResolv
 
 func (pa *pipelineAdapter) Validate(ctx context.Context, fs interface{}) error {
 	if pa.pipeline == nil {
-		pa.pipeline = execution.NewMemPipeline(&noOpLogger{})
+		// Use logger if available, otherwise use no-op logger
+		logger := pa.logger
+		if logger == nil {
+			logger = &noOpLogger{}
+		}
+		pa.pipeline = execution.NewMemPipeline(logger)
 		
-		// Add all operations to the pipeline
+		// Add all operations to the pipeline, wrapping them if needed
 		for _, op := range pa.operations {
-			if err := pa.pipeline.Add(op); err != nil {
-				return err
+			// Check if operation already implements OperationInterface
+			if _, ok := op.(execution.OperationInterface); ok {
+				if err := pa.pipeline.Add(op); err != nil {
+					return err
+				}
+			} else {
+				// Wrap in operationAdapter
+				wrapped := &operationAdapter{op: op}
+				if err := pa.pipeline.Add(wrapped); err != nil {
+					return err
+				}
 			}
 		}
 	}

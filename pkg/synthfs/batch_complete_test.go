@@ -11,8 +11,8 @@ import (
 func TestBatchCompleteAPI(t *testing.T) {
 	testFS := synthfs.NewTestFileSystem()
 	registry := synthfs.GetDefaultRegistry()
-	fs := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
+	fileSystem := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)
 
 	t.Run("CreateSymlink operation", func(t *testing.T) {
 		// Create target file first
@@ -64,7 +64,9 @@ func TestBatchCompleteAPI(t *testing.T) {
 		}
 
 		testFS := synthfs.NewTestFileSystem()
-		setupBatch := synthfs.NewBatch().WithFileSystem(testFS)
+		registry := synthfs.GetDefaultRegistry()
+		fileSystem := synthfs.NewTestFileSystem()
+		setupBatch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)
 
 		// Create some files to archive
 		_, err := setupBatch.CreateDir("archive-test")
@@ -84,12 +86,12 @@ func TestBatchCompleteAPI(t *testing.T) {
 
 		// Run setup batch to ensure files exist before creating archive operation
 		setupResult, err := setupBatch.Run()
-		if err != nil || !setupResult.Success {
-			t.Fatalf("Setup batch failed: %v, errors: %v", err, setupResult.Errors)
+		if err != nil || !setupResult.IsSuccess() {
+			t.Fatalf("Setup batch failed: %v, errors: %v", err, setupResult.GetError())
 		}
 
 		// Now, create the batch for the actual test
-		archiveBatch := synthfs.NewBatch().WithFileSystem(testFS)
+		archiveBatch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)
 
 		// Create tar.gz archive
 		_, err = archiveBatch.CreateArchive("backup.tar.gz", synthfs.ArchiveFormatTarGz, "archive-test/file1.txt", "archive-test/file2.txt")
@@ -117,18 +119,21 @@ func TestBatchCompleteAPI(t *testing.T) {
 		// Real archive verification would require extracting and checking contents
 		t.Logf("Archive operations executed successfully: %d operations", len(result.GetOperations()))
 		for i, opResult := range result.GetOperations() {
-			desc := opResult.Operation.Describe()
-			t.Logf("Operation %d: %s %s -> %s", i+1, desc.Type, desc.Path, opResult.Status)
+			operationResult := opResult.(*synthfs.OperationResult)
+			desc := operationResult.Operation.Describe()
+			t.Logf("Operation %d: %s %s -> %s", i+1, desc.Type, desc.Path, operationResult.Status)
 		}
 	})
 
 	t.Run("Complete workflow with all operations", func(t *testing.T) {
 		// Test dependency resolution between operations
 		testFS := synthfs.NewTestFileSystem()
+		registry := synthfs.GetDefaultRegistry()
+		fileSystem := synthfs.NewTestFileSystem()
 
 		// --- Setup Phase ---
 		// Create initial files and directories first.
-		setupBatch := synthfs.NewBatch().WithFileSystem(testFS)
+		setupBatch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)
 		_, err := setupBatch.CreateDir("project")
 		if err != nil {
 			t.Fatalf("CreateDir failed: %v", err)
@@ -142,13 +147,13 @@ func TestBatchCompleteAPI(t *testing.T) {
 			t.Fatalf("CreateFile failed: %v", err)
 		}
 		setupResult, err := setupBatch.Run()
-		if err != nil || !setupResult.Success {
-			t.Fatalf("Setup batch for workflow failed: %v, errors: %v", err, setupResult.Errors)
+		if err != nil || !setupResult.IsSuccess() {
+			t.Fatalf("Setup batch for workflow failed: %v, errors: %v", err, setupResult.GetError())
 		}
 
 		// --- Test Phase ---
 		// Now run the workflow on the pre-existing files.
-		fullBatch := synthfs.NewBatch().WithFileSystem(testFS)
+		fullBatch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)
 
 		// Copy file to project directory
 		_, err = fullBatch.Copy("README.md", "project/README.md")
@@ -189,7 +194,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 			t.Fatalf("Complete workflow failed: %v", result.GetError())
 		}
 
-		t.Logf("Complete workflow executed: %d operations in %v", len(result.GetOperations()), result.Duration)
+		t.Logf("Complete workflow executed: %d operations in %v", len(result.GetOperations()), result.GetDuration())
 
 		// Verify some key results
 		operations := fullBatch.Operations()
@@ -215,20 +220,22 @@ func TestBatchCompleteAPI(t *testing.T) {
 
 	t.Run("Operation objects detailed inspection", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
+		registry := synthfs.GetDefaultRegistry()
+		fileSystem := synthfs.NewTestFileSystem()
 
 		// --- Setup Phase ---
-		setupBatch := synthfs.NewBatch().WithFileSystem(testFS)
+		setupBatch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)
 		_, err := setupBatch.CreateFile("inspect.txt", []byte("inspection content"))
 		if err != nil {
 			t.Fatalf("CreateFile for setup failed: %v", err)
 		}
 		setupResult, err := setupBatch.Run()
-		if err != nil || !setupResult.Success {
-			t.Fatalf("Setup batch for inspection failed: %v, errors: %v", err, setupResult.Errors)
+		if err != nil || !setupResult.IsSuccess() {
+			t.Fatalf("Setup batch for inspection failed: %v, errors: %v", err, setupResult.GetError())
 		}
 
 		// --- Test Phase ---
-		inspectBatch := synthfs.NewBatch().WithFileSystem(testFS)
+		inspectBatch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)
 
 		// This operation is now invalid because the file already exists.
 		// We'll test symlink and archive on the existing file.
@@ -248,20 +255,20 @@ func TestBatchCompleteAPI(t *testing.T) {
 		}
 
 		// Inspect operation details (like Python example)
-		t.Logf("File Operation: %s (ID: %s)", fileOp.Describe().Type, fileOp.ID())
-		t.Logf("  Path: %s", fileOp.Describe().Path)
-		t.Logf("  Details: %+v", fileOp.Describe().Details)
-		t.Logf("  Dependencies: %v", fileOp.Dependencies())
+		t.Logf("File Operation: %s (ID: %s)", fileOp.(synthfs.Operation).Describe().Type, fileOp.(synthfs.Operation).ID())
+		t.Logf("  Path: %s", fileOp.(synthfs.Operation).Describe().Path)
+		t.Logf("  Details: %+v", fileOp.(synthfs.Operation).Describe().Details)
+		t.Logf("  Dependencies: %v", fileOp.(synthfs.Operation).Dependencies())
 
-		t.Logf("Symlink Operation: %s (ID: %s)", symlinkOp.Describe().Type, symlinkOp.ID())
-		t.Logf("  Path: %s", symlinkOp.Describe().Path)
-		t.Logf("  Details: %+v", symlinkOp.Describe().Details)
-		t.Logf("  Dependencies: %v", symlinkOp.Dependencies())
+		t.Logf("Symlink Operation: %s (ID: %s)", symlinkOp.(synthfs.Operation).Describe().Type, symlinkOp.(synthfs.Operation).ID())
+		t.Logf("  Path: %s", symlinkOp.(synthfs.Operation).Describe().Path)
+		t.Logf("  Details: %+v", symlinkOp.(synthfs.Operation).Describe().Details)
+		t.Logf("  Dependencies: %v", symlinkOp.(synthfs.Operation).Dependencies())
 
-		t.Logf("Archive Operation: %s (ID: %s)", archiveOp.Describe().Type, archiveOp.ID())
-		t.Logf("  Path: %s", archiveOp.Describe().Path)
-		t.Logf("  Details: %+v", archiveOp.Describe().Details)
-		t.Logf("  Dependencies: %v", archiveOp.Dependencies())
+		t.Logf("Archive Operation: %s (ID: %s)", archiveOp.(synthfs.Operation).Describe().Type, archiveOp.(synthfs.Operation).ID())
+		t.Logf("  Path: %s", archiveOp.(synthfs.Operation).Describe().Path)
+		t.Logf("  Details: %+v", archiveOp.(synthfs.Operation).Describe().Details)
+		t.Logf("  Dependencies: %v", archiveOp.(synthfs.Operation).Dependencies())
 
 		// Execute and inspect results
 		result, err := inspectBatch.Run()
@@ -274,13 +281,14 @@ func TestBatchCompleteAPI(t *testing.T) {
 		}
 
 		// Inspect execution results (like Python example)
-		t.Logf("Execution Result: Success=%v, Duration=%v", result.IsSuccess(), result.Duration)
+		t.Logf("Execution Result: Success=%v, Duration=%v", result.IsSuccess(), result.GetDuration())
 		for i, opResult := range result.GetOperations() {
+			operationResult := opResult.(*synthfs.OperationResult)
 			t.Logf("  Operation %d: %s -> %s (Duration: %v)",
 				i+1,
-				opResult.Operation.ID(),
-				opResult.Status,
-				opResult.Duration)
+				operationResult.Operation.ID(),
+				operationResult.Status,
+				operationResult.Duration)
 		}
 	})
 }

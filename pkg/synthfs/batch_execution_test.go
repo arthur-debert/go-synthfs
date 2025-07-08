@@ -51,18 +51,21 @@ func TestBatchExecution(t *testing.T) {
 			t.Error("Expected operations in result, but got none")
 		}
 
-		t.Logf("Executed %d operations in %v", len(result.GetOperations()), result.Duration)
+		t.Logf("Executed %d operations in %v", len(result.GetOperations()), result.GetDuration())
 		for i, opResult := range result.GetOperations() {
+			operationResult := opResult.(*synthfs.OperationResult)
 			t.Logf("Operation %d: %s %s -> %s",
 				i+1,
-				opResult.Operation.Describe().Type,
-				opResult.Operation.Describe().Path,
-				opResult.Status)
+				operationResult.Operation.Describe().Type,
+				operationResult.Operation.Describe().Path,
+				operationResult.Status)
 		}
 	})
 
 	t.Run("Execute with auto-generated dependencies", func(t *testing.T) {
-		newBatch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
+		registry := synthfs.GetDefaultRegistry()
+		fs := synthfs.NewTestFileSystem()
+		newBatch := synthfs.NewBatch(fs, registry).WithFileSystem(synthfs.NewTestFileSystem())
 
 		// This should auto-create multiple parent directories
 		_, err := newBatch.CreateFile("deep/nested/path/file.txt", []byte("nested content"))
@@ -83,18 +86,21 @@ func TestBatchExecution(t *testing.T) {
 		}
 
 		// Log the execution details
-		t.Logf("Nested execution: %d operations in %v", len(result.GetOperations()), result.Duration)
+		t.Logf("Nested execution: %d operations in %v", len(result.GetOperations()), result.GetDuration())
 		for i, opResult := range result.GetOperations() {
+			operationResult := opResult.(*synthfs.OperationResult)
 			t.Logf("Operation %d: %s %s -> %s",
 				i+1,
-				opResult.Operation.Describe().Type,
-				opResult.Operation.Describe().Path,
-				opResult.Status)
+				operationResult.Operation.Describe().Type,
+				operationResult.Operation.Describe().Path,
+				operationResult.Status)
 		}
 	})
 
 	t.Run("Empty batch execution", func(t *testing.T) {
-		emptyBatch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
+		registry := synthfs.GetDefaultRegistry()
+		fs := synthfs.NewTestFileSystem()
+		emptyBatch := synthfs.NewBatch(fs, registry).WithFileSystem(synthfs.NewTestFileSystem())
 
 		result, err := emptyBatch.Run()
 		if err != nil {
@@ -130,16 +136,21 @@ func TestBatchRollback(t *testing.T) {
 	}
 
 	// Test rollback function exists
-	if result.Rollback == nil {
+	rollbackFunc := result.GetRollback()
+	if rollbackFunc == nil {
 		t.Fatal("Expected rollback function, but got nil")
 	}
 
 	// Try to call rollback (should not error even with stub operations)
-	err = result.Rollback(context.Background())
-	if err != nil {
-		t.Logf("Rollback returned error (expected with stub operations): %v", err)
+	if rollback, ok := rollbackFunc.(func(context.Context) error); ok {
+		err = rollback(context.Background())
+		if err != nil {
+			t.Logf("Rollback returned error (expected with stub operations): %v", err)
+		} else {
+			t.Log("Rollback completed successfully")
+		}
 	} else {
-		t.Log("Rollback completed successfully")
+		t.Error("Rollback function has unexpected type")
 	}
 }
 

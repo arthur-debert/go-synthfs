@@ -21,8 +21,8 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-	fs := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
+		fs := synthfs.NewTestFileSystem()
+		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 		// Copy operation should compute checksum
 		op, err := batch.Copy("source.txt", "destination.txt")
@@ -31,7 +31,8 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		// Check that checksum was computed and stored
-		checksum := op.GetChecksum("source.txt")
+		operation := op.(synthfs.Operation)
+		checksum := operation.GetChecksum("source.txt")
 		if checksum == nil {
 			t.Error("Expected checksum to be computed for source file")
 		} else {
@@ -47,7 +48,7 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		// Check that checksum is in operation description
-		desc := op.(synthfs.Operation).Describe()
+		desc := operation.Describe()
 		if sourceChecksum, exists := desc.Details["source_checksum"]; !exists {
 			t.Error("Expected source_checksum in operation details")
 		} else if sourceChecksum != checksum.MD5 {
@@ -66,8 +67,8 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-	fs := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
+		fs := synthfs.NewTestFileSystem()
+		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 		// Move operation should compute checksum
 		op, err := batch.Move("old.txt", "new.txt")
@@ -76,7 +77,8 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		// Check that checksum was computed and stored
-		checksum := op.GetChecksum("old.txt")
+		operation := op.(synthfs.Operation)
+		checksum := operation.GetChecksum("old.txt")
 		if checksum == nil {
 			t.Error("Expected checksum to be computed for source file")
 		} else {
@@ -92,7 +94,7 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		// Check that checksum is in operation description
-		desc := op.(synthfs.Operation).Describe()
+		desc := operation.Describe()
 		if sourceChecksum, exists := desc.Details["source_checksum"]; !exists {
 			t.Error("Expected source_checksum in operation details")
 		} else if sourceChecksum != checksum.MD5 {
@@ -118,8 +120,8 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-	fs := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
+		fs := synthfs.NewTestFileSystem()
+		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 		// Archive operation should compute checksums for all sources
 		op, err := batch.CreateArchive("backup.tar.gz", synthfs.ArchiveFormatTarGz, "file1.txt", "file2.txt", "file3.txt")
@@ -128,13 +130,14 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		// Check that checksums were computed for all source files
-		allChecksums := op.(synthfs.Operation).GetAllChecksums()
+		operation := op.(synthfs.Operation)
+		allChecksums := operation.GetAllChecksums()
 		if len(allChecksums) != 3 {
 			t.Errorf("Expected 3 checksums, got %d", len(allChecksums))
 		}
 
 		for path, expectedContent := range files {
-			checksum := op.GetChecksum(path)
+			checksum := operation.GetChecksum(path)
 			if checksum == nil {
 				t.Errorf("Expected checksum for source file %s", path)
 				continue
@@ -152,7 +155,7 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		// Check that sources_checksummed is in operation description
-		desc := op.(synthfs.Operation).Describe()
+		desc := operation.Describe()
 		if sourcesChecksummed, exists := desc.Details["sources_checksummed"]; !exists {
 			t.Error("Expected sources_checksummed in operation details")
 		} else if sourcesChecksummed != 3 {
@@ -170,8 +173,8 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-	fs := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
+		fs := synthfs.NewTestFileSystem()
+		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 		// Try to copy a directory (should not fail checksum computation)
 		op, err := batch.Copy("testdir", "copydir")
@@ -180,7 +183,8 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		// Checksum should be nil for directories
-		checksum := op.GetChecksum("testdir")
+		operation := op.(synthfs.Operation)
+		checksum := operation.GetChecksum("testdir")
 		if checksum != nil {
 			t.Error("Expected no checksum for directory, but got one")
 		}
@@ -200,8 +204,8 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-	fs := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
+		fs := synthfs.NewTestFileSystem()
+		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 		// Create two copy operations
 		op1, err := batch.Copy("file1.txt", "copy1.txt")
@@ -215,8 +219,10 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		// Checksums should be different
-		checksum1 := op1.GetChecksum("file1.txt")
-		checksum2 := op2.GetChecksum("file2.txt")
+		operation1 := op1.(synthfs.Operation)
+		operation2 := op2.(synthfs.Operation)
+		checksum1 := operation1.GetChecksum("file1.txt")
+		checksum2 := operation2.GetChecksum("file2.txt")
 
 		if checksum1 == nil || checksum2 == nil {
 			t.Fatal("Both checksums should be computed")
@@ -242,8 +248,8 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-	fs := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
+		fs := synthfs.NewTestFileSystem()
+		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 		// Create two copy operations
 		op1, err := batch.Copy("identical1.txt", "copy1.txt")
@@ -257,8 +263,10 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		// Checksums should be identical
-		checksum1 := op1.GetChecksum("identical1.txt")
-		checksum2 := op2.GetChecksum("identical2.txt")
+		operation1 := op1.(synthfs.Operation)
+		operation2 := op2.(synthfs.Operation)
+		checksum1 := operation1.GetChecksum("identical1.txt")
+		checksum2 := operation2.GetChecksum("identical2.txt")
 
 		if checksum1 == nil || checksum2 == nil {
 			t.Fatal("Both checksums should be computed")
@@ -273,8 +281,8 @@ func TestBatchChecksumming(t *testing.T) {
 	t.Run("Checksum computation failure is handled gracefully", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
 		registry := synthfs.GetDefaultRegistry()
-	fs := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
+		fs := synthfs.NewTestFileSystem()
+		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 		// Try to copy non-existent file (should fail during source existence validation first)
 		_, err := batch.Copy("nonexistent.txt", "dest.txt")

@@ -189,9 +189,9 @@ func TestBatchIDGeneration(t *testing.T) {
 		t.Fatalf("Failed to create file1.txt: %v", err)
 	}
 
-	id1 := op1.ID()
-	id2 := op2.ID()
-	id3 := op3.ID()
+	id1 := op1.(synthfs.Operation).ID()
+	id2 := op2.(synthfs.Operation).ID()
+	id3 := op3.(synthfs.Operation).ID()
 
 	if id1 == id2 {
 		t.Error("Operation IDs should be unique, but got duplicates")
