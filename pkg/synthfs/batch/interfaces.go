@@ -29,7 +29,7 @@ type Batch interface {
 	WithRegistry(registry core.OperationFactory) Batch
 	WithLogger(logger core.Logger) Batch
 
-	// Execution - simplified to core methods only
+	// Execution
 	Run() (interface{}, error)
 	RunWithOptions(opts interface{}) (interface{}, error)
 	RunRestorable() (interface{}, error)

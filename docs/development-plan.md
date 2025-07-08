@@ -2,457 +2,241 @@
 
 ## Overview
 
-This document outlines the development strategy for completing the SynthFS library. After consolidating the v2 and legacy codebases, we're taking an **operations-first approach** to maximize value delivery and minimize rework.
+This document outlines the current state and future development strategy for the SynthFS library. The execution refactoring has been completed, resulting in a clean, unified implementation with prerequisite resolution.
 
-## 🎯 Strategic Approach: Operations-Led Development
+## 🎯 Current Architecture
 
-### Why Operations First?
+### Clean Implementation Status ✅ COMPLETED
 
-1. **Lower Risk, Higher Certainty** - Operations have clear, testable specifications
-2. **Concrete Requirements Drive Better Design** - Infrastructure designed after seeing real usage patterns
-3. **Faster Value Delivery** - Each operation provides immediate user value
-4. **Development Momentum** - Clear "done" criteria and independent deliverables
+**Goal:** Single, clean batch implementation with prerequisite resolution.
 
-### Critical Exception: Foundation Infrastructure
+**Achievements:**
 
-Some infrastructure is a **prerequisite** for operations and must be done first.
+- ✅ **Single BatchImpl**: Unified implementation with prerequisite resolution
+- ✅ **Removed backwards compatibility**: All feature flags and migration code removed
+- ✅ **Simplified interfaces**: Clean batch interface without legacy methods
+- ✅ **Prerequisite resolution**: Automatic dependency management for all operations
+- ✅ **Clean main API**: Direct access to implementation without wrapper layers
 
----
+### Current Features
 
-## 📋 Development Phases
+1. **Operations Supported:**
+   - CreateDir, CreateFile, CreateSymlink
+   - Copy, Move, Delete
+   - CreateArchive, Unarchive
+   - All with automatic prerequisite resolution
 
-### **Phase 0.5: Core Code Simplification** ✅ COMPLETED
+2. **Batch Execution:**
+   - Single `NewBatch()` constructor returns clean implementation
+   - Prerequisite resolution automatically resolves dependencies
+   - Support for backup/restore operations
+   - Comprehensive validation and error handling
 
-**Goal:** Align current codebase with the simple vision from `intro-to-synthfs.txxt`.
-
-**Rationale:** The current code is over-engineered compared to the core vision of "queue operations, validate upfront, execute later with simple rollback." Remove complexity that doesn't serve the core use case.
-
-**Deliverables:** ✅ ALL COMPLETED
-
-1. ✅ **Remove Progress Reporting System** (`pkg/synthfs/progress.go` → deleted)
-   - Deleted entire 297-line file
-   - Simple Result struct provides basic success/failure reporting
-
-2. ✅ **Simplify Executor** (`pkg/synthfs/executor.go` → 177 lines)
-   - Removed ExecuteConfig, ExecuteOption, WithDryRun complexity  
-   - Removed ExecuteStream method and ProgressReportingExecutor
-   - Simple Execute(ctx, queue, filesystem) method
-   - Reduced excessive TRACE/DEBUG logging, kept essential INFO messages
-
-3. ✅ **Simplify Operation Interface** (`pkg/synthfs/operation.go`)
-   - Removed complex BaseOperation struct and WithID()/WithDependency() chainable methods
-   - Introduced SimpleOperation for straightforward implementation
-   - Operations created complete and immutable
-   - Kept GenericOperation for backward compatibility during transition
-
-4. ✅ **Update Generic Operations** (`pkg/synthfs/ops/generic.go`)
-   - Updated to use SimpleOperation instead of BaseOperation
-   - Simplified operation creation without complex chaining
-
-**Achieved Results:**
-
-- ✅ **486 lines removed** (3,213 → 2,727 lines, ~15% reduction)
-- ✅ **Simpler mental model** aligned with intro vision
-- ✅ **All tests passing** with simpler API
-- ✅ **No breaking changes** to core functionality
-- ✅ **Clearer separation** between validation and execution
+3. **Clean Architecture:**
+   - No feature flags or backwards compatibility code
+   - Single execution path with prerequisite resolution
+   - Simplified interfaces and documentation
 
 ---
 
-### **Phase 1A: Critical FileSystem Extensions** ⏱️ 1 week
+## 📋 Future Development Phases
 
-**Goal:** Unblock Phase 1 operations by extending the FileSystem interface.
+### **Phase 1: Testing and Validation** ⏱️ 1 week
+
+**Goal:** Ensure the clean implementation works correctly in all scenarios.
 
 **Deliverables:**
 
-1. **Extend WriteFS Interface** (`pkg/synthfs/fs.go`)
+1. **Comprehensive Test Suite**
+   - End-to-end integration tests
+   - Prerequisite resolution validation
+   - Edge case handling
 
-   ```golang
-   // Add to WriteFS interface:
-   Symlink(oldname, newname string) error    // For CreateSymlink operation
-   Readlink(name string) (string, error)     // For symlink validation/rollback  
-   Rename(oldpath, newpath string) error     // For Move operations
-   ```
-
-2. **Update OSFileSystem Implementation**
-
-   ```golang
-   // pkg/synthfs/fs.go - Add implementations:
-   func (osfs *OSFileSystem) Symlink(oldname, newname string) error
-   func (osfs *OSFileSystem) Readlink(name string) (string, error) 
-   func (osfs *OSFileSystem) Rename(oldpath, newpath string) error
-   ```
-
-3. **Update TestFileSystem** (`pkg/synthfs/testing.go`)
-   - Add mock implementations for testing
-   - Ensure symlink/rename behavior is testable
-
-4. **Update MockFS** (`pkg/synthfs/testutil/mock_fs.go`)
-   - Add symlink support to mock filesystem
-   - Add rename operation support
+2. **Performance Validation**
+   - Benchmark the clean implementation
+   - Validate memory usage and execution speed
+   - Compare against previous implementation
 
 **Success Criteria:**
 
-- [ ] All FileSystem interfaces compile
-- [ ] OSFileSystem supports symlinks and renames
-- [ ] TestFileSystem supports symlinks and renames
-- [ ] MockFS supports symlinks and renames
-- [ ] Full test coverage for new methods
+- [ ] All existing tests pass
+- [ ] Performance meets or exceeds previous implementation
+- [ ] Edge cases properly handled
 
 ---
 
-### **Phase 1B: Complete Create Operations** ⏱️ 2-3 weeks
+### **Phase 2: Enhanced Operations** ⏱️ 2-3 weeks
 
-**Goal:** Implement CreateSymlink and CreateArchive operations to complete Phase 1.
+**Goal:** Add advanced operation features and patterns.
 
 **Deliverables:**
 
-1. **CreateSymlink Operation** (`pkg/synthfs/ops/create_symlink.go`)
+1. **Enhanced Archive Operations**
+   - Pattern-based extraction
+   - Multiple archive format support
+   - Large file handling optimizations
 
-   ```golang
-   // Will use the generic Create() with SymlinkItem
-   // But may need specific implementation details for validation
-   ```
+2. **Advanced Copy/Move Operations**
+   - Cross-device optimizations
+   - Symlink handling options
+   - Preserve metadata options
 
-   - Validation: Check target exists, path is valid
-   - Execution: Use `FileSystem.Symlink()`
-   - Rollback: Remove created symlink
-   - Integration with `ops.Create(synthfs.NewSymlink(...))`
-
-2. **CreateArchive Operation** (`pkg/synthfs/ops/create_archive.go`)
-
-   ```golang
-   // Support tar.gz and zip formats initially
-   ```
-
-   - Validation: Check all sources exist
-   - Execution: Create archive from sources (tar.gz, zip)
-   - Rollback: Remove created archive
-   - Integration with `ops.Create(synthfs.NewArchive(...))`
-
-3. **Archive Implementation**
-   - Archive creation logic (tar.gz, zip)
-   - Proper error handling for missing sources
-   - Support for both files and directories as sources
-
-4. **Complete Generic Create() Integration**
-   - Ensure `ops.Create()` properly handles SymlinkItem and ArchiveItem
-   - Update operation description generation
-   - Test all item types through generic interface
+3. **Batch Operation Patterns**
+   - Conditional operations
+   - Batch validation improvements
+   - Operation grouping
 
 **Success Criteria:**
 
-- [ ] `ops.Create(synthfs.NewSymlink(path, target))` works end-to-end
-- [ ] `ops.Create(synthfs.NewArchive(path, format, sources))` works end-to-end
-- [ ] Full validation, execution, and rollback for both operations
+- [ ] Enhanced operations work seamlessly with prerequisite resolution
+- [ ] Performance optimizations implemented
 - [ ] Comprehensive test coverage
-- [ ] Integration tests with real filesystem
 
 ---
 
-### **Phase 2: Delete Operations** ⏱️ 2 weeks
+### **Phase 3: CLI and Tooling** ⏱️ 2 weeks
 
-**Goal:** Support deletion of any filesystem item using unified operation.
+**Goal:** Update CLI to work with the clean implementation.
 
 **Deliverables:**
 
-1. **Unified Delete Operation** (`pkg/synthfs/ops/delete.go`)
+1. **Updated CLI Commands**
+   - Remove legacy command options
+   - Simplify command structure
+   - Improve error messages
 
-   ```golang
-   func Delete(path string) Operation
-   // Uses ops.Delete() from generic.go, but may need specific implementation
-   ```
-
-   - Validation: Check that path exists
-   - Execution: Inspect item type and use appropriate removal method
-   - Rollback: **Advanced** - Store item content/metadata before deletion
-
-2. **Intelligent Path Inspection**
-   - Detect file vs directory vs symlink at path
-   - Choose appropriate removal strategy (Remove vs RemoveAll)
-   - Handle edge cases (broken symlinks, etc.)
-
-3. **Rollback Strategy Design**
-   - **Files**: Store content + metadata before deletion
-   - **Directories**: Store full tree structure + contents  
-   - **Symlinks**: Store target path
-   - Implement restoration logic
+2. **Plan Execution**
+   - JSON plan format support
+   - Plan validation and dry-run
+   - Progress reporting
 
 **Success Criteria:**
 
-- [ ] `ops.Delete("/path")` works for files, directories, symlinks
-- [ ] Proper validation and error handling
-- [ ] Basic rollback support (files and symlinks)
-- [ ] Advanced rollback for directories (stretch goal)
+- [ ] CLI works with clean implementation
+- [ ] Plan execution is reliable
+- [ ] Good user experience
 
 ---
 
-### **Phase 3: Copy Operations** ⏱️ 2 weeks
+### **Phase 4: Documentation and Examples** ⏱️ 1 week
 
-**Goal:** Support copying any filesystem item using unified operation.
+**Goal:** Update documentation to reflect the clean implementation.
 
 **Deliverables:**
 
-1. **Unified Copy Operation** (`pkg/synthfs/ops/copy.go`)
+1. **Updated Documentation**
+   - Remove references to legacy implementations
+   - Document prerequisite resolution
+   - Update API examples
 
-   ```golang
-   func Copy(src, dst string) Operation
-   ```
-
-   - Validation: Source exists, destination is valid
-   - Execution: Type-appropriate copy (recursive for directories)
-   - Rollback: Remove item created at destination
-
-2. **Intelligent Copy Logic**
-   - **Files**: Direct content copy with mode preservation
-   - **Directories**: Recursive copy with structure preservation
-   - **Symlinks**: Copy as symlink or copy target (configurable)
-
-3. **Performance Considerations**
-   - Efficient large file copying
-   - Progress reporting for large operations
-   - Memory usage optimization
+2. **Example Projects**
+   - Common usage patterns
+   - Best practices guide
+   - Migration examples (if needed)
 
 **Success Criteria:**
 
-- [ ] `ops.Copy("/src", "/dst")` works for all item types
-- [ ] Preserves permissions, timestamps where possible
-- [ ] Handles symlinks correctly
-- [ ] Efficient for large files/directories
-
----
-
-### **Phase 4: Move Operations** ⏱️ 1-2 weeks
-
-**Goal:** Support moving/renaming filesystem items using unified operation.
-
-**Deliverables:**
-
-1. **Unified Move Operation** (`pkg/synthfs/ops/move.go`)
-
-   ```golang
-   func Move(src, dst string) Operation  
-   ```
-
-   - Validation: Source exists, destination is valid
-   - Execution: Use `FileSystem.Rename()` when possible
-   - Fallback: Copy-then-Delete for cross-device moves
-   - Rollback: Move item back from destination to source
-
-2. **Atomic vs Non-Atomic Moves**
-   - Try atomic rename first
-   - Fallback to copy+delete with proper error handling
-   - Ensure consistency during multi-step operations
-
-**Success Criteria:**
-
-- [ ] `ops.Move("/src", "/dst")` works for all item types
-- [ ] Atomic moves when possible
-- [ ] Safe cross-device moves
-- [ ] Proper rollback support
-
----
-
-### **Phase 5: Minimal Serialization Infrastructure** ⏱️ 1-2 weeks
-
-**Goal:** Enable basic plan persistence and CLI foundations.
-
-**Deliverables:**
-
-1. **Basic Serialization Interfaces** (`pkg/synthfs/serialization.go`)
-
-   ```golang
-   type SerializableOperation interface {
-       Operation
-       MarshalJSON() ([]byte, error)
-       UnmarshalJSON([]byte) error
-   }
-   
-   type OperationPlan struct {
-       Operations []SerializableOperation `json:"operations"`
-       Metadata   PlanMetadata            `json:"metadata"`
-   }
-   ```
-
-2. **JSON Serialization for Core Operations**
-   - Implement SerializableOperation for Create, Delete, Copy, Move
-   - Plan marshaling/unmarshaling functions
-   - Version handling for forward compatibility
-
-3. **Basic Plan Execution**
-
-   ```golang
-   func ExecutePlan(ctx context.Context, plan *OperationPlan, fsys FileSystem) error
-   ```
-
-**Success Criteria:**
-
-- [ ] Can serialize operation plans to JSON
-- [ ] Can deserialize and execute plans
-- [ ] Basic plan validation
-- [ ] Simple plan file format established
-
----
-
-### **Phase 6: CLI Plan Commands** ⏱️ 1-2 weeks
-
-**Goal:** Restore CLI functionality with new operation system.
-
-**Deliverables:**
-
-1. **Plan Commands** (`cmd/synthfs/plan.go`)
-
-   ```bash
-   synthfs plan execute plan.json
-   synthfs plan validate plan.json  
-   synthfs plan create --output plan.json [operations...]
-   ```
-
-2. **Plan File Management**
-   - Plan file validation
-   - Error reporting for malformed plans
-   - Dry-run execution mode
-
-3. **Basic Plan Generation**
-   - CLI flags to generate common operation patterns
-   - Template system for common workflows
-
-**Success Criteria:**
-
-- [ ] Can execute plans from CLI
-- [ ] Can validate plans without executing
-- [ ] Good error messages and help text
-- [ ] Integration with existing operation system
-
----
-
-### **Phase 7+: Advanced Infrastructure** ⏱️ Future
-
-**Deferred until after core operations are complete:**
-
-1. **Advanced Rollback & Recovery**
-   - Complete directory rollback with full state restoration
-   - Transaction-like begin/commit/rollback interfaces
-   - Recovery from partial failures
-
-2. **Performance & Concurrency**
-   - Parallel execution with conflict detection
-   - Performance benchmarks for archive operations
-   - Resource usage monitoring
-
-3. **Advanced Validation & Analysis**
-   - Automatic conflict detection between operations
-   - Dependency graph visualization
-   - Custom validation rules engine
-
-4. **Documentation & Tooling**
-   - Auto-generated documentation from plans
-   - Migration tools for plan format changes
-   - IDE integration and language server
+- [ ] Documentation is accurate and complete
+- [ ] Examples work with current implementation
+- [ ] Clear usage patterns documented
 
 ---
 
 ## 🎯 Immediate Next Steps
 
-### ✅ COMPLETED: Core Code Simplification (Phase 0.5)
-
-**Achievements:**
-
-- ✅ **486 lines removed** (3,213 → 2,727 lines, ~15% reduction)
-- ✅ Deleted `pkg/synthfs/progress.go` (297 lines)
-- ✅ Simplified executor (385 → 177 lines)
-- ✅ Removed ExecuteConfig, ExecuteOption, dry run complexity
-- ✅ Simplified operations (removed BaseOperation chaining, added SimpleOperation)
-- ✅ Reduced logging verbosity to focus on user-relevant INFO messages
-- ✅ All tests passing with simpler API
-
 ### Current Sprint (Week 1)
 
-**Priority 1: FileSystem Interface Extensions (Phase 1A)**
+**Priority 1: Validation and Testing**
 
-1. **Update WriteFS interface** in `pkg/synthfs/fs.go`
-2. **Implement methods in OSFileSystem**
-3. **Add symlink support to TestFileSystem**
-4. **Add symlink support to MockFS**
-5. **Write comprehensive tests**
+1. **Run comprehensive test suite**
+2. **Validate prerequisite resolution**
+3. **Test edge cases and error handling**
+4. **Performance benchmarking**
 
 **Concrete Tasks:**
 
-- [ ] Add `Symlink(oldname, newname string) error` to WriteFS
-- [ ] Add `Readlink(name string) (string, error)` to WriteFS  
-- [ ] Add `Rename(oldpath, newpath string) error` to WriteFS
-- [ ] Implement in OSFileSystem using `os.Symlink`, `os.Readlink`, `os.Rename`
-- [ ] Update TestFileSystem with symlink tracking
-- [ ] Update MockFS with symlink support
-- [ ] Add test coverage for all new methods
-- [ ] Update existing operation tests to use extended interface
+- [ ] Run full test suite to ensure no regressions
+- [ ] Validate that prerequisite resolution works correctly
+- [ ] Test complex operation sequences
+- [ ] Benchmark performance against previous implementation
+- [ ] Document any issues found
 
 ### Success Metrics
 
 **Technical:**
 
-- All tests pass
-- FileSystem interface properly extended
-- No breaking changes to existing code
+- All tests pass with clean implementation
+- Performance meets or exceeds previous version
+- Prerequisite resolution works correctly
+- No memory leaks or resource issues
 
 **Strategic:**
 
-- Phase 1B operations can begin immediately after completion
-- Clear path to completing all CRUD operations
-- Infrastructure decisions informed by real operation usage
+- Single, maintainable codebase
+- Clear development path forward
+- No technical debt from migration code
 
 ---
 
-## 📊 Risk Management
+## 📊 Technical Architecture
 
-### Technical Risks
+### Clean Implementation Benefits
 
-1. **Symlink Support Complexity**
-   - **Risk**: Cross-platform symlink behavior differences
-   - **Mitigation**: Comprehensive test suite, platform-specific handling
+1. **Simplified Codebase**
+   - Single implementation path
+   - No feature flags or compatibility layers
+   - Clear, maintainable code
 
-2. **Archive Operation Performance**
-   - **Risk**: Large archive creation impacts performance
-   - **Mitigation**: Streaming implementation, progress reporting
+2. **Prerequisite Resolution**
+   - Automatic dependency management
+   - Parent directory creation
+   - Conflict detection and resolution
 
-3. **Rollback Complexity**
-   - **Risk**: Directory rollback is complex and error-prone
-   - **Mitigation**: Start with simple cases, iterate based on real needs
+3. **Unified Interfaces**
+   - Single batch interface
+   - Consistent operation patterns
+   - Clean error handling
 
-### Strategic Risks
+### Future Considerations
 
-1. **Serialization Format Changes**
-   - **Risk**: Plan format changes break existing plans
-   - **Mitigation**: Version plan format, implement migration tools
+1. **Extensibility**
+   - Plugin system for custom operations
+   - Custom prerequisite resolvers
+   - Operation middleware
 
-2. **API Design Lock-in**
-   - **Risk**: Early API decisions constrain future flexibility
-   - **Mitigation**: Iterate API based on operation implementation learnings
+2. **Performance**
+   - Parallel operation execution
+   - Memory usage optimization
+   - Large file handling
+
+3. **Monitoring**
+   - Detailed execution metrics
+   - Progress reporting improvements
+   - Error analytics
 
 ---
 
-## 📈 Success Criteria for Overall Plan
+## 📈 Success Criteria
 
 ### Technical Goals
 
-- [ ] All CRUD operations implemented (Create, Read/Validate, Update/Move, Delete)
-- [ ] Unified, consistent API across all operations
-- [ ] Full rollback support for transactional execution
-- [ ] Comprehensive test coverage (>90%)
-- [ ] Plan serialization and CLI integration
+- [ ] Clean, maintainable codebase with single implementation
+- [ ] Prerequisite resolution works reliably
+- [ ] Performance meets or exceeds previous implementation
+- [ ] Comprehensive test coverage maintained
 
 ### Strategic Goals  
 
-- [ ] Clear, maintainable codebase with no v2/legacy confusion
-- [ ] Incremental value delivery at each phase
-- [ ] Design decisions validated by real usage
-- [ ] Strong foundation for advanced features
+- [ ] No technical debt from backwards compatibility
+- [ ] Clear development path for future features
+- [ ] Strong foundation for advanced capabilities
+- [ ] Simplified maintenance and debugging
 
 ### User Experience Goals
 
-- [ ] Simple, intuitive API for common operations
-- [ ] Powerful CLI for complex workflows
-- [ ] Excellent error messages and validation
-- [ ] Comprehensive documentation and examples
+- [ ] Simple, intuitive API
+- [ ] Reliable operation execution
+- [ ] Good error messages and debugging
+- [ ] Comprehensive documentation
 
-This plan balances **immediate value delivery** with **long-term architectural soundness**, ensuring each phase builds naturally on the previous one while delivering concrete user benefits.
+This plan focuses on **validating and building upon** the clean implementation achieved through the execution refactoring, ensuring a solid foundation for future development.
