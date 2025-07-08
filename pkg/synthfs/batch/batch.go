@@ -1045,6 +1045,12 @@ func (oa *operationAdapter) GetItem() interface{} {
 	return nil
 }
 
+func (oa *operationAdapter) SetDescriptionDetail(key string, value interface{}) {
+	if op, ok := oa.op.(interface{ SetDescriptionDetail(string, interface{}) }); ok {
+		op.SetDescriptionDetail(key, value)
+	}
+}
+
 func (oa *operationAdapter) AddDependency(depID core.OperationID) {
 	if op, ok := oa.op.(interface{ AddDependency(core.OperationID) }); ok {
 		op.AddDependency(depID)

@@ -127,6 +127,12 @@ func (w *operationWrapper) GetItem() interface{} {
 	return nil
 }
 
+func (w *operationWrapper) SetDescriptionDetail(key string, value interface{}) {
+	if op, ok := w.op.(interface{ SetDescriptionDetail(string, interface{}) }); ok {
+		op.SetDescriptionDetail(key, value)
+	}
+}
+
 func (w *operationWrapper) AddDependency(depID core.OperationID) {
 	if op, ok := w.op.(interface{ AddDependency(core.OperationID) }); ok {
 		op.AddDependency(depID)
