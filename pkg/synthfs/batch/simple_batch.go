@@ -582,3 +582,11 @@ func (soa *simpleOperationAdapter) SetDescriptionDetail(key string, value interf
 		op.SetDescriptionDetail(key, value)
 	}
 }
+
+// Prerequisites returns the prerequisites for this operation
+func (soa *simpleOperationAdapter) Prerequisites() []core.Prerequisite {
+	if op, ok := soa.op.(interface{ Prerequisites() []core.Prerequisite }); ok {
+		return op.Prerequisites()
+	}
+	return nil
+}
