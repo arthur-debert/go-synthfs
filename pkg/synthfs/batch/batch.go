@@ -427,13 +427,14 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 	}
 	
 	// Convert to batch result interface
-	batchResult := NewResultWithBudget(
+	batchResult := NewResultWithBudgetAndRollback(
 		coreResult.Success,
 		operationResults,
 		restoreOps,
 		duration,
 		executionError,
 		coreResult.Budget,
+		coreResult.Rollback,
 	)
 	
 	return batchResult, nil

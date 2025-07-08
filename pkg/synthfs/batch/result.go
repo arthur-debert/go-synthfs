@@ -10,6 +10,7 @@ type ResultImpl struct {
 	duration   time.Duration
 	err        error
 	budget     interface{} // Budget information from execution
+	rollback   interface{} // Rollback function
 }
 
 // NewResult creates a new batch result.
@@ -19,6 +20,11 @@ func NewResult(success bool, operations []interface{}, restoreOps []interface{},
 
 // NewResultWithBudget creates a new batch result with budget information.
 func NewResultWithBudget(success bool, operations []interface{}, restoreOps []interface{}, duration time.Duration, err error, budget interface{}) Result {
+	return NewResultWithBudgetAndRollback(success, operations, restoreOps, duration, err, budget, nil)
+}
+
+// NewResultWithBudgetAndRollback creates a new batch result with budget information and rollback function.
+func NewResultWithBudgetAndRollback(success bool, operations []interface{}, restoreOps []interface{}, duration time.Duration, err error, budget interface{}, rollback interface{}) Result {
 	return &ResultImpl{
 		success:    success,
 		operations: operations,
@@ -26,6 +32,7 @@ func NewResultWithBudget(success bool, operations []interface{}, restoreOps []in
 		duration:   duration,
 		err:        err,
 		budget:     budget,
+		rollback:   rollback,
 	}
 }
 
@@ -57,4 +64,9 @@ func (r *ResultImpl) GetError() error {
 // GetBudget returns the budget information from execution.
 func (r *ResultImpl) GetBudget() interface{} {
 	return r.budget
+}
+
+// GetRollback returns the rollback function.
+func (r *ResultImpl) GetRollback() interface{} {
+	return r.rollback
 }

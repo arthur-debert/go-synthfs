@@ -486,9 +486,8 @@ func (b *Batch) RunWithOptions(opts PipelineOptions) (*Result, error) {
 		return nil, fmt.Errorf("failed to resolve implicit dependencies: %w", err)
 	}
 
-	// TODO: Temporarily delegate only restorable operations to batch package
-	// This allows testing of the budget functionality while keeping non-restorable operations stable
-	if false && opts.Restorable {
+	// Delegate to batch package implementation
+	if true {
 		// Synchronize operations with batch package implementation
 		if err := b.syncOperationsToBatchImpl(); err != nil {
 			return nil, fmt.Errorf("failed to sync operations to batch implementation: %w", err)
@@ -921,6 +920,35 @@ func (b *Batch) syncOperationsToBatchImpl() error {
 			_, err := b.batchImpl.CreateSymlink(target, desc.Path)
 			if err != nil {
 				return fmt.Errorf("failed to sync CreateSymlink operation %s: %w", op.ID(), err)
+			}
+			
+		case "create_archive":
+			// Extract archive details from the operation item
+			if item := op.GetItem(); item != nil {
+				if archiveItem, ok := item.(*ArchiveItem); ok {
+					_, err := b.batchImpl.CreateArchive(desc.Path, archiveItem.Format(), archiveItem.Sources()...)
+					if err != nil {
+						return fmt.Errorf("failed to sync CreateArchive operation %s: %w", op.ID(), err)
+					}
+				}
+			}
+			
+		case "unarchive":
+			// Extract unarchive details from the operation item
+			if item := op.GetItem(); item != nil {
+				if unarchiveItem, ok := item.(*UnarchiveItem); ok {
+					if len(unarchiveItem.Patterns()) > 0 {
+						_, err := b.batchImpl.UnarchiveWithPatterns(desc.Path, unarchiveItem.ExtractPath(), unarchiveItem.Patterns()...)
+						if err != nil {
+							return fmt.Errorf("failed to sync UnarchiveWithPatterns operation %s: %w", op.ID(), err)
+						}
+					} else {
+						_, err := b.batchImpl.Unarchive(desc.Path, unarchiveItem.ExtractPath())
+						if err != nil {
+							return fmt.Errorf("failed to sync Unarchive operation %s: %w", op.ID(), err)
+						}
+					}
+				}
 			}
 			
 		default:

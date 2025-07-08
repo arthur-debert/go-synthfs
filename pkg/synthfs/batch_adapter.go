@@ -1,6 +1,7 @@
 package synthfs
 
 import (
+	"context"
 	"io/fs"
 	"time"
 
@@ -181,6 +182,14 @@ func ConvertBatchResult(batchResult interface{}) *Result {
 		}
 	}
 
+	// Extract rollback function
+	var rollback func(context.Context) error
+	if rollbackInterface := result.GetRollback(); rollbackInterface != nil {
+		if rollbackFunc, ok := rollbackInterface.(func(context.Context) error); ok {
+			rollback = rollbackFunc
+		}
+	}
+
 	return &Result{
 		Success:    result.IsSuccess(),
 		Operations: operationResults,
@@ -188,5 +197,6 @@ func ConvertBatchResult(batchResult interface{}) *Result {
 		Duration:   duration,
 		Errors:     errors,
 		Budget:     budget,
+		Rollback:   rollback,
 	}
 }
