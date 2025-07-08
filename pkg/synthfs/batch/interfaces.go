@@ -29,17 +29,11 @@ type Batch interface {
 	WithRegistry(registry core.OperationFactory) Batch
 	WithLogger(logger core.Logger) Batch
 
-	// Execution
+	// Execution - simplified to core methods only
 	Run() (interface{}, error)
 	RunWithOptions(opts interface{}) (interface{}, error)
 	RunRestorable() (interface{}, error)
 	RunRestorableWithBudget(maxBackupMB int) (interface{}, error)
-	RunWithPrerequisites() (interface{}, error)
-	RunWithPrerequisitesAndBudget(maxBackupMB int) (interface{}, error)
-	RunWithSimpleBatch() (interface{}, error)
-	RunWithSimpleBatchAndBudget(maxBackupMB int) (interface{}, error)
-	RunWithLegacyBatch() (interface{}, error)
-	RunWithLegacyBatchAndBudget(maxBackupMB int) (interface{}, error)
 }
 
 // Result represents the outcome of executing a batch of operations
@@ -49,6 +43,6 @@ type Result interface {
 	GetRestoreOps() []interface{}
 	GetDuration() interface{}
 	GetError() error
-	GetBudget() interface{} // Budget information from execution (may be nil for non-restorable runs)
-	GetRollback() interface{} // Rollback function
+	GetBudget() interface{}
+	GetRollback() interface{}
 }
