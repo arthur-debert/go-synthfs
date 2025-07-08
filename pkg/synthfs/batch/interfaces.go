@@ -7,8 +7,12 @@ import (
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
+// BatchOptions controls how batch operations are executed
+type BatchOptions struct {
+	UseSimpleBatch bool // When true, use SimpleBatch + prerequisite resolution; when false (default), use existing behavior
+}
+
 // Batch represents a collection of operations that can be validated and executed as a unit.
-// As of Phase 7, all batches use prerequisite resolution for dependency management.
 type Batch interface {
 	// Operation management
 	Operations() []interface{}
@@ -29,18 +33,13 @@ type Batch interface {
 	WithContext(ctx context.Context) Batch
 	WithRegistry(registry core.OperationFactory) Batch
 	WithLogger(logger core.Logger) Batch
+	WithOptions(opts BatchOptions) Batch
 
 	// Execution
 	Run() (interface{}, error)
 	RunWithOptions(opts interface{}) (interface{}, error)
 	RunRestorable() (interface{}, error)
 	RunRestorableWithBudget(maxBackupMB int) (interface{}, error)
-	RunWithPrerequisites() (interface{}, error)
-	RunWithPrerequisitesAndBudget(maxBackupMB int) (interface{}, error)
-	RunWithSimpleBatch() (interface{}, error)
-	RunWithSimpleBatchAndBudget(maxBackupMB int) (interface{}, error)
-	RunWithLegacyBatch() (interface{}, error)
-	RunWithLegacyBatchAndBudget(maxBackupMB int) (interface{}, error)
 }
 
 // Result represents the outcome of executing a batch of operations
@@ -51,5 +50,5 @@ type Result interface {
 	GetDuration() interface{}
 	GetError() error
 	GetBudget() interface{} // Budget information from execution (may be nil for non-restorable runs)
-	GetRollback() interface{} // Rollback function (may be nil)
+	GetRollback() interface{} // Rollback function (func(context.Context) error)
 }

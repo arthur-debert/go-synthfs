@@ -495,8 +495,7 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 	pipelineOpts := core.PipelineOptions{
 		Restorable:           false,
 		MaxBackupSizeMB:      10,
-		ResolvePrerequisites: true, // Enable prerequisite resolution by default
-		UseSimpleBatch:       true, // Default to true as of Phase 6 - new behavior
+		ResolvePrerequisites: true, // Always enable prerequisite resolution (Phase 7)
 	}
 
 	if optsMap, ok := opts.(map[string]interface{}); ok {
@@ -509,9 +508,6 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 		if rp, ok := optsMap["resolve_prerequisites"].(bool); ok {
 			pipelineOpts.ResolvePrerequisites = rp
 		}
-		if usb, ok := optsMap["use_simple_batch"].(bool); ok {
-			pipelineOpts.UseSimpleBatch = usb
-		}
 	}
 
 	// Log the start of execution
@@ -521,39 +517,7 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 			Bool("restorable", pipelineOpts.Restorable).
 			Int("max_backup_mb", pipelineOpts.MaxBackupSizeMB).
 			Bool("resolve_prerequisites", pipelineOpts.ResolvePrerequisites).
-			Bool("use_simple_batch", pipelineOpts.UseSimpleBatch).
 			Msg("executing batch")
-	}
-
-	// If UseSimpleBatch is enabled, delegate to SimpleBatch implementation
-	if pipelineOpts.UseSimpleBatch {
-		if b.logger != nil {
-			b.logger.Info().Msg("delegating to SimpleBatch implementation")
-		}
-		
-		// Create a SimpleBatch with the same operations
-		simpleBatch := NewSimpleBatch(b.fs, b.registry).
-			WithContext(b.ctx).
-			WithLogger(b.logger)
-		
-		// Add all operations to the SimpleBatch
-		for _, op := range b.operations {
-			// SimpleBatch expects operations to be added through its methods,
-			// but we already have created operations. We need to add them directly.
-			if simpleBatchImpl, ok := simpleBatch.(*SimpleBatchImpl); ok {
-				simpleBatchImpl.operations = append(simpleBatchImpl.operations, op)
-			}
-		}
-		
-		// Convert options back to interface{} map for SimpleBatch
-		simpleBatchOpts := map[string]interface{}{
-			"restorable":            pipelineOpts.Restorable,
-			"max_backup_size_mb":    pipelineOpts.MaxBackupSizeMB,
-			"resolve_prerequisites": pipelineOpts.ResolvePrerequisites,
-		}
-		
-		// Delegate to SimpleBatch
-		return simpleBatch.RunWithOptions(simpleBatchOpts)
 	}
 
 	// If no operations, return successful empty result

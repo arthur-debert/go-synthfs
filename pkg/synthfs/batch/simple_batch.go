@@ -592,9 +592,9 @@ type simplePipelineAdapter struct {
 	registry   core.OperationFactory
 }
 
-func (spa *simplePipelineAdapter) Operations() []interface{} {
+func (spa *simplePipelineAdapter) Operations() []execution.OperationInterface {
 	// Convert operations to the format expected by execution package
-	var result []interface{}
+	var result []execution.OperationInterface
 	for _, op := range spa.operations {
 		// Create adapter for each operation
 		adapter := &simpleOperationAdapter{op: op}
@@ -622,6 +622,9 @@ func (spa *simplePipelineAdapter) Validate(ctx context.Context, fs interface{}) 
 type simpleOperationAdapter struct {
 	op interface{}
 }
+
+// Ensure simpleOperationAdapter implements execution.OperationInterface
+var _ execution.OperationInterface = (*simpleOperationAdapter)(nil)
 
 func (soa *simpleOperationAdapter) GetOriginalOperation() interface{} {
 	return soa.op
