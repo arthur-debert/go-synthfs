@@ -36,6 +36,10 @@ type Batch interface {
 	RunRestorableWithBudget(maxBackupMB int) (interface{}, error)
 	RunWithPrerequisites() (interface{}, error)
 	RunWithPrerequisitesAndBudget(maxBackupMB int) (interface{}, error)
+	RunWithSimpleBatch() (interface{}, error)
+	RunWithSimpleBatchAndBudget(maxBackupMB int) (interface{}, error)
+	RunWithLegacyBatch() (interface{}, error)
+	RunWithLegacyBatchAndBudget(maxBackupMB int) (interface{}, error)
 }
 
 // Result represents the outcome of executing a batch of operations

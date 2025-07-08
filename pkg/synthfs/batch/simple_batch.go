@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"strings"
 	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
@@ -457,6 +458,46 @@ func (sb *SimpleBatch) RunRestorableWithBudget(maxBackupMB int) (interface{}, er
 		"resolve_prerequisites":  true,
 	}
 	return sb.RunWithOptions(opts)
+}
+
+// RunWithPrerequisites runs all operations with prerequisite resolution enabled.
+func (sb *SimpleBatch) RunWithPrerequisites() (interface{}, error) {
+	opts := map[string]interface{}{
+		"resolve_prerequisites":  true,
+		"restorable":             false,
+		"max_backup_size_mb":     0,
+	}
+	return sb.RunWithOptions(opts)
+}
+
+// RunWithPrerequisitesAndBudget runs all operations with prerequisite resolution and backup enabled.
+func (sb *SimpleBatch) RunWithPrerequisitesAndBudget(maxBackupMB int) (interface{}, error) {
+	opts := map[string]interface{}{
+		"resolve_prerequisites":  true,
+		"restorable":             true,
+		"max_backup_size_mb":     maxBackupMB,
+	}
+	return sb.RunWithOptions(opts)
+}
+
+// RunWithSimpleBatch is equivalent to Run() for SimpleBatch
+func (sb *SimpleBatch) RunWithSimpleBatch() (interface{}, error) {
+	return sb.Run()
+}
+
+// RunWithSimpleBatchAndBudget is equivalent to RunRestorableWithBudget() for SimpleBatch
+func (sb *SimpleBatch) RunWithSimpleBatchAndBudget(maxBackupMB int) (interface{}, error) {
+	return sb.RunRestorableWithBudget(maxBackupMB)
+}
+
+// RunWithLegacyBatch is not applicable for SimpleBatch - delegates to Run()
+func (sb *SimpleBatch) RunWithLegacyBatch() (interface{}, error) {
+	return sb.Run()
+}
+
+// RunWithLegacyBatchAndBudget is not applicable for SimpleBatch - delegates to RunRestorableWithBudget()
+func (sb *SimpleBatch) RunWithLegacyBatchAndBudget(maxBackupMB int) (interface{}, error) {
+	return sb.RunRestorableWithBudget(maxBackupMB)
 }
 
 // Helper methods
