@@ -25,10 +25,8 @@ func NewCreateFileOperation(id core.OperationID, path string) *CreateFileOperati
 func (op *CreateFileOperation) Prerequisites() []core.Prerequisite {
 	var prereqs []core.Prerequisite
 	
-	// Need parent directory to exist
-	if filepath.Dir(op.description.Path) != "." && filepath.Dir(op.description.Path) != "/" {
-		prereqs = append(prereqs, core.NewParentDirPrerequisite(op.description.Path))
-	}
+	// Always need parent directory to exist (even if it's current directory)
+	prereqs = append(prereqs, core.NewParentDirPrerequisite(op.description.Path))
 	
 	// Need no conflict with existing files
 	prereqs = append(prereqs, core.NewNoConflictPrerequisite(op.description.Path))

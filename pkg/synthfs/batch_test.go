@@ -10,7 +10,9 @@ import (
 func TestBatchBasicUsage(t *testing.T) {
 	// Use a test filesystem for controlled testing
 	testFS := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch().WithFileSystem(testFS).WithContext(context.Background())
+	registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS).WithContext(context.Background())
 
 	// Pre-create files needed for valid operations in Phase II
 	if err := testFS.WriteFile("source.txt", []byte("s"), 0644); err != nil {
@@ -33,7 +35,7 @@ func TestBatchBasicUsage(t *testing.T) {
 			t.Fatal("CreateDir returned nil operation")
 		}
 
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		if desc.Type != "create_directory" {
 			t.Errorf("Expected operation type 'create_directory', got '%s'", desc.Type)
 		}
@@ -54,7 +56,7 @@ func TestBatchBasicUsage(t *testing.T) {
 			t.Fatal("CreateFile returned nil operation")
 		}
 
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		if desc.Type != "create_file" {
 			t.Errorf("Expected operation type 'create_file', got '%s'", desc.Type)
 		}
@@ -95,7 +97,7 @@ func TestBatchBasicUsage(t *testing.T) {
 			t.Fatal("Delete returned nil operation")
 		}
 
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		if desc.Type != "delete" {
 			t.Errorf("Expected operation type 'delete', got '%s'", desc.Type)
 		}
@@ -135,7 +137,9 @@ func TestBatchWithTestFileSystem(t *testing.T) {
 		t.Fatalf("Failed to setup test directory: %v", err)
 	}
 
-	batch := synthfs.NewBatch().WithFileSystem(testFS)
+	registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 	t.Run("CreateFile with parent directory auto-creation", func(t *testing.T) {
 		// This should auto-create the "auto-dir" directory
@@ -153,7 +157,7 @@ func TestBatchWithTestFileSystem(t *testing.T) {
 		// Check that auto-dir creation operation was added
 		foundAutoDirOp := false
 		for _, op := range ops {
-			desc := op.Describe()
+			desc := op.(synthfs.Operation).Describe()
 			if desc.Type == "create_directory" && desc.Path == "auto-dir" {
 				foundAutoDirOp = true
 				break
@@ -167,7 +171,9 @@ func TestBatchWithTestFileSystem(t *testing.T) {
 
 func TestBatchIDGeneration(t *testing.T) {
 	testFS := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch().WithFileSystem(testFS)
+	registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 	// Create multiple operations and check ID uniqueness
 	op1, err := batch.CreateDir("dir1")

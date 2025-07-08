@@ -10,7 +10,9 @@ import (
 
 func TestBatchCompleteAPI(t *testing.T) {
 	testFS := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch().WithFileSystem(testFS)
+	registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 	t.Run("CreateSymlink operation", func(t *testing.T) {
 		// Create target file first
@@ -31,8 +33,8 @@ func TestBatchCompleteAPI(t *testing.T) {
 			t.Fatalf("Execute failed: %v", err)
 		}
 
-		if !result.Success {
-			t.Fatalf("Batch execution failed: %v", result.Errors)
+		if !result.IsSuccess() {
+			t.Fatalf("Batch execution failed: %v", result.GetError())
 		}
 
 		// Verify the symlink was created
@@ -107,14 +109,14 @@ func TestBatchCompleteAPI(t *testing.T) {
 			t.Fatalf("Execute failed: %v", err)
 		}
 
-		if !result.Success {
-			t.Fatalf("Archive creation failed: %v", result.Errors)
+		if !result.IsSuccess() {
+			t.Fatalf("Archive creation failed: %v", result.GetError())
 		}
 
 		// For now, just verify the operations were created and executed
 		// Real archive verification would require extracting and checking contents
-		t.Logf("Archive operations executed successfully: %d operations", len(result.Operations))
-		for i, opResult := range result.Operations {
+		t.Logf("Archive operations executed successfully: %d operations", len(result.GetOperations()))
+		for i, opResult := range result.GetOperations() {
 			desc := opResult.Operation.Describe()
 			t.Logf("Operation %d: %s %s -> %s", i+1, desc.Type, desc.Path, opResult.Status)
 		}
@@ -183,11 +185,11 @@ func TestBatchCompleteAPI(t *testing.T) {
 			t.Fatalf("Execute failed: %v", err)
 		}
 
-		if !result.Success {
-			t.Fatalf("Complete workflow failed: %v", result.Errors)
+		if !result.IsSuccess() {
+			t.Fatalf("Complete workflow failed: %v", result.GetError())
 		}
 
-		t.Logf("Complete workflow executed: %d operations in %v", len(result.Operations), result.Duration)
+		t.Logf("Complete workflow executed: %d operations in %v", len(result.GetOperations()), result.Duration)
 
 		// Verify some key results
 		operations := fullBatch.Operations()
@@ -198,7 +200,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 		// Check operation types
 		operationTypes := make(map[string]int)
 		for _, op := range operations {
-			operationTypes[op.Describe().Type]++
+			operationTypes[op.(synthfs.Operation).Describe().Type]++
 		}
 
 		expectedTypes := []string{"create_directory", "copy", "create_symlink", "move", "create_archive"}
@@ -267,13 +269,13 @@ func TestBatchCompleteAPI(t *testing.T) {
 			t.Fatalf("Execute failed: %v", err)
 		}
 
-		if !result.Success {
-			t.Fatalf("Execution failed: %v", result.Errors)
+		if !result.IsSuccess() {
+			t.Fatalf("Execution failed: %v", result.GetError())
 		}
 
 		// Inspect execution results (like Python example)
-		t.Logf("Execution Result: Success=%v, Duration=%v", result.Success, result.Duration)
-		for i, opResult := range result.Operations {
+		t.Logf("Execution Result: Success=%v, Duration=%v", result.IsSuccess(), result.Duration)
+		for i, opResult := range result.GetOperations() {
 			t.Logf("  Operation %d: %s -> %s (Duration: %v)",
 				i+1,
 				opResult.Operation.ID(),

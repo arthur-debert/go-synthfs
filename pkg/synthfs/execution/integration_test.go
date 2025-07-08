@@ -45,7 +45,7 @@ func (ow *operationWrapper) ID() core.OperationID {
 
 func (ow *operationWrapper) Describe() core.OperationDesc {
 	if op, ok := ow.op.(interface{ Describe() core.OperationDesc }); ok {
-		return op.Describe()
+		return op.(synthfs.Operation).Describe()
 	}
 	return core.OperationDesc{}
 }

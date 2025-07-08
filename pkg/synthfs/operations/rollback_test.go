@@ -93,7 +93,7 @@ func TestOperationRollback(t *testing.T) {
 		op := operations.NewCopyOperation(core.OperationID("test-op"), "test/source.txt")
 		op.SetPaths("test/source.txt", "test/destination.txt")
 		// Also set destination in description for consistency
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		desc.Details["destination"] = "test/destination.txt"
 
 		// Execute copy
@@ -136,7 +136,7 @@ func TestOperationRollback(t *testing.T) {
 		op := operations.NewMoveOperation(core.OperationID("test-op"), "test/movesource.txt")
 		op.SetPaths("test/movesource.txt", "test/movedest.txt")
 		// Also set destination in description for consistency
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		desc.Details["destination"] = "test/movedest.txt"
 
 		// Execute move
@@ -189,7 +189,7 @@ func TestOperationRollback(t *testing.T) {
 		// Setup: create a symlink first
 		op := operations.NewCreateSymlinkOperation(core.OperationID("test-op"), "test/link")
 		// Set target in description
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		desc.Details["target"] = "../target"
 
 		// Note: MockFilesystem doesn't support symlinks, so Execute will fail

@@ -11,7 +11,9 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 	// Phase I, Milestone 2: Test duplicate path detection in batch operations
 
 	t.Run("Detect duplicate file creation", func(t *testing.T) {
-		batch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(synthfs.NewTestFileSystem())
 		_, err := batch.CreateFile("test.txt", []byte("content1"))
 		if err != nil {
 			t.Fatalf("First CreateFile failed: %v", err)
@@ -30,7 +32,9 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 	})
 
 	t.Run("Detect duplicate directory creation", func(t *testing.T) {
-		batch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(synthfs.NewTestFileSystem())
 		_, err := batch.CreateDir("testdir")
 		if err != nil {
 			t.Fatalf("First CreateDir failed: %v", err)
@@ -54,7 +58,9 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 			t.Fatalf("Failed to create test file: %v", err)
 		}
 
-		batch := synthfs.NewBatch().WithFileSystem(testFS)
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		_, err = batch.Delete("somefile.txt")
 		if err != nil {
 			t.Fatalf("First Delete should succeed validation: %v", err)
@@ -82,7 +88,9 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 			t.Fatalf("Failed to create source2: %v", err)
 		}
 
-		batch := synthfs.NewBatch().WithFileSystem(testFS)
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		_, err = batch.Copy("source1.txt", "destination.txt")
 		if err != nil {
 			t.Fatalf("First Copy failed: %v", err)
@@ -110,7 +118,9 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 			t.Fatalf("Failed to create old2: %v", err)
 		}
 
-		batch := synthfs.NewBatch().WithFileSystem(testFS)
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		_, err = batch.Move("old1.txt", "new.txt")
 		if err != nil {
 			t.Fatalf("First Move failed: %v", err)
@@ -138,7 +148,9 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 			t.Fatalf("Failed to create target2: %v", err)
 		}
 
-		batch := synthfs.NewBatch().WithFileSystem(testFS)
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		_, err = batch.CreateSymlink("target1.txt", "link.txt")
 		if err != nil {
 			t.Fatalf("First CreateSymlink failed: %v", err)
@@ -166,7 +178,9 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 			t.Fatalf("Failed to create src2: %v", err)
 		}
 
-		batch := synthfs.NewBatch().WithFileSystem(testFS)
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		_, err = batch.CreateArchive("backup.tar.gz", synthfs.ArchiveFormatTarGz, "src1.txt")
 		if err != nil {
 			t.Fatalf("First CreateArchive failed: %v", err)
@@ -189,7 +203,9 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 			t.Fatalf("Failed to create test file: %v", err)
 		}
 
-		batch := synthfs.NewBatch().WithFileSystem(testFS)
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		// This sequence should be allowed by a smart tracker.
 		// Delete the original file.
 		_, err = batch.Delete("file.txt")
@@ -227,7 +243,9 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		batch := synthfs.NewBatch().WithFileSystem(testFS)
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 		// A mix of valid operations that should all be added successfully.
 		// The `add` function handles adding to the operations slice.

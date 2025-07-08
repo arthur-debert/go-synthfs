@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
@@ -26,13 +25,11 @@ func NewCreateDirectoryOperation(id core.OperationID, path string) *CreateDirect
 func (op *CreateDirectoryOperation) Prerequisites() []core.Prerequisite {
 	var prereqs []core.Prerequisite
 	
-	// Need parent directory to exist
-	if filepath.Dir(op.description.Path) != "." && filepath.Dir(op.description.Path) != "/" {
-		prereqs = append(prereqs, core.NewParentDirPrerequisite(op.description.Path))
-	}
+	// Always need parent directory to exist (even if it's current directory)
+	prereqs = append(prereqs, core.NewParentDirPrerequisite(op.description.Path))
 	
-	// Note: Directories can be created even if they already exist (idempotent)
-	// so we don't need NoConflictPrerequisite
+	// Need no conflict with existing files (even though mkdir is idempotent for directories)
+	prereqs = append(prereqs, core.NewNoConflictPrerequisite(op.description.Path))
 	
 	return prereqs
 }

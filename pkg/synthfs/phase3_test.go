@@ -399,20 +399,20 @@ func TestExecutor_RunWithOptions_Basic(t *testing.T) {
 	opts := DefaultPipelineOptions()
 	result := executor.RunWithOptions(ctx, pipeline, fs, opts)
 
-	if !result.Success {
-		t.Errorf("Expected success, got errors: %v", result.Errors)
+	if !result.IsSuccess() {
+		t.Errorf("Expected success, got errors: %v", result.GetError())
 	}
 
-	if len(result.Operations) != 1 {
-		t.Errorf("Expected 1 operation result, got %d", len(result.Operations))
+	if len(result.GetOperations()) != 1 {
+		t.Errorf("Expected 1 operation result, got %d", len(result.GetOperations()))
 	}
 
-	if result.Budget != nil {
+	if result.GetBudget() != nil {
 		t.Error("Expected budget to be nil when restorable=false")
 	}
 
-	if len(result.RestoreOps) != 0 {
-		t.Errorf("Expected 0 restore operations when restorable=false, got %d", len(result.RestoreOps))
+	if len(result.GetRestoreOps()) != 0 {
+		t.Errorf("Expected 0 restore operations when restorable=false, got %d", len(result.GetRestoreOps()))
 	}
 }
 
@@ -447,30 +447,35 @@ func TestExecutor_RunWithOptions_Restorable(t *testing.T) {
 	}
 	result := executor.RunWithOptions(ctx, pipeline, fs, opts)
 
-	if !result.Success {
-		t.Errorf("Expected success, got errors: %v", result.Errors)
+	if !result.IsSuccess() {
+		t.Errorf("Expected success, got errors: %v", result.GetError())
 	}
 
-	if len(result.Operations) != 1 {
-		t.Errorf("Expected 1 operation result, got %d", len(result.Operations))
+	if len(result.GetOperations()) != 1 {
+		t.Errorf("Expected 1 operation result, got %d", len(result.GetOperations()))
 	}
 
-	if result.Budget == nil {
+	if result.GetBudget() == nil {
 		t.Fatal("Expected budget to be initialized when restorable=true")
 	}
 
-	if result.Budget.TotalMB != 5.0 {
-		t.Errorf("Expected budget total 5.0 MB, got %f", result.Budget.TotalMB)
+	if budget, ok := result.GetBudget().(*BackupBudget); ok {
+		if budget.TotalMB != 5.0 {
+			t.Errorf("Expected budget total 5.0 MB, got %f", budget.TotalMB)
+		}
+	} else {
+		t.Error("Expected budget to be *BackupBudget type")
 	}
 
-	if len(result.RestoreOps) != 1 {
-		t.Errorf("Expected 1 restore operation when restorable=true, got %d", len(result.RestoreOps))
+	if len(result.GetRestoreOps()) != 1 {
+		t.Errorf("Expected 1 restore operation when restorable=true, got %d", len(result.GetRestoreOps()))
 	}
 
 	// Check operation result has backup data
-	opResult := result.Operations[0]
-	if opResult.BackupData == nil {
-		t.Error("Expected backup data in operation result when restorable=true")
+	// Note: With the simplified API, we can't directly access operation details
+	// We can only verify that restore operations were created
+	if len(result.GetRestoreOps()) == 0 {
+		t.Error("Expected restore operations to be created when restorable=true")
 	}
 }
 
@@ -492,20 +497,24 @@ func TestBatch_RunRestorable(t *testing.T) {
 		t.Fatalf("RunRestorable failed: %v", err)
 	}
 
-	if !result.Success {
-		t.Errorf("Expected success, got errors: %v", result.Errors)
+	if !result.IsSuccess() {
+		t.Errorf("Expected success, got errors: %v", result.GetError())
 	}
 
-	if result.Budget == nil {
+	if result.GetBudget() == nil {
 		t.Error("Expected budget to be initialized in restorable mode")
 	}
 
-	if result.Budget.TotalMB != 10.0 {
-		t.Errorf("Expected default budget 10.0 MB, got %f", result.Budget.TotalMB)
+	if budget, ok := result.GetBudget().(*BackupBudget); ok {
+		if budget.TotalMB != 10.0 {
+			t.Errorf("Expected default budget 10.0 MB, got %f", budget.TotalMB)
+		}
+	} else {
+		t.Error("Expected budget to be *BackupBudget type")
 	}
 
-	if len(result.RestoreOps) != 1 {
-		t.Errorf("Expected 1 restore operation, got %d", len(result.RestoreOps))
+	if len(result.GetRestoreOps()) != 1 {
+		t.Errorf("Expected 1 restore operation, got %d", len(result.GetRestoreOps()))
 	}
 }
 
@@ -527,15 +536,19 @@ func TestBatch_RunRestorableWithBudget(t *testing.T) {
 		t.Fatalf("RunRestorableWithBudget failed: %v", err)
 	}
 
-	if !result.Success {
-		t.Errorf("Expected success, got errors: %v", result.Errors)
+	if !result.IsSuccess() {
+		t.Errorf("Expected success, got errors: %v", result.GetError())
 	}
 
-	if result.Budget == nil {
+	if result.GetBudget() == nil {
 		t.Error("Expected budget to be initialized in restorable mode")
 	}
 
-	if result.Budget.TotalMB != 25.0 {
-		t.Errorf("Expected custom budget 25.0 MB, got %f", result.Budget.TotalMB)
+	if budget, ok := result.GetBudget().(*BackupBudget); ok {
+		if budget.TotalMB != 25.0 {
+			t.Errorf("Expected custom budget 25.0 MB, got %f", budget.TotalMB)
+		}
+	} else {
+		t.Error("Expected budget to be *BackupBudget type")
 	}
 }

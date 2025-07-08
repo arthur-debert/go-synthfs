@@ -11,7 +11,9 @@ import (
 
 func TestBatchRealOperations(t *testing.T) {
 	testFS := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch().WithFileSystem(testFS)
+	registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 	t.Run("Real file and directory creation", func(t *testing.T) {
 		// Create a directory
@@ -33,8 +35,8 @@ func TestBatchRealOperations(t *testing.T) {
 			t.Fatalf("Execute failed: %v", err)
 		}
 
-		if !result.Success {
-			t.Fatalf("Batch execution failed: %v", result.Errors)
+		if !result.IsSuccess() {
+			t.Fatalf("Batch execution failed: %v", result.GetError())
 		}
 
 		// Verify the directory was created
@@ -82,8 +84,8 @@ func TestBatchRealOperations(t *testing.T) {
 			t.Fatalf("Initial execute failed: %v", err)
 		}
 
-		if !result.Success {
-			t.Fatalf("Initial execution failed: %v", result.Errors)
+		if !result.IsSuccess() {
+			t.Fatalf("Initial execution failed: %v", result.GetError())
 		}
 
 		// Now create a new batch for the copy operation with the same filesystem
@@ -101,14 +103,14 @@ func TestBatchRealOperations(t *testing.T) {
 			t.Fatalf("Copy execute failed: %v", err)
 		}
 
-		if !result.Success {
-			t.Fatalf("Copy execution failed: %v", result.Errors)
+		if !result.IsSuccess() {
+			t.Fatalf("Copy execution failed: %v", result.GetError())
 		}
 
 		t.Log("Copy test implemented - verifying operations were created successfully")
 		t.Logf("Operations: %d", len(copyBatch.Operations()))
 		for i, op := range copyBatch.Operations() {
-			desc := op.Describe()
+			desc := op.(synthfs.Operation).Describe()
 			t.Logf("Operation %d: %s %s", i+1, desc.Type, desc.Path)
 		}
 	})
@@ -130,8 +132,8 @@ func TestBatchRealOperations(t *testing.T) {
 			t.Fatalf("Initial execute failed: %v", err)
 		}
 
-		if !result.Success {
-			t.Fatalf("Initial execution failed: %v", result.Errors)
+		if !result.IsSuccess() {
+			t.Fatalf("Initial execution failed: %v", result.GetError())
 		}
 
 		// Now create a new batch for the move operation with the same filesystem
@@ -149,12 +151,12 @@ func TestBatchRealOperations(t *testing.T) {
 			t.Fatalf("Move execute failed: %v", err)
 		}
 
-		if !result.Success {
-			t.Fatalf("Move execution failed: %v", result.Errors)
+		if !result.IsSuccess() {
+			t.Fatalf("Move execution failed: %v", result.GetError())
 		}
 
 		t.Log("Move test implemented - operations executed successfully")
-		t.Logf("Operations executed: %d", len(result.Operations))
+		t.Logf("Operations executed: %d", len(result.GetOperations()))
 	})
 
 	t.Run("Real symlink operation", func(t *testing.T) {
@@ -173,7 +175,9 @@ func TestBatchRealOperations(t *testing.T) {
 
 		// Create symlink (this will use our new CreateSymlink operation)
 		// For now, let's test that the batch can handle this
-		batch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(synthfs.NewTestFileSystem())
 
 		// Create both target and symlink
 		_, err = batch.CreateFile("target.txt", targetContent)
@@ -214,11 +218,11 @@ func TestBatchRealOperations(t *testing.T) {
 			t.Fatalf("Execute failed: %v", err)
 		}
 
-		if !result.Success {
+		if !result.IsSuccess() {
 			// A "not found" error during execution is also a form of success for delete.
 			// But there should be no other errors.
 			isNotExistError := false
-			for _, opRes := range result.Operations {
+			for _, opRes := range result.GetOperations() {
 				if opRes.Error != nil {
 					if strings.Contains(opRes.Error.Error(), "no such file or directory") {
 						isNotExistError = true
@@ -227,8 +231,8 @@ func TestBatchRealOperations(t *testing.T) {
 					}
 				}
 			}
-			if !isNotExistError && len(result.Errors) > 0 {
-				t.Fatalf("Delete execution failed: %v", result.Errors)
+			if !isNotExistError && len(result.GetError()) > 0 {
+				t.Fatalf("Delete execution failed: %v", result.GetError())
 			}
 		}
 
@@ -254,8 +258,8 @@ func TestBatchRealOperations(t *testing.T) {
 			t.Fatalf("Execute failed: %v", err)
 		}
 
-		if !result.Success {
-			t.Fatalf("Execution failed: %v", result.Errors)
+		if !result.IsSuccess() {
+			t.Fatalf("Execution failed: %v", result.GetError())
 		}
 
 		// Test rollback
@@ -270,7 +274,9 @@ func TestBatchRealOperations(t *testing.T) {
 
 func TestBatchValidation(t *testing.T) {
 	t.Run("Validation errors are caught", func(t *testing.T) {
-		batch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(synthfs.NewTestFileSystem())
 
 		// Try to create file with empty path (should fail validation)
 		_, err := batch.CreateFile("", []byte("content"))
@@ -286,7 +292,9 @@ func TestBatchValidation(t *testing.T) {
 	})
 
 	t.Run("Copy validation", func(t *testing.T) {
-		batch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(synthfs.NewTestFileSystem())
 
 		// Phase I, Milestone 1: Copy operations with non-existent source now fail validation
 		// (source existence is checked at validation time)
@@ -307,7 +315,9 @@ func TestBatchValidation(t *testing.T) {
 	})
 
 	t.Run("Move validation", func(t *testing.T) {
-		batch := synthfs.NewBatch().WithFileSystem(synthfs.NewTestFileSystem())
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(synthfs.NewTestFileSystem())
 
 		// Phase I, Milestone 1: Move operations with non-existent source now fail validation
 		// (source existence is checked at validation time)
@@ -329,7 +339,9 @@ func TestBatchValidation(t *testing.T) {
 
 	t.Run("Delete validation", func(t *testing.T) {
 		testFS := synthfs.NewTestFileSystem()
-		batch := synthfs.NewBatch().WithFileSystem(testFS)
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 		// With Phase II state tracking, deleting a non-existent file should fail validation.
 		_, err := batch.Delete("does-not-exist.txt")

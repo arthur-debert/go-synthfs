@@ -46,7 +46,7 @@ func (p *ParentDirPrerequisite) Path() string {
 
 func (p *ParentDirPrerequisite) Validate(fsys interface{}) error {
 	parentPath := p.Path()
-	if parentPath == "" {
+	if parentPath == "" || parentPath == "/" || parentPath == "." {
 		return nil // Root or current directory - no parent needed
 	}
 

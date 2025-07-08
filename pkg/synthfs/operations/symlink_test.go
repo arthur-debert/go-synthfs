@@ -42,7 +42,7 @@ func TestSymlinkOperations(t *testing.T) {
 		op.SetItem(symlinkItem)
 		
 		// Also set target in description
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		desc.Details["target"] = "../target"
 
 		err := op.Validate(ctx, fs)
@@ -64,7 +64,7 @@ func TestSymlinkOperations(t *testing.T) {
 		op.SetItem(symlinkItem)
 		
 		// Also set target in description
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		desc.Details["target"] = "../target"
 
 		// MockFilesystem doesn't support symlinks
@@ -92,7 +92,7 @@ func TestSymlinkOperations(t *testing.T) {
 		op.SetItem(symlinkItem)
 		
 		// Also set target in description
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		desc.Details["target"] = "../target"
 
 		reverseOps, backupData, err := op.ReverseOps(ctx, fs, nil)

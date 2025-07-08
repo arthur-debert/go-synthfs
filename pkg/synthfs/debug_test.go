@@ -14,7 +14,9 @@ func TestDebugCopyOperation(t *testing.T) {
 		t.Fatalf("Failed to create source: %v", err)
 	}
 	
-	batch := synthfs.NewBatch().WithFileSystem(testFS)
+	registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 	
 	// Try to copy
 	op, err := batch.Copy("source.txt", "dest.txt")
@@ -24,5 +26,5 @@ func TestDebugCopyOperation(t *testing.T) {
 	
 	t.Logf("Operation created: %v", op)
 	t.Logf("Operation ID: %v", op.ID())
-	t.Logf("Operation description: %v", op.Describe())
+	t.Logf("Operation description: %v", op.(synthfs.Operation).Describe())
 }

@@ -1,4 +1,4 @@
-package synthfs_test
+package synthfs
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ func TestBatchChecksumVerification(t *testing.T) {
 	// Phase I, Milestone 4: Test checksum verification at execution time
 
 	// t.Run("Copy operation succeeds when source unchanged", func(t *testing.T) {
-	// 	testFS := synthfs.NewTestFileSystem()
+	// 	testFS := NewTestFileSystem()
 	//
 	// 	// Create source file
 	// 	sourceContent := []byte("Unchanged content for copy")
@@ -17,7 +17,8 @@ func TestBatchChecksumVerification(t *testing.T) {
 	// 		t.Fatalf("Failed to create source file: %v", err)
 	// 	}
 	//
-	// 	batch := synthfs.NewBatch().WithFileSystem(testFS)
+	// 	registry := GetDefaultRegistry()
+	// 	batch := NewBatch(testFS, registry).WithFileSystem(testFS)
 	//
 	// 	// Create copy operation (should compute checksum)
 	// 	op, err := batch.Copy("source.txt", "destination.txt")
@@ -37,8 +38,8 @@ func TestBatchChecksumVerification(t *testing.T) {
 	// 		t.Fatalf("Batch execution failed: %v", err)
 	// 	}
 	//
-	// 	if !result.Success {
-	// 		t.Fatalf("Batch execution was not successful: %v", result.Errors)
+	// 	if !result.IsSuccess() {
+	// 		t.Fatalf("Batch execution was not successful: %v", result.GetError())
 	// 	}
 	//
 	// 	// Verify destination file was created
@@ -48,7 +49,7 @@ func TestBatchChecksumVerification(t *testing.T) {
 	// })
 	//
 	// t.Run("Copy operation fails when source file is modified", func(t *testing.T) {
-	// 	testFS := synthfs.NewTestFileSystem()
+	// 	testFS := NewTestFileSystem()
 	//
 	// 	// Create source file
 	// 	originalContent := []byte("Original content")
@@ -57,7 +58,8 @@ func TestBatchChecksumVerification(t *testing.T) {
 	// 		t.Fatalf("Failed to create source file: %v", err)
 	// 	}
 	//
-	// 	batch := synthfs.NewBatch().WithFileSystem(testFS)
+	// 	registry := GetDefaultRegistry()
+	// 	batch := NewBatch(testFS, registry).WithFileSystem(testFS)
 	//
 	// 	// Create copy operation (computes checksum of original content)
 	// 	_, err = batch.Copy("source.txt", "destination.txt")
@@ -78,13 +80,13 @@ func TestBatchChecksumVerification(t *testing.T) {
 	// 		t.Fatalf("Batch execution failed: %v", err)
 	// 	}
 	//
-	// 	if result.Success {
+	// 	if result.IsSuccess() {
 	// 		t.Error("Expected batch execution to fail due to checksum verification")
 	// 	}
 	//
 	// 	// Check that error mentions checksum verification
 	// 	found := false
-	// 	for _, opResult := range result.Operations {
+	// 	for _, opResult := range result.GetOperations() {
 	// 		if opResult.Error != nil && strings.Contains(opResult.Error.Error(), "checksum verification") {
 	// 			found = true
 	// 			// Check for the new, more accurate error message
@@ -100,7 +102,7 @@ func TestBatchChecksumVerification(t *testing.T) {
 	// })
 	//
 	// t.Run("Move operation fails when source file modified", func(t *testing.T) {
-	// 	testFS := synthfs.NewTestFileSystem()
+	// 	testFS := NewTestFileSystem()
 	//
 	// 	// Create source file
 	// 	originalContent := []byte("Original file for move")
@@ -109,7 +111,8 @@ func TestBatchChecksumVerification(t *testing.T) {
 	// 		t.Fatalf("Failed to create source file: %v", err)
 	// 	}
 	//
-	// 	batch := synthfs.NewBatch().WithFileSystem(testFS)
+	// 	registry := GetDefaultRegistry()
+	// 	batch := NewBatch(testFS, registry).WithFileSystem(testFS)
 	//
 	// 	// Create move operation (computes checksum)
 	// 	_, err = batch.Move("old.txt", "new.txt")
@@ -130,13 +133,13 @@ func TestBatchChecksumVerification(t *testing.T) {
 	// 		t.Fatalf("Batch execution failed: %v", err)
 	// 	}
 	//
-	// 	if result.Success {
+	// 	if result.IsSuccess() {
 	// 		t.Error("Expected batch execution to fail due to checksum verification")
 	// 	}
 	//
 	// 	// Check that error mentions checksum verification
 	// 	found := false
-	// 	for _, opResult := range result.Operations {
+	// 	for _, opResult := range result.GetOperations() {
 	// 		if opResult.Error != nil && strings.Contains(opResult.Error.Error(), "checksum verification") {
 	// 			found = true
 	// 			break
@@ -148,7 +151,7 @@ func TestBatchChecksumVerification(t *testing.T) {
 	// })
 	//
 	// t.Run("Archive operation fails when source files modified", func(t *testing.T) {
-	// 	testFS := synthfs.NewTestFileSystem()
+	// 	testFS := NewTestFileSystem()
 	//
 	// 	// Create multiple source files
 	// 	files := map[string][]byte{
@@ -164,7 +167,8 @@ func TestBatchChecksumVerification(t *testing.T) {
 	// 		}
 	// 	}
 	//
-	// 	batch := synthfs.NewBatch().WithFileSystem(testFS)
+	// 	registry := GetDefaultRegistry()
+	// 	batch := NewBatch(testFS, registry).WithFileSystem(testFS)
 	//
 	// 	// Create archive operation (computes checksums for all sources)
 	// 	_, err := batch.CreateArchive("backup.tar.gz", targets.ArchiveFormatTarGz, "file1.txt", "file2.txt", "file3.txt")
@@ -184,13 +188,13 @@ func TestBatchChecksumVerification(t *testing.T) {
 	// 		t.Fatalf("Batch execution failed: %v", err)
 	// 	}
 	//
-	// 	if result.Success {
+	// 	if result.IsSuccess() {
 	// 		t.Error("Expected batch execution to fail due to checksum verification")
 	// 	}
 	//
 	// 	// Check that error mentions checksum verification for file2.txt
 	// 	found := false
-	// 	for _, opResult := range result.Operations {
+	// 	for _, opResult := range result.GetOperations() {
 	// 		if opResult.Error != nil && strings.Contains(opResult.Error.Error(), "checksum verification") {
 	// 			found = true
 	// 			if !strings.Contains(opResult.Error.Error(), "file2.txt") {
@@ -205,8 +209,9 @@ func TestBatchChecksumVerification(t *testing.T) {
 	// })
 	//
 	// t.Run("Operations without checksums execute normally", func(t *testing.T) {
-	// 	testFS := synthfs.NewTestFileSystem()
-	// 	batch := synthfs.NewBatch().WithFileSystem(testFS)
+	// 	testFS := NewTestFileSystem()
+	// 	registry := GetDefaultRegistry()
+	// 	batch := NewBatch(testFS, registry).WithFileSystem(testFS)
 	//
 	// 	// Create operations that don't use checksums
 	// 	_, err := batch.CreateDir("testdir")
@@ -238,7 +243,7 @@ func TestBatchChecksumVerification(t *testing.T) {
 	// 	}
 	//
 	// 	// Some operations might fail (like delete of nonexistent file), but there should be no checksum errors
-	// 	for _, opResult := range result.Operations {
+	// 	for _, opResult := range result.GetOperations() {
 	// 		if opResult.Error != nil && strings.Contains(opResult.Error.Error(), "checksum verification") {
 	// 			t.Errorf("Unexpected checksum verification error for operation that shouldn't have checksums: %v", opResult.Error)
 	// 		}

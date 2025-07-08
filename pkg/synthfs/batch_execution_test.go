@@ -11,7 +11,9 @@ func TestBatchExecution(t *testing.T) {
 	// Use TestFileSystem for controlled testing
 	testFS := synthfs.NewTestFileSystem()
 
-	batch := synthfs.NewBatch().
+	registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).
 		WithFileSystem(testFS).
 		WithContext(context.Background())
 
@@ -39,18 +41,18 @@ func TestBatchExecution(t *testing.T) {
 
 		// Check if execution was successful
 		// Note: Since we're using stub operations, success depends on the current implementation
-		if !result.Success {
+		if !result.IsSuccess() {
 			t.Logf("Batch execution not successful (expected with stub operations)")
-			t.Logf("Errors: %v", result.Errors)
+			t.Logf("Errors: %v", result.GetError())
 		}
 
 		// Check that operations were processed
-		if len(result.Operations) == 0 {
+		if len(result.GetOperations()) == 0 {
 			t.Error("Expected operations in result, but got none")
 		}
 
-		t.Logf("Executed %d operations in %v", len(result.Operations), result.Duration)
-		for i, opResult := range result.Operations {
+		t.Logf("Executed %d operations in %v", len(result.GetOperations()), result.Duration)
+		for i, opResult := range result.GetOperations() {
 			t.Logf("Operation %d: %s %s -> %s",
 				i+1,
 				opResult.Operation.Describe().Type,
@@ -81,8 +83,8 @@ func TestBatchExecution(t *testing.T) {
 		}
 
 		// Log the execution details
-		t.Logf("Nested execution: %d operations in %v", len(result.Operations), result.Duration)
-		for i, opResult := range result.Operations {
+		t.Logf("Nested execution: %d operations in %v", len(result.GetOperations()), result.Duration)
+		for i, opResult := range result.GetOperations() {
 			t.Logf("Operation %d: %s %s -> %s",
 				i+1,
 				opResult.Operation.Describe().Type,
@@ -99,19 +101,21 @@ func TestBatchExecution(t *testing.T) {
 			t.Fatalf("Empty batch execution failed: %v", err)
 		}
 
-		if !result.Success {
+		if !result.IsSuccess() {
 			t.Error("Empty batch should succeed")
 		}
 
-		if len(result.Operations) != 0 {
-			t.Errorf("Expected 0 operations for empty batch, got %d", len(result.Operations))
+		if len(result.GetOperations()) != 0 {
+			t.Errorf("Expected 0 operations for empty batch, got %d", len(result.GetOperations()))
 		}
 	})
 }
 
 func TestBatchRollback(t *testing.T) {
 	testFS := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch().WithFileSystem(testFS)
+	registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 	// Add some operations
 	_, err := batch.CreateDir("rollback-test")
@@ -141,7 +145,9 @@ func TestBatchRollback(t *testing.T) {
 
 func TestBatchOperationCounts(t *testing.T) {
 	testFS := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch().WithFileSystem(testFS)
+	registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 	// Pre-create files for Copy, Move, Delete to be valid
 	if err := testFS.WriteFile("to-copy.txt", []byte("c"), 0644); err != nil {
@@ -211,5 +217,5 @@ func TestBatchOperationCounts(t *testing.T) {
 		t.Fatalf("Final execution failed: %v", err)
 	}
 
-	t.Logf("Successfully executed batch with %d operations", len(result.Operations))
+	t.Logf("Successfully executed batch with %d operations", len(result.GetOperations()))
 }

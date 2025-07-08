@@ -40,7 +40,7 @@ func TestArchiveOperations(t *testing.T) {
 
 		op := operations.NewCreateArchiveOperation(core.OperationID("test-op"), "archive.zip")
 		// Set archive format and sources in description
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		desc.Details["format"] = "zip"
 		desc.Details["sources"] = []string{"file1.txt", "file2.txt"}
 
@@ -134,7 +134,7 @@ func TestArchiveOperations(t *testing.T) {
 
 		op := operations.NewUnarchiveOperation(core.OperationID("test-op"), "archive.zip")
 		// Set extract_path in description
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		desc.Details["extract_path"] = "output"
 
 		if err := op.Execute(ctx, fs); err != nil {

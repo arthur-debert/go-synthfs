@@ -12,7 +12,9 @@ func TestBatchCopyValidation(t *testing.T) {
 	t.Run("Copy non-existent source file", func(t *testing.T) {
 		// Create empty test filesystem
 		fs := filesystem.NewTestFileSystem()
-		batch := synthfs.NewBatch().WithFileSystem(fs)
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(fs)
 		
 		// Try to copy non-existent file
 		_, err := batch.Copy("nonexistent.txt", "dest.txt")
@@ -34,7 +36,9 @@ func TestBatchCopyValidation(t *testing.T) {
 			t.Fatalf("Failed to create source file: %v", err)
 		}
 		
-		batch := synthfs.NewBatch().WithFileSystem(fs)
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(fs)
 		
 		// Copy should succeed during validation
 		op, err := batch.Copy("source.txt", "dest.txt")
@@ -52,7 +56,9 @@ func TestBatchMoveValidation(t *testing.T) {
 	t.Run("Move non-existent source file", func(t *testing.T) {
 		// Create empty test filesystem
 		fs := filesystem.NewTestFileSystem()
-		batch := synthfs.NewBatch().WithFileSystem(fs)
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(fs)
 		
 		// Try to move non-existent file
 		_, err := batch.Move("nonexistent.txt", "dest.txt")
@@ -74,7 +80,9 @@ func TestBatchMoveValidation(t *testing.T) {
 			t.Fatalf("Failed to create source file: %v", err)
 		}
 		
-		batch := synthfs.NewBatch().WithFileSystem(fs)
+		registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(fs)
 		
 		// Move should succeed during validation
 		op, err := batch.Move("source.txt", "dest.txt")

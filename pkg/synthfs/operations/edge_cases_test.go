@@ -196,7 +196,7 @@ func TestCopyMoveOperations_EdgeCases(t *testing.T) {
 		op := operations.NewCopyOperation(core.OperationID("test-op"), "source.txt")
 		op.SetPaths("source.txt", "targetdir/source.txt")
 		// Also set destination in description for consistency
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		desc.Details["destination"] = "targetdir/source.txt"
 
 		err := op.Execute(ctx, fs)
@@ -234,7 +234,7 @@ func TestCopyMoveOperations_EdgeCases(t *testing.T) {
 		op := operations.NewMoveOperation(core.OperationID("test-op"), "dir1/file.txt")
 		op.SetPaths("dir1/file.txt", "dir2/file.txt")
 		// Also set destination in description for consistency
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		desc.Details["destination"] = "dir2/file.txt"
 
 		err := op.Execute(ctx, fs)
@@ -264,7 +264,7 @@ func TestCopyMoveOperations_EdgeCases(t *testing.T) {
 		op := operations.NewCopyOperation(core.OperationID("test-op"), "sourcedir")
 		op.SetPaths("sourcedir", "destdir")
 		// Also set destination in description for consistency
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		desc.Details["destination"] = "destdir"
 
 		// Copy of directories is not yet implemented

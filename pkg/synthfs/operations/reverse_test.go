@@ -131,7 +131,7 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 				continue
 			}
 			
-			path := op.Describe().Path
+			path := op.(synthfs.Operation).Describe().Path
 			expectedType, found := expectedRevOps[path]
 			if !found {
 				t.Errorf("Unexpected reverse operation path: %s", path)
@@ -140,8 +140,8 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 			
 			foundRevOps[path] = true
 			
-			if op.Describe().Type != expectedType {
-				t.Errorf("Reverse op type mismatch for %s. Expected %s, Got %s", path, expectedType, op.Describe().Type)
+			if op.(synthfs.Operation).Describe().Type != expectedType {
+				t.Errorf("Reverse op type mismatch for %s. Expected %s, Got %s", path, expectedType, op.(synthfs.Operation).Describe().Type)
 			}
 		}
 		
@@ -349,7 +349,7 @@ func TestReverseOperations_Files(t *testing.T) {
 		op := operations.NewCopyOperation(core.OperationID("test-copy"), "source.txt")
 		op.SetPaths("source.txt", "dest.txt")
 		// Also set destination in description for consistency
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		desc.Details["destination"] = "dest.txt"
 
 		reverseOps, backupData, err := op.ReverseOps(ctx, fs, nil)
@@ -381,7 +381,7 @@ func TestReverseOperations_Files(t *testing.T) {
 		op := operations.NewMoveOperation(core.OperationID("test-move"), "source.txt")
 		op.SetPaths("source.txt", "dest.txt")
 		// Also set destination in description for consistency
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		desc.Details["destination"] = "dest.txt"
 
 		reverseOps, backupData, err := op.ReverseOps(ctx, fs, nil)

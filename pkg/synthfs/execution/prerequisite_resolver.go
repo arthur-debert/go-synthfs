@@ -54,7 +54,7 @@ func (r *DefaultPrerequisiteResolver) resolveParentDir(prereq core.Prerequisite)
 	path := prereq.Path()
 	
 	// Skip if it's root or current directory
-	if path == "." || path == "/" {
+	if path == "" || path == "." || path == "/" {
 		return nil, nil
 	}
 	
