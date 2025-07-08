@@ -1,289 +1,127 @@
-THIS SHOULD BE A LINTER ERRORpackage batch_test
+package batch
 
 import (
+	"context"
 	"testing"
 
-	"github.com/arthur-debert/synthfs/pkg/synthfs/batch"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/registry"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
 func TestMigrationPath(t *testing.T) {
-	// Create test filesystem and registry
-	fs := filesystem.NewOSFileSystem(".")
-	reg := registry.NewRegistry()
+	// Create a mock filesystem and registry
+	mockFS := testutil.NewOperationsMockFS()
+	
+	// Create a simple registry for testing
+	registry := &mockRegistry{}
 
-	t.Run("UseSimpleBatch flag in RunWithOptions", func(t *testing.T) {
-		batch := batch.NewBatch(fs, reg)
-
-		// Add a file operation to a nested path
-		_, err := batch.CreateFile("deep/nested/file.txt", []byte("content"))
-		if err != nil {
-			t.Fatalf("Failed to create file operation: %v", err)
+	t.Run("Default uses old batch implementation", func(t *testing.T) {
+		// Default options should use the old batch implementation
+		defaultOpts := DefaultBatchOptions()
+		if defaultOpts.UseSimpleBatch {
+			t.Error("Default options should not use SimpleBatch for backward compatibility")
 		}
 
-		// Run with UseSimpleBatch enabled
-		opts := map[string]interface{}{
-			"use_simple_batch":      true,
-			"resolve_prerequisites": true,
-			"restorable":            false,
-			"max_backup_size_mb":    0,
-		}
-
-		result, err := batch.RunWithOptions(opts)
-		if err != nil {
-			t.Logf("Run failed (expected with missing prerequisites): %v", err)
-		}
-
-		if result == nil {
-			t.Error("Expected result to be returned even on failure")
-		}
-
-		// Verify that the batch implementation was called
-		// (This is mainly a smoke test - the detailed functionality is tested elsewhere)
-	})
-
-	t.Run("UseSimpleBatch false uses traditional behavior", func(t *testing.T) {
-		batch := batch.NewBatch(fs, reg)
-
-		// Add a file operation
-		_, err := batch.CreateFile("test/file.txt", []byte("content"))
-		if err != nil {
-			t.Fatalf("Failed to create file operation: %v", err)
-		}
-
-		// Run with UseSimpleBatch disabled (default)
-		opts := map[string]interface{}{
-			"use_simple_batch":      false,
-			"resolve_prerequisites": true,
-			"restorable":            false,
-			"max_backup_size_mb":    0,
-		}
-
-		result, err := batch.RunWithOptions(opts)
-		if err != nil {
-			t.Logf("Run failed (expected with missing prerequisites): %v", err)
-		}
-
-		if result == nil {
-			t.Error("Expected result to be returned even on failure")
+		batch := NewBatchWithOptions(mockFS, registry, defaultOpts)
+		
+		// Verify it's the old implementation by checking type
+		if _, ok := batch.(*SimpleBatchImpl); ok {
+			t.Error("Default options should create BatchImpl, not SimpleBatchImpl")
 		}
 	})
 
-	t.Run("RunWithSimpleBatch convenience method", func(t *testing.T) {
-		batch := batch.NewBatch(fs, reg)
-
-		// Add some operations
-		_, err := batch.CreateDir("test-dir")
-		if err != nil {
-			t.Fatalf("Failed to create directory operation: %v", err)
-		}
-
-		_, err = batch.CreateFile("test-dir/file.txt", []byte("content"))
-		if err != nil {
-			t.Fatalf("Failed to create file operation: %v", err)
-		}
-
-		// Use the convenience method
-		result, err := batch.RunWithSimpleBatch()
-		if err != nil {
-			t.Logf("RunWithSimpleBatch failed (expected with missing prerequisites): %v", err)
-		}
-
-		if result == nil {
-			t.Error("Expected result to be returned even on failure")
+	t.Run("UseSimpleBatch option enables new implementation", func(t *testing.T) {
+		// Options with UseSimpleBatch enabled should use SimpleBatch
+		opts := BatchOptions{UseSimpleBatch: true}
+		batch := NewBatchWithOptions(mockFS, registry, opts)
+		
+		// Verify it's the new implementation
+		if _, ok := batch.(*SimpleBatchImpl); !ok {
+			t.Error("UseSimpleBatch option should create SimpleBatchImpl")
 		}
 	})
 
-	t.Run("RunWithSimpleBatchAndBudget convenience method", func(t *testing.T) {
-		batch := batch.NewBatch(fs, reg)
-
-		// Add some operations
-		_, err := batch.CreateFile("test.txt", []byte("content"))
-		if err != nil {
-			t.Fatalf("Failed to create file operation: %v", err)
+	t.Run("Both implementations support WithOptions", func(t *testing.T) {
+		// Test old implementation
+		oldBatch := NewBatch(mockFS, registry)
+		oldBatch = oldBatch.WithOptions(BatchOptions{UseSimpleBatch: false})
+		if oldBatch == nil {
+			t.Error("Old batch WithOptions should not return nil")
 		}
 
-		// Use the convenience method with budget
-		result, err := batch.RunWithSimpleBatchAndBudget(20)
-		if err != nil {
-			t.Logf("RunWithSimpleBatchAndBudget failed (expected with missing prerequisites): %v", err)
-		}
-
-		if result == nil {
-			t.Error("Expected result to be returned even on failure")
+		// Test new implementation
+		newBatch := NewSimpleBatch(mockFS, registry)
+		newBatch = newBatch.WithOptions(BatchOptions{UseSimpleBatch: true})
+		if newBatch == nil {
+			t.Error("New batch WithOptions should not return nil")
 		}
 	})
 
-	t.Run("Default behavior unchanged", func(t *testing.T) {
-		batch := batch.NewBatch(fs, reg)
+	t.Run("Both implementations can create operations", func(t *testing.T) {
+		ctx := context.Background()
 
-		// Add some operations
-		_, err := batch.CreateDir("default-test")
+		// Test old implementation
+		oldBatch := NewBatch(mockFS, registry).WithContext(ctx)
+		_, err := oldBatch.CreateFile("test.txt", []byte("content"))
 		if err != nil {
-			t.Fatalf("Failed to create directory operation: %v", err)
+			t.Errorf("Old batch CreateFile failed: %v", err)
 		}
 
-		// Default Run() should not use SimpleBatch
-		result, err := batch.Run()
+		// Test new implementation
+		newBatch := NewSimpleBatch(mockFS, registry).WithContext(ctx)
+		_, err = newBatch.CreateFile("test2.txt", []byte("content"))
 		if err != nil {
-			t.Logf("Default Run failed (expected with missing prerequisites): %v", err)
+			t.Errorf("New batch CreateFile failed: %v", err)
 		}
-
-		if result == nil {
-			t.Error("Expected result to be returned even on failure")
-		}
-
-		// The default behavior should remain unchanged (backward compatibility)
-	})
-
-	t.Run("Migration preserves operation order", func(t *testing.T) {
-		batch := batch.NewBatch(fs, reg)
-
-		// Add operations in specific order
-		op1, err := batch.CreateDir("dir1")
-		if err != nil {
-			t.Fatalf("Failed to create dir1: %v", err)
-		}
-
-		op2, err := batch.CreateFile("file1.txt", []byte("content1"))
-		if err != nil {
-			t.Fatalf("Failed to create file1: %v", err)
-		}
-
-		op3, err := batch.CreateDir("dir2")
-		if err != nil {
-			t.Fatalf("Failed to create dir2: %v", err)
-		}
-
-		// Get operations before migration
-		opsBefore := batch.Operations()
-		if len(opsBefore) != 3 {
-			t.Errorf("Expected 3 operations, got %d", len(opsBefore))
-		}
-
-		// Test with SimpleBatch
-		opts := map[string]interface{}{
-			"use_simple_batch":      true,
-			"resolve_prerequisites": false, // Disable to avoid prerequisite resolution complexity
-			"restorable":            false,
-			"max_backup_size_mb":    0,
-		}
-
-		_, err = batch.RunWithOptions(opts)
-		if err != nil {
-			t.Logf("SimpleBatch run failed (may be expected): %v", err)
-		}
-
-		// Verify original batch operations are unchanged
-		opsAfter := batch.Operations()
-		if len(opsAfter) != len(opsBefore) {
-			t.Errorf("Operation count changed after migration: before=%d, after=%d", len(opsBefore), len(opsAfter))
-		}
-
-		// Verify IDs are the same
-		if len(opsAfter) >= 3 {
-			beforeIDs := make([]string, len(opsBefore))
-			afterIDs := make([]string, len(opsAfter))
-
-			for i, op := range opsBefore {
-				if idGetter, ok := op.(interface{ ID() interface{ String() string } }); ok {
-					beforeIDs[i] = idGetter.ID().String()
-				}
-			}
-
-			for i, op := range opsAfter {
-				if idGetter, ok := op.(interface{ ID() interface{ String() string } }); ok {
-					afterIDs[i] = idGetter.ID().String()
-				}
-			}
-
-			for i := 0; i < len(beforeIDs) && i < len(afterIDs); i++ {
-				if beforeIDs[i] != afterIDs[i] {
-					t.Errorf("Operation order changed: position %d before=%s, after=%s", i, beforeIDs[i], afterIDs[i])
-				}
-			}
-		}
-
-		// The test operations should have the right IDs
-		_ = op1
-		_ = op2
-		_ = op3
 	})
 }
 
-func TestBackwardCompatibility(t *testing.T) {
-	// Create test filesystem and registry
-	fs := filesystem.NewOSFileSystem(".")
-	reg := registry.NewRegistry()
+// mockRegistry is a simple registry for testing
+type mockRegistry struct{}
 
-	t.Run("Existing code continues to work", func(t *testing.T) {
-		// This test ensures that existing code that doesn't use UseSimpleBatch
-		// continues to work as before
+func (r *mockRegistry) CreateOperation(id core.OperationID, opType string, path string) (interface{}, error) {
+	return &mockOperation{
+		id:     id,
+		opType: opType,
+		path:   path,
+	}, nil
+}
 
-		batch := batch.NewBatch(fs, reg)
+func (r *mockRegistry) SetItemForOperation(op interface{}, item interface{}) error {
+	if mockOp, ok := op.(*mockOperation); ok {
+		mockOp.item = item
+	}
+	return nil
+}
 
-		// Add operations like existing code would
-		_, err := batch.CreateDir("legacy-test")
-		if err != nil {
-			t.Fatalf("CreateDir failed: %v", err)
-		}
+// mockOperation is a simple operation for testing
+type mockOperation struct {
+	id     core.OperationID
+	opType string
+	path   string
+	item   interface{}
+	details map[string]interface{}
+}
 
-		_, err = batch.CreateFile("legacy-test/file.txt", []byte("content"))
-		if err != nil {
-			t.Fatalf("CreateFile failed: %v", err)
-		}
+func (m *mockOperation) ID() core.OperationID {
+	return m.id
+}
 
-		// Run with traditional methods
-		result1, err1 := batch.Run()
-		if err1 != nil {
-			t.Logf("Run failed (may be expected): %v", err1)
-		}
-		if result1 == nil {
-			t.Error("Run should return a result")
-		}
+func (m *mockOperation) Describe() core.OperationDesc {
+	return core.OperationDesc{
+		Type:    m.opType,
+		Path:    m.path,
+		Details: m.details,
+	}
+}
 
-		// Test RunRestorable
-		result2, err2 := batch.RunRestorable()
-		if err2 != nil {
-			t.Logf("RunRestorable failed (may be expected): %v", err2)
-		}
-		if result2 == nil {
-			t.Error("RunRestorable should return a result")
-		}
+func (m *mockOperation) SetDescriptionDetail(key string, value interface{}) {
+	if m.details == nil {
+		m.details = make(map[string]interface{})
+	}
+	m.details[key] = value
+}
 
-		// Test RunWithPrerequisites
-		result3, err3 := batch.RunWithPrerequisites()
-		if err3 != nil {
-			t.Logf("RunWithPrerequisites failed (may be expected): %v", err3)
-		}
-		if result3 == nil {
-			t.Error("RunWithPrerequisites should return a result")
-		}
-	})
-
-	t.Run("Options format remains compatible", func(t *testing.T) {
-		batch := batch.NewBatch(fs, reg)
-
-		_, err := batch.CreateFile("compat-test.txt", []byte("content"))
-		if err != nil {
-			t.Fatalf("CreateFile failed: %v", err)
-		}
-
-		// Existing options format should still work
-		opts := map[string]interface{}{
-			"restorable":            true,
-			"max_backup_size_mb":    10,
-			"resolve_prerequisites": true,
-			// use_simple_batch not specified - should default to false
-		}
-
-		result, err := batch.RunWithOptions(opts)
-		if err != nil {
-			t.Logf("RunWithOptions failed (may be expected): %v", err)
-		}
-		if result == nil {
-			t.Error("RunWithOptions should return a result")
-		}
-	})
+func (m *mockOperation) Validate(ctx context.Context, fsys interface{}) error {
+	return nil
 }

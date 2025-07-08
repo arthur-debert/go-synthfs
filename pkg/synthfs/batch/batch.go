@@ -27,20 +27,17 @@ type BatchImpl struct {
 	logger     core.Logger
 }
 
-// BatchOptions provides configuration for batch creation
-type BatchOptions struct {
-	// Note: UseSimpleBatch option removed in Phase 7 - always uses prerequisite resolution
-}
+// Note: BatchOptions is now defined in options.go
 
 // NewBatch creates a new operation batch with prerequisite resolution (Phase 7).
 // This constructor uses prerequisite resolution instead of automatic parent directory creation
 // for better extensibility and cleaner separation of concerns.
 func NewBatch(fs interface{}, registry core.OperationFactory) Batch {
-	return NewBatchWithOptions(fs, registry, BatchOptions{})
+	return NewBatchWithOptions(fs, registry, nil)
 }
 
 // NewBatchWithOptions creates a new operation batch with specified options.
-func NewBatchWithOptions(fs interface{}, registry core.OperationFactory, opts BatchOptions) Batch {
+func NewBatchWithOptions(fs interface{}, registry core.OperationFactory, opts *BatchOptions) Batch {
 	return &BatchImpl{
 		operations: []interface{}{},
 		fs:         fs,

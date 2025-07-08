@@ -7,8 +7,6 @@ import (
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
-// Note: BatchOptions is now defined in options.go
-
 // Batch represents a collection of operations that can be validated and executed as a unit.
 type Batch interface {
 	// Operation management
@@ -36,6 +34,8 @@ type Batch interface {
 	RunWithOptions(opts interface{}) (interface{}, error)
 	RunRestorable() (interface{}, error)
 	RunRestorableWithBudget(maxBackupMB int) (interface{}, error)
+	RunWithPrerequisites() (interface{}, error)
+	RunWithPrerequisitesAndBudget(maxBackupMB int) (interface{}, error)
 }
 
 // Result represents the outcome of executing a batch of operations
@@ -46,5 +46,5 @@ type Result interface {
 	GetDuration() interface{}
 	GetError() error
 	GetBudget() interface{} // Budget information from execution (may be nil for non-restorable runs)
-	GetRollback() interface{} // Rollback function (func(context.Context) error)
+	GetRollback() interface{} // Rollback function
 }
