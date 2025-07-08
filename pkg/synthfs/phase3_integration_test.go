@@ -417,7 +417,8 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 		}
 
 		// 1. Delete the directory in a restorable batch
-		batchDelete := NewBatch().WithFileSystem(fs).WithContext(ctx)
+		registry := GetDefaultRegistry()
+		batchDelete := NewBatch(fs, registry).WithContext(ctx)
 		_, err := batchDelete.Delete(originalDir)
 		if err != nil {
 			t.Fatalf("Failed to add Delete op: %v", err)
@@ -427,8 +428,8 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 		if err != nil {
 			t.Fatalf("RunRestorableWithBudget for delete failed: %v", err)
 		}
-		if !resultDelete.Success {
-			t.Fatalf("Delete batch was not successful: %v", resultDelete.Errors)
+		if !resultDelete.IsSuccess() {
+			t.Fatalf("Delete batch was not successful: %v", resultDelete.GetError())
 		}
 
 		// Verify directory is gone
@@ -439,7 +440,7 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 		// Verify BackupData for the delete operation
 		var deleteOpResult OperationResult
 		foundDeleteOp := false
-		for _, opRes := range resultDelete.Operations {
+		for _, opRes := range resultDelete.GetOperations() {
 			if opRes.Operation.Describe().Type == "delete" && opRes.Operation.Describe().Path == originalDir {
 				deleteOpResult = opRes
 				foundDeleteOp = true
@@ -645,7 +646,7 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 // 	}
 
 // 	registry := GetDefaultRegistry()
-	batch := NewBatch(fs, registry).WithContext(ctx)
+// 	batch := NewBatch(fs, registry).WithContext(ctx)
 
 // 	// Add delete operation for the directory
 // 	_, err := batch.Delete("my-dir")
