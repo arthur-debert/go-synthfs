@@ -1,4 +1,4 @@
-THIS SHOULD BE A LINTER ERRORpackage execution
+package execution
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ type PrerequisiteResolver struct {
 }
 
 // NewPrerequisiteResolver creates a new prerequisite resolver
-func NewPrerequisiteResolver(factory core.OperationFactory) *PrerequisiteResolver {
+func NewPrerequisiteResolver(factory core.OperationFactory, logger core.Logger) *PrerequisiteResolver {
 	return &PrerequisiteResolver{
 		factory: factory,
 	}
