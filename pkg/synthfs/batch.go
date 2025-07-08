@@ -18,6 +18,11 @@ type Batch struct {
 }
 
 // NewBatch creates a new operation batch with default filesystem and context.
+// 
+// BEHAVIOR CHANGE (Phase 6): As of Phase 6, this function now defaults to SimpleBatch behavior
+// which uses prerequisite resolution instead of automatic parent directory creation.
+// This provides better extensibility and testability. If you need the old behavior temporarily,
+// use batch.NewBatchWithLegacyBehavior() or call WithSimpleBatch(false) on the result.
 func NewBatch() *Batch {
 	fs := filesystem.NewOSFileSystem(".")
 	registry := GetDefaultRegistry()

@@ -30,8 +30,10 @@ func (e *Executor) EventBus() core.EventBus {
 // DefaultPipelineOptions returns sensible defaults for pipeline execution
 func DefaultPipelineOptions() core.PipelineOptions {
 	return core.PipelineOptions{
-		Restorable:      false,                   // No backup overhead by default
-		MaxBackupSizeMB: core.DefaultMaxBackupMB, // Default budget
+		Restorable:           false,                   // No backup overhead by default
+		MaxBackupSizeMB:      core.DefaultMaxBackupMB, // Default budget
+		ResolvePrerequisites: true,                    // Enable prerequisite resolution by default (Phase 6)
+		UseSimpleBatch:       true,                    // Use SimpleBatch by default (Phase 6)
 	}
 }
 

@@ -374,8 +374,13 @@ func (b *SimpleBatchImpl) RunWithOptions(opts interface{}) (interface{}, error) 
 	}
 	executor := execution.NewExecutor(loggerToUse)
 
-	// Create pipeline adapter
-	pipeline := &simplePipelineAdapter{operations: b.operations, registry: b.registry}
+	// Create pipeline using memory pipeline from execution package
+	pipeline := execution.NewMemPipeline(loggerToUse)
+	
+	// Add all operations to the pipeline
+	if err := pipeline.Add(b.operations...); err != nil {
+		return nil, fmt.Errorf("failed to add operations to pipeline: %w", err)
+	}
 
 	// Create prerequisite resolver if prerequisite resolution is enabled
 	var prereqResolver core.PrerequisiteResolver
@@ -530,46 +535,7 @@ func cleanPathForID(path string) string {
 	return result
 }
 
-// simplePipelineAdapter adapts operations to the execution pipeline interface
-type simplePipelineAdapter struct {
-	operations []interface{}
-	registry   core.OperationFactory
-}
 
-func (spa *simplePipelineAdapter) Operations() []execution.OperationInterface {
-	var adaptedOps []execution.OperationInterface
-	for _, op := range spa.operations {
-		if adaptedOp, ok := op.(execution.OperationInterface); ok {
-			adaptedOps = append(adaptedOps, adaptedOp)
-		}
-	}
-	return adaptedOps
-}
-
-func (spa *simplePipelineAdapter) Resolve() error {
-	// Simple batch doesn't need dependency resolution - operations are added in order
-	return nil
-}
-
-func (spa *simplePipelineAdapter) ResolvePrerequisites(resolver core.PrerequisiteResolver, fs interface{}) error {
-	// Create a memory pipeline for prerequisite resolution
-	pipeline := execution.NewMemPipeline(&noOpLogger{})
-	
-	// Add all operations to the pipeline
-	for _, op := range spa.operations {
-		if err := pipeline.Add(op); err != nil {
-			return fmt.Errorf("failed to add operation to pipeline: %w", err)
-		}
-	}
-	
-	// Resolve prerequisites
-	return pipeline.ResolvePrerequisites(resolver, fs)
-}
-
-func (spa *simplePipelineAdapter) Validate(ctx context.Context, fs interface{}) error {
-	// Simple batch doesn't do validation - delegate to execution pipeline
-	return nil
-}
 
 // noOpLogger is a no-operation logger implementation
 type noOpLogger struct{}

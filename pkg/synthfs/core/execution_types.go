@@ -9,8 +9,8 @@ import (
 type PipelineOptions struct {
 	Restorable         bool // Whether to enable reversible operations with backup
 	MaxBackupSizeMB    int  // Maximum backup size in MB (default: 10MB)
-	ResolvePrerequisites bool // Whether to resolve prerequisites like parent directories (default: false)
-	UseSimpleBatch     bool // Whether to use SimpleBatch instead of traditional Batch (default: false, will change to true in future versions)
+	ResolvePrerequisites bool // Whether to resolve prerequisites like parent directories (default: true as of Phase 6)
+	UseSimpleBatch     bool // Whether to use SimpleBatch instead of traditional Batch (default: true as of Phase 6)
 }
 
 // OperationResult holds the outcome of a single operation's execution

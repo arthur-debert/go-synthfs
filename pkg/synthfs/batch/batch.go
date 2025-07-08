@@ -31,21 +31,30 @@ type BatchImpl struct {
 }
 
 // NewBatch creates a new operation batch.
+// 
+// DEPRECATED: As of Phase 6, this constructor defaults to SimpleBatch behavior (useSimpleBatch=true).
+// The legacy behavior with automatic parent directory creation and path tracking is deprecated.
+// Use NewBatchWithSimpleBatch() explicitly for the new behavior, or set WithSimpleBatch(false) 
+// to temporarily restore legacy behavior. The legacy behavior will be removed in a future version.
 func NewBatch(fs interface{}, registry core.OperationFactory) Batch {
 	return &BatchImpl{
 		operations:     []interface{}{},
 		fs:             fs,
 		ctx:            context.Background(),
 		idCounter:      0,
-		pathTracker:    newPathStateTracker(fs),
+		pathTracker:    nil, // No path tracker needed for SimpleBatch behavior (Phase 6 default)
 		registry:       registry,
 		logger:         nil, // Will be set by WithLogger method
-		useSimpleBatch: false, // Default to legacy behavior for backward compatibility
+		useSimpleBatch: true, // Phase 6: Default to SimpleBatch behavior
 	}
 }
 
 // NewBatchWithSimpleBatch creates a new operation batch with SimpleBatch behavior enabled.
 // This disables automatic parent directory creation and relies on prerequisite resolution.
+// 
+// RECOMMENDED: This is now the preferred way to create batches as of Phase 6.
+// This constructor explicitly enables the new behavior that relies on prerequisite resolution
+// instead of hardcoded parent directory creation logic.
 func NewBatchWithSimpleBatch(fs interface{}, registry core.OperationFactory) Batch {
 	return &BatchImpl{
 		operations:     []interface{}{},
@@ -56,6 +65,26 @@ func NewBatchWithSimpleBatch(fs interface{}, registry core.OperationFactory) Bat
 		registry:       registry,
 		logger:         nil, // Will be set by WithLogger method
 		useSimpleBatch: true, // Enable SimpleBatch behavior
+	}
+}
+
+// NewBatchWithLegacyBehavior creates a new operation batch with legacy behavior enabled.
+// This enables automatic parent directory creation and path tracking.
+// 
+// DEPRECATED: This constructor is provided for backward compatibility only.
+// The legacy behavior with automatic parent directory creation and path tracking is deprecated.
+// Please migrate to NewBatchWithSimpleBatch() or NewBatch() which use prerequisite resolution.
+// This constructor will be removed in a future version.
+func NewBatchWithLegacyBehavior(fs interface{}, registry core.OperationFactory) Batch {
+	return &BatchImpl{
+		operations:     []interface{}{},
+		fs:             fs,
+		ctx:            context.Background(),
+		idCounter:      0,
+		pathTracker:    newPathStateTracker(fs), // Enable path tracker for legacy behavior
+		registry:       registry,
+		logger:         nil, // Will be set by WithLogger method
+		useSimpleBatch: false, // Disable SimpleBatch behavior for legacy support
 	}
 }
 
