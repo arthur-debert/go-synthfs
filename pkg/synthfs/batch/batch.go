@@ -10,7 +10,9 @@ import (
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/execution"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/targets"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/validation"
 )
 
 // logInfo is a simple logger for the batch package
@@ -73,14 +75,32 @@ func (b *BatchImpl) WithRegistry(registry core.OperationFactory) Batch {
 
 // add adds an operation to the batch and validates it
 func (b *BatchImpl) add(op interface{}) error {
-	// Get validation method through interface assertion
+	// Try to validate the operation
+	// First check if it has a Validate method that accepts interface{}
 	type validator interface {
 		Validate(ctx context.Context, fsys interface{}) error
 	}
 
+	validated := false
 	if v, ok := op.(validator); ok {
 		if err := v.Validate(b.ctx, b.fs); err != nil {
 			return err
+		}
+		validated = true
+	}
+
+	// If not validated yet, try ValidateV2 which operations should have
+	if !validated {
+		type validatorV2 interface {
+			ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
+		}
+
+		if v, ok := op.(validatorV2); ok {
+			// Create a minimal ExecutionContext for validation
+			execCtx := &core.ExecutionContext{}
+			if err := v.ValidateV2(b.ctx, execCtx, b.fs); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -185,6 +205,23 @@ func (b *BatchImpl) Copy(src, dst string) (interface{}, error) {
 		return nil, fmt.Errorf("validation failed for Copy(%s, %s): %w", src, dst, err)
 	}
 
+	// Compute checksum for source file (after validation passes)
+	if fs, ok := b.fs.(filesystem.FullFileSystem); ok {
+		if checksum, err := validation.ComputeFileChecksum(fs, src); err == nil && checksum != nil {
+			// Set checksum on operation
+			type checksumSetter interface {
+				SetChecksum(path string, checksum *validation.ChecksumRecord)
+			}
+			if setter, ok := op.(checksumSetter); ok {
+				setter.SetChecksum(src, checksum)
+			}
+			// Set source_checksum in details
+			_ = b.setOperationDetails(op, map[string]interface{}{
+				"source_checksum": checksum.MD5,
+			})
+		}
+	}
+
 	return op, nil
 }
 
@@ -211,6 +248,23 @@ func (b *BatchImpl) Move(src, dst string) (interface{}, error) {
 	// Add to batch
 	if err := b.add(op); err != nil {
 		return nil, fmt.Errorf("validation failed for Move(%s, %s): %w", src, dst, err)
+	}
+
+	// Compute checksum for source file (after validation passes)
+	if fs, ok := b.fs.(filesystem.FullFileSystem); ok {
+		if checksum, err := validation.ComputeFileChecksum(fs, src); err == nil && checksum != nil {
+			// Set checksum on operation
+			type checksumSetter interface {
+				SetChecksum(path string, checksum *validation.ChecksumRecord)
+			}
+			if setter, ok := op.(checksumSetter); ok {
+				setter.SetChecksum(src, checksum)
+			}
+			// Set source_checksum in details
+			_ = b.setOperationDetails(op, map[string]interface{}{
+				"source_checksum": checksum.MD5,
+			})
+		}
 	}
 
 	return op, nil
@@ -286,6 +340,25 @@ func (b *BatchImpl) CreateArchive(archivePath string, format interface{}, source
 	// Add to batch
 	if err := b.add(op); err != nil {
 		return nil, fmt.Errorf("failed to add CreateArchive(%s): %w", archivePath, err)
+	}
+
+	// Compute checksums for all source files
+	if fs, ok := b.fs.(filesystem.FullFileSystem); ok {
+		for _, source := range sources {
+			if checksum, err := validation.ComputeFileChecksum(fs, source); err == nil && checksum != nil {
+				// Set checksum on operation
+				type checksumSetter interface {
+					SetChecksum(path string, checksum *validation.ChecksumRecord)
+				}
+				if setter, ok := op.(checksumSetter); ok {
+					setter.SetChecksum(source, checksum)
+				}
+			}
+		}
+		// Set sources_checksummed in details
+		_ = b.setOperationDetails(op, map[string]interface{}{
+			"sources_checksummed": len(sources),
+		})
 	}
 
 	return op, nil
