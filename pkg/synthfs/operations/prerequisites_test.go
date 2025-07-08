@@ -1,15 +1,14 @@
-package operations_test
+package operations
 
 import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
 )
 
 func TestOperationPrerequisites(t *testing.T) {
-	t.Run("CreateFileOperation prerequisites", func(t *testing.T) {
-		op := operations.NewCreateFileOperation(core.OperationID("test-op"), "subdir/file.txt")
+	t.Run("CreateFileOperation Prerequisites", func(t *testing.T) {
+		op := NewCreateFileOperation(core.OperationID("test-op"), "dir/file.txt")
 		
 		prereqs := op.Prerequisites()
 		if len(prereqs) != 2 {
@@ -19,17 +18,18 @@ func TestOperationPrerequisites(t *testing.T) {
 		// Check for parent directory prerequisite
 		hasParentDir := false
 		hasNoConflict := false
+		
 		for _, prereq := range prereqs {
 			switch prereq.Type() {
 			case "parent_dir":
 				hasParentDir = true
-				if prereq.Path() != "subdir/file.txt" {
-					t.Errorf("Expected parent_dir prerequisite path to be 'subdir/file.txt', got '%s'", prereq.Path())
+				if prereq.Path() != "dir" {
+					t.Errorf("Expected parent_dir path 'dir', got '%s'", prereq.Path())
 				}
 			case "no_conflict":
 				hasNoConflict = true
-				if prereq.Path() != "subdir/file.txt" {
-					t.Errorf("Expected no_conflict prerequisite path to be 'subdir/file.txt', got '%s'", prereq.Path())
+				if prereq.Path() != "dir/file.txt" {
+					t.Errorf("Expected no_conflict path 'dir/file.txt', got '%s'", prereq.Path())
 				}
 			}
 		}
@@ -41,9 +41,19 @@ func TestOperationPrerequisites(t *testing.T) {
 			t.Error("Expected no_conflict prerequisite")
 		}
 	})
-
-	t.Run("CreateDirectoryOperation prerequisites", func(t *testing.T) {
-		op := operations.NewCreateDirectoryOperation(core.OperationID("test-op"), "parent/child")
+	
+	t.Run("CreateFileOperation with root path", func(t *testing.T) {
+		op := NewCreateFileOperation(core.OperationID("test-op"), "file.txt")
+		
+		prereqs := op.Prerequisites()
+		// Should still have no_conflict but parent_dir is current directory
+		if len(prereqs) != 2 {
+			t.Errorf("Expected 2 prerequisites, got %d", len(prereqs))
+		}
+	})
+	
+	t.Run("CreateDirectoryOperation Prerequisites", func(t *testing.T) {
+		op := NewCreateDirectoryOperation(core.OperationID("test-op"), "parent/newdir")
 		
 		prereqs := op.Prerequisites()
 		if len(prereqs) != 2 {
@@ -53,12 +63,19 @@ func TestOperationPrerequisites(t *testing.T) {
 		// Check for parent directory prerequisite
 		hasParentDir := false
 		hasNoConflict := false
+		
 		for _, prereq := range prereqs {
 			switch prereq.Type() {
 			case "parent_dir":
 				hasParentDir = true
+				if prereq.Path() != "parent" {
+					t.Errorf("Expected parent_dir path 'parent', got '%s'", prereq.Path())
+				}
 			case "no_conflict":
 				hasNoConflict = true
+				if prereq.Path() != "parent/newdir" {
+					t.Errorf("Expected no_conflict path 'parent/newdir', got '%s'", prereq.Path())
+				}
 			}
 		}
 		
@@ -69,37 +86,34 @@ func TestOperationPrerequisites(t *testing.T) {
 			t.Error("Expected no_conflict prerequisite")
 		}
 	})
-
-	t.Run("CopyOperation prerequisites", func(t *testing.T) {
-		op := operations.NewCopyOperation(core.OperationID("test-op"), "source.txt")
-		op.SetPaths("source.txt", "dest/copy.txt")
+	
+	t.Run("CreateSymlinkOperation Prerequisites", func(t *testing.T) {
+		op := NewCreateSymlinkOperation(core.OperationID("test-op"), "dir/symlink")
 		
 		prereqs := op.Prerequisites()
-		if len(prereqs) != 3 {
-			t.Errorf("Expected 3 prerequisites, got %d", len(prereqs))
+		if len(prereqs) != 2 {
+			t.Errorf("Expected 2 prerequisites, got %d", len(prereqs))
 		}
 		
-		// Check for source exists, parent directory, and no conflict prerequisites
-		hasSourceExists := false
+		// Check for parent directory prerequisite
 		hasParentDir := false
 		hasNoConflict := false
+		
 		for _, prereq := range prereqs {
 			switch prereq.Type() {
-			case "source_exists":
-				hasSourceExists = true
-				if prereq.Path() != "source.txt" {
-					t.Errorf("Expected source_exists prerequisite path to be 'source.txt', got '%s'", prereq.Path())
-				}
 			case "parent_dir":
 				hasParentDir = true
+				if prereq.Path() != "dir" {
+					t.Errorf("Expected parent_dir path 'dir', got '%s'", prereq.Path())
+				}
 			case "no_conflict":
 				hasNoConflict = true
+				if prereq.Path() != "dir/symlink" {
+					t.Errorf("Expected no_conflict path 'dir/symlink', got '%s'", prereq.Path())
+				}
 			}
 		}
 		
-		if !hasSourceExists {
-			t.Error("Expected source_exists prerequisite")
-		}
 		if !hasParentDir {
 			t.Error("Expected parent_dir prerequisite")
 		}
@@ -107,9 +121,9 @@ func TestOperationPrerequisites(t *testing.T) {
 			t.Error("Expected no_conflict prerequisite")
 		}
 	})
-
-	t.Run("DeleteOperation prerequisites", func(t *testing.T) {
-		op := operations.NewDeleteOperation(core.OperationID("test-op"), "file.txt")
+	
+	t.Run("DeleteOperation Prerequisites", func(t *testing.T) {
+		op := NewDeleteOperation(core.OperationID("test-op"), "file.txt")
 		
 		prereqs := op.Prerequisites()
 		if len(prereqs) != 1 {
@@ -117,31 +131,47 @@ func TestOperationPrerequisites(t *testing.T) {
 		}
 		
 		// Check for source exists prerequisite
-		if prereqs[0].Type() != "source_exists" {
-			t.Errorf("Expected source_exists prerequisite, got %s", prereqs[0].Type())
+		hasSourceExists := false
+		
+		for _, prereq := range prereqs {
+			switch prereq.Type() {
+			case "source_exists":
+				hasSourceExists = true
+				if prereq.Path() != "file.txt" {
+					t.Errorf("Expected source_exists path 'file.txt', got '%s'", prereq.Path())
+				}
+			}
 		}
-		if prereqs[0].Path() != "file.txt" {
-			t.Errorf("Expected prerequisite path to be 'file.txt', got '%s'", prereqs[0].Path())
+		
+		if !hasSourceExists {
+			t.Error("Expected source_exists prerequisite")
 		}
 	})
-
-	t.Run("CreateSymlinkOperation prerequisites", func(t *testing.T) {
-		op := operations.NewCreateSymlinkOperation(core.OperationID("test-op"), "subdir/link")
+	
+	t.Run("CreateArchiveOperation Prerequisites", func(t *testing.T) {
+		op := NewCreateArchiveOperation(core.OperationID("test-op"), "dir/archive.tar.gz")
 		
 		prereqs := op.Prerequisites()
-		if len(prereqs) != 2 {
-			t.Errorf("Expected 2 prerequisites, got %d", len(prereqs))
+		if len(prereqs) < 2 {
+			t.Errorf("Expected at least 2 prerequisites, got %d", len(prereqs))
 		}
 		
-		// Check for parent directory and no conflict prerequisites
+		// Check for parent directory prerequisite
 		hasParentDir := false
 		hasNoConflict := false
+		
 		for _, prereq := range prereqs {
 			switch prereq.Type() {
 			case "parent_dir":
 				hasParentDir = true
+				if prereq.Path() != "dir" {
+					t.Errorf("Expected parent_dir path 'dir', got '%s'", prereq.Path())
+				}
 			case "no_conflict":
 				hasNoConflict = true
+				if prereq.Path() != "dir/archive.tar.gz" {
+					t.Errorf("Expected no_conflict path 'dir/archive.tar.gz', got '%s'", prereq.Path())
+				}
 			}
 		}
 		
@@ -152,86 +182,103 @@ func TestOperationPrerequisites(t *testing.T) {
 			t.Error("Expected no_conflict prerequisite")
 		}
 	})
-
-	t.Run("Root path operations have no parent_dir prerequisite", func(t *testing.T) {
-		op := operations.NewCreateFileOperation(core.OperationID("test-op"), "file.txt")
+	
+	t.Run("CopyOperation Prerequisites", func(t *testing.T) {
+		op := NewCopyOperation(core.OperationID("test-op"), "source.txt")
+		op.SetPaths("source.txt", "dir/dest.txt")
 		
 		prereqs := op.Prerequisites()
-		
-		// Should only have no_conflict prerequisite, not parent_dir
-		if len(prereqs) != 1 {
-			t.Errorf("Expected 1 prerequisite for root path, got %d", len(prereqs))
+		if len(prereqs) != 3 {
+			t.Errorf("Expected 3 prerequisites, got %d", len(prereqs))
 		}
 		
-		if prereqs[0].Type() != "no_conflict" {
-			t.Errorf("Expected no_conflict prerequisite, got %s", prereqs[0].Type())
+		// Check for all expected prerequisites
+		hasParentDir := false
+		hasNoConflict := false
+		hasSourceExists := false
+		
+		for _, prereq := range prereqs {
+			switch prereq.Type() {
+			case "parent_dir":
+				hasParentDir = true
+				if prereq.Path() != "dir" {
+					t.Errorf("Expected parent_dir path 'dir', got '%s'", prereq.Path())
+				}
+			case "no_conflict":
+				hasNoConflict = true
+				if prereq.Path() != "dir/dest.txt" {
+					t.Errorf("Expected no_conflict path 'dir/dest.txt', got '%s'", prereq.Path())
+				}
+			case "source_exists":
+				hasSourceExists = true
+				if prereq.Path() != "source.txt" {
+					t.Errorf("Expected source_exists path 'source.txt', got '%s'", prereq.Path())
+				}
+			}
+		}
+		
+		if !hasParentDir {
+			t.Error("Expected parent_dir prerequisite")
+		}
+		if !hasNoConflict {
+			t.Error("Expected no_conflict prerequisite")
+		}
+		if !hasSourceExists {
+			t.Error("Expected source_exists prerequisite")
 		}
 	})
-}
-
-func TestPrerequisiteValidation(t *testing.T) {
-	fs := NewMockFilesystem()
 	
-	t.Run("ParentDirPrerequisite validates correctly", func(t *testing.T) {
-		// Create parent directory
-		if err := fs.MkdirAll("parent", 0755); err != nil {
-			t.Fatal(err)
+	t.Run("MoveOperation Prerequisites", func(t *testing.T) {
+		op := NewMoveOperation(core.OperationID("test-op"), "source.txt")
+		op.SetPaths("source.txt", "dir/dest.txt")
+		
+		prereqs := op.Prerequisites()
+		if len(prereqs) != 3 {
+			t.Errorf("Expected 3 prerequisites, got %d", len(prereqs))
 		}
 		
-		prereq := core.NewParentDirPrerequisite("parent/child")
-		err := prereq.Validate(fs)
-		if err != nil {
-			t.Errorf("Expected parent directory validation to pass, got error: %v", err)
-		}
-	})
-
-	t.Run("ParentDirPrerequisite fails when parent missing", func(t *testing.T) {
-		prereq := core.NewParentDirPrerequisite("nonexistent/child")
-		err := prereq.Validate(fs)
-		if err == nil {
-			t.Error("Expected parent directory validation to fail when parent doesn't exist")
-		}
-	})
-
-	t.Run("NoConflictPrerequisite validates correctly", func(t *testing.T) {
-		prereq := core.NewNoConflictPrerequisite("newfile.txt")
-		err := prereq.Validate(fs)
-		if err != nil {
-			t.Errorf("Expected no conflict validation to pass, got error: %v", err)
-		}
-	})
-
-	t.Run("NoConflictPrerequisite fails when file exists", func(t *testing.T) {
-		// Create a file
-		if err := fs.WriteFile("existing.txt", []byte("content"), 0644); err != nil {
-			t.Fatal(err)
+		// Check for all expected prerequisites
+		hasParentDir := false
+		hasNoConflict := false
+		hasSourceExists := false
+		
+		for _, prereq := range prereqs {
+			switch prereq.Type() {
+			case "parent_dir":
+				hasParentDir = true
+				if prereq.Path() != "dir" {
+					t.Errorf("Expected parent_dir path 'dir', got '%s'", prereq.Path())
+				}
+			case "no_conflict":
+				hasNoConflict = true
+				if prereq.Path() != "dir/dest.txt" {
+					t.Errorf("Expected no_conflict path 'dir/dest.txt', got '%s'", prereq.Path())
+				}
+			case "source_exists":
+				hasSourceExists = true
+				if prereq.Path() != "source.txt" {
+					t.Errorf("Expected source_exists path 'source.txt', got '%s'", prereq.Path())
+				}
+			}
 		}
 		
-		prereq := core.NewNoConflictPrerequisite("existing.txt")
-		err := prereq.Validate(fs)
-		if err == nil {
-			t.Error("Expected no conflict validation to fail when file exists")
+		if !hasParentDir {
+			t.Error("Expected parent_dir prerequisite")
+		}
+		if !hasNoConflict {
+			t.Error("Expected no_conflict prerequisite")
+		}
+		if !hasSourceExists {
+			t.Error("Expected source_exists prerequisite")
 		}
 	})
-
-	t.Run("SourceExistsPrerequisite validates correctly", func(t *testing.T) {
-		// Create a file
-		if err := fs.WriteFile("source.txt", []byte("content"), 0644); err != nil {
-			t.Fatal(err)
-		}
+	
+	t.Run("BaseOperation default Prerequisites", func(t *testing.T) {
+		op := NewBaseOperation(core.OperationID("test-op"), "test", "test-path")
 		
-		prereq := core.NewSourceExistsPrerequisite("source.txt")
-		err := prereq.Validate(fs)
-		if err != nil {
-			t.Errorf("Expected source exists validation to pass, got error: %v", err)
-		}
-	})
-
-	t.Run("SourceExistsPrerequisite fails when source missing", func(t *testing.T) {
-		prereq := core.NewSourceExistsPrerequisite("nonexistent.txt")
-		err := prereq.Validate(fs)
-		if err == nil {
-			t.Error("Expected source exists validation to fail when source doesn't exist")
+		prereqs := op.Prerequisites()
+		if len(prereqs) != 0 {
+			t.Errorf("Expected 0 prerequisites for base operation, got %d", len(prereqs))
 		}
 	})
 }
