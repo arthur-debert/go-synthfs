@@ -126,14 +126,14 @@ type NoConflictPrerequisite struct {
 4. Update documentation with migration guide (DONE)
 5. **Tests**: Integration tests for both paths (DONE)
 
-### Phase 6: Switch Defaults (Controlled Breaking Change)
+### Phase 6: Switch Defaults (Controlled Breaking Change) (DONE)
 
 **Goal**: Make new behavior default, deprecate old
 
-1. Change `UseSimpleBatch` default to true
-2. Add deprecation notices to old batch methods
-3. Update all internal usage to new pattern
-4. **Tests**: Update tests to use new pattern primarily
+1. Change `UseSimpleBatch` default to true (DONE)
+2. Add deprecation notices to old batch methods (DONE)
+3. Update all internal usage to new pattern (DONE)
+4. **Tests**: Update tests to use new pattern primarily (DONE)
 
 ### Phase 7: Cleanup (Major Version)
 
