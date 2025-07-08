@@ -32,12 +32,14 @@ type BatchImpl struct {
 
 // BatchOptions provides configuration for batch creation
 type BatchOptions struct {
-	UseSimpleBatch bool // Enable new prerequisite-based design (default: false for backward compatibility)
+	UseSimpleBatch bool // Enable new prerequisite-based design (default: true as of Phase 6)
 }
 
-// NewBatch creates a new operation batch with default options (backward compatible).
+// NewBatch creates a new operation batch with SimpleBatch behavior as the default (Phase 6).
+// This constructor now defaults to using prerequisite resolution instead of automatic 
+// parent directory creation. For legacy behavior, use NewBatchWithLegacyBehavior().
 func NewBatch(fs interface{}, registry core.OperationFactory) Batch {
-	return NewBatchWithOptions(fs, registry, BatchOptions{UseSimpleBatch: false})
+	return NewBatchWithOptions(fs, registry, BatchOptions{UseSimpleBatch: true})
 }
 
 // NewBatchWithOptions creates a new operation batch with specified options.
