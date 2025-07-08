@@ -1,224 +1,205 @@
-# Golang CLI Project Template
+# SynthFS - Simplified Filesystem Operations
 
-This is a comprehensive template for building Go CLI applications with modern tooling and best practices.
+A Go library for simplified filesystem operations with automatic dependency resolution and batch execution.
 
-## 🚀 **Recommended: Use the Project Creator**
+## 🚀 **Key Features**
 
-The easiest way to use this template is via the main repository's project creation script:
+- **🔄 Automatic Dependencies**: Parent directories and conflict resolution handled automatically
+- **📦 Batch Operations**: Execute multiple filesystem operations as a unit with rollback support
+- **🧪 Clean Architecture**: Single implementation with prerequisite resolution built-in
+- **⚡ Performance**: Efficient operation execution with comprehensive error handling
+- **🛡️ Safe Operations**: Built-in validation and conflict detection
 
-```bash
-# From the main template repository
-./bin/create-project /path/to/your-new-cli-project
+## 🏗️ **Quick Start**
 
-# With custom settings
-./bin/create-project /path/to/my-tool \
-  --description "My awesome CLI tool" \
-  --author-name "Your Name"
+### Basic Usage
+
+```go
+package main
+
+import (
+    "github.com/arthur-debert/synthfs/pkg/synthfs"
+    "github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
+    "github.com/arthur-debert/synthfs/pkg/synthfs/operations"
+)
+
+func main() {
+    // Create filesystem and registry
+    fs := filesystem.NewOSFileSystem(".")
+    registry := operations.NewFactory()
+    
+    // Create batch with automatic prerequisite resolution
+    batch := synthfs.NewBatch(fs, registry)
+    
+    // Add operations - parent directories handled automatically
+    batch.CreateFile("deep/nested/structure/file.txt", []byte("content"))
+    batch.CreateDir("another/directory")
+    batch.Copy("source.txt", "backup/source.txt")
+    
+    // Execute all operations
+    result, err := batch.Run()
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    if result.IsSuccess() {
+        fmt.Println("All operations completed successfully!")
+    }
+}
 ```
 
-This automatically:
+### Restorable Operations
 
-- ✅ Copies and configures the template
-- ✅ Replaces all placeholders with your values  
-- ✅ Renames directories appropriately
-- ✅ Initializes git repository
-- ✅ Installs Go dependencies
-- ✅ Creates initial commit
-
-## 📋 **Alternative: Manual Setup**
-
-If you prefer manual setup or want to understand the process:
-
-### 1. Template Setup
-
-Replace all placeholder values throughout the project:
-
-```bash
-# The project creator automatically handles these replacements:
-synthfs      → your-cli-name (from directory name)
-arthur-debert   → arthur-debert (from config.yaml)
-Description of your CLI tool → "Description of your CLI tool" 
-Arthur Debert   → "Arthur Debert" (from config.yaml)
-arthur@debert.xyz  → "arthur@debert.xyz" (from config.yaml)
+```go
+// Enable backup/restore functionality
+result, err := batch.RunRestorable()
+if err != nil {
+    log.Printf("Operations failed: %v", err)
+    
+    // Use restore operations if needed
+    if restoreOps := result.GetRestoreOps(); len(restoreOps) > 0 {
+        // Execute restore operations...
+    }
+}
 ```
 
-See `TEMPLATE_USAGE.md` for detailed manual setup instructions.
+## � **Supported Operations**
 
-## ✨ **Features**
+| Operation | Description | Auto-resolves |
+|-----------|-------------|---------------|
+| `CreateFile()` | Create files with content | Parent directories |
+| `CreateDir()` | Create directories | Parent directories |
+| `Copy()` | Copy files/directories | Parent directories, source validation |
+| `Move()` | Move files/directories | Parent directories, source validation |
+| `Delete()` | Delete files/directories | Conflict checking |
+| `CreateSymlink()` | Create symbolic links | Parent directories |
+| `CreateArchive()` | Create .tar.gz/.zip archives | Parent directories |
+| `Unarchive()` | Extract archives | Parent directories |
 
-### 🏗️ Project Structure
+## ✨ **Architecture**
 
-- **`cmd/`** - CLI application main entry points
-- **`pkg/`** - Reusable Go packages/libraries
-- **`scripts/`** - Development and deployment scripts
-- **`.github/workflows/`** - CI/CD workflows
+### Clean Design
 
-### 🔧 Development Tools
+```go
+// Single constructor - no feature flags or complex options
+batch := synthfs.NewBatch(fs, registry)
 
-- **Build automation** with comprehensive build scripts
-- **Testing** with coverage reporting and gotestsum
-- **Linting** with golangci-lint
-- **Pre-commit hooks** for code quality
-- **Line counting** with cloc for Go projects
-- **Release automation** with semantic versioning
+// Operations declare prerequisites automatically
+batch.CreateFile("path/to/file.txt", content)
 
-### 🚀 Release & Distribution
+// Prerequisite resolution happens during execution
+result, err := batch.Run()
+```
 
-- **GoReleaser** configuration for multi-platform builds
-- **GitHub Actions** for CI/CD
-- **Homebrew** formula generation (with debug mode)
-- **Debian packages** (.deb) generation
-- **Code coverage** reporting with Codecov integration
+### Automatic Dependency Management
 
-## 🛠️ **Available Scripts**
+The library automatically handles:
 
-### Development Scripts
+- **Parent Directory Creation**: `CreateFile("a/b/c/file.txt")` creates `a/`, `a/b/`, and `a/b/c/` as needed
+- **Conflict Detection**: Prevents overwriting existing files unless explicitly intended
+- **Source Validation**: Ensures source files exist before copy/move operations
+- **Dependency Ordering**: Operations execute in the correct order based on dependencies
+
+### Error Handling
+
+```go
+result, err := batch.Run()
+if err != nil {
+    // Handle execution errors
+    fmt.Printf("Batch failed: %v\n", err)
+}
+
+if !result.IsSuccess() {
+    // Handle partial failures
+    if execErr := result.GetError(); execErr != nil {
+        fmt.Printf("First error: %v\n", execErr)
+    }
+}
+```
+
+## � **Development**
+
+### Building
 
 ```bash
-# Build the application
+# Build all packages
 ./scripts/build
 
 # Run tests with coverage
-./scripts/test
-
-# Run tests with detailed coverage report
 ./scripts/test-with-coverage
 
 # Run linting
 ./scripts/lint
-
-# Count lines of code
-./scripts/cloc-go [directory]
-
-# Install pre-commit hooks
-./scripts/pre-commit install
-
-# Create a new release
-./scripts/release-new [--major|--minor|--patch] [--yes]
 ```
 
-### Script Details
+### Project Structure
 
-#### `scripts/build`
+- **`pkg/synthfs/`** - Main library packages
+  - **`batch/`** - Batch operation implementation
+  - **`core/`** - Core interfaces and types  
+  - **`operations/`** - Individual operation implementations
+  - **`execution/`** - Execution pipeline and prerequisite resolution
+  - **`targets/`** - Target item types (files, directories, etc.)
+  - **`filesystem/`** - Filesystem abstraction layer
 
-- Builds all Go packages
-- Creates CLI binary with version info from git
-- Performs basic functionality tests
-- Outputs to `bin/` directory
-
-#### `scripts/test`
-
-- Runs all tests with race detection
-- Supports `--ci` flag for CI environments
-- Generates coverage reports
-- Uses gotestsum for better output formatting
-
-#### `scripts/lint`
-
-- Runs golangci-lint with comprehensive checks
-- Auto-installs golangci-lint if missing
-- Configurable timeout (5 minutes)
-
-#### `scripts/pre-commit`
-
-- Installs/uninstalls Git pre-commit hooks
-- Runs linting and testing before commits
-- Usage: `./scripts/pre-commit [install|uninstall]`
-
-#### `scripts/release-new`
-
-- Interactive or CLI-driven version bumping
-- Supports semantic versioning (major/minor/patch)
-- Creates and pushes Git tags
-- Triggers GitHub Actions release workflow
-
-#### `scripts/cloc-go`
-
-- Counts lines of code in Go projects
-- Separates production code from test code
-- Provides detailed statistics
-- Usage: `./scripts/cloc-go [directory]` (defaults to `pkg/`)
-
-## 🔄 **GitHub Actions Workflows**
-
-### Test Workflow (`.github/workflows/test.yml`)
-
-- **Build Job**: Compiles packages and CLI binary
-- **Test Job**: Runs tests with coverage reporting
-- Uploads coverage to Codecov
-- Runs on every push and PR
-
-### Release Workflow (`.github/workflows/release.yml`)
-
-- Triggers on version tags (`v*.*.*`)
-- Builds multi-platform binaries
-- Creates GitHub releases
-- Updates Homebrew formula
-- Generates Debian packages
-
-## ⚙️ **GoReleaser Configuration**
-
-### Debug Mode for Homebrew
-
-The template supports a debug mode for Homebrew formula generation:
+### Testing
 
 ```bash
-# Production releases (default)
-DEBUG=false → Formula goes to "Formula/" directory
+# Run all tests
+./scripts/test
 
-# Debug/testing releases  
-DEBUG=true → Formula goes to "debug/" directory
+# Generate coverage report
+./scripts/test-with-coverage
+open coverage.html
 ```
 
-### Supported Platforms
+## 📚 **Advanced Usage**
 
-- **Operating Systems**: Linux, macOS, Windows
-- **Architectures**: amd64, arm64
-- **Package Formats**: tar.gz, zip, .deb
-- **Distribution**: GitHub Releases, Homebrew
+### Custom Filesystem
 
-## 🎯 **Configuration**
-
-### Required Secrets (GitHub)
-
-Set these in your GitHub repository settings:
-
-```bash
-HOMEBREW_TAP_TOKEN    # GitHub token with access to homebrew-tools repo
-CODECOV_TOKEN         # Codecov token for coverage reporting
+```go
+// Use custom filesystem implementation
+fs := &MyCustomFileSystem{}
+batch := synthfs.NewBatch(fs, registry)
 ```
 
-### Optional Environment Variables
+### Logging
 
-```bash
-PKG_NAME              # Override package name
-DEBUG                 # Enable debug mode for Homebrew formula
+```go
+logger := &MyLogger{} // Implement core.Logger interface
+batch := synthfs.NewBatch(fs, registry).WithLogger(logger)
 ```
 
-## 🏆 **Best Practices**
+### Context Support
 
-### Development Workflow
+```go
+ctx := context.WithTimeout(context.Background(), 30*time.Second)
+batch := synthfs.NewBatch(fs, registry).WithContext(ctx)
+```
 
-1. Install pre-commit hooks: `./scripts/pre-commit install`
-2. Write tests for new features
-3. Run `./scripts/test` before committing
-4. Use `./scripts/release-new` for releases
+## 📊 **Performance**
 
-### Release Process
+- **Efficient Resolution**: Prerequisites resolved once during planning phase
+- **Batch Execution**: Operations executed in optimal order
+- **Memory Efficient**: Minimal memory footprint for operation tracking
+- **Concurrent Safe**: Thread-safe operation building (execution is single-threaded)
 
-1. Ensure all changes are committed
-2. Run `./scripts/release-new --patch` (or --minor/--major)
-3. GitHub Actions will handle the release automatically
-4. Monitor the release at your GitHub Actions page
+## �️ **Safety Features**
 
-## 📚 **Dependencies**
-
-- **Go 1.23+**
-- **golangci-lint** (auto-installed)
-- **gotestsum** (auto-installed)
-- **cloc** (for line counting)
-- **GitHub CLI** (optional, for enhanced GitHub integration)
+- **Validation**: All operations validated before execution
+- **Rollback**: Optional backup/restore functionality
+- **Conflict Detection**: Prevents accidental overwrites
+- **Error Recovery**: Comprehensive error reporting with context
 
 ## 📄 **License**
 
 MIT License - see LICENSE file for details
+
+## 🤝 **Contributing**
+
+1. Fork the repository
+2. Create a feature branch
+3. Run tests: `./scripts/test`
+4. Submit a pull request
+
+See the development scripts in `scripts/` directory for building, testing, and linting.

@@ -25,7 +25,7 @@ type BatchImpl struct {
 	logger     core.Logger
 }
 
-// NewBatch creates a new operation batch with prerequisite resolution.
+// NewBatch creates a new operation batch with prerequisite resolution enabled.
 func NewBatch(fs interface{}, registry core.OperationFactory) Batch {
 	return &BatchImpl{
 		operations: []interface{}{},
@@ -82,31 +82,28 @@ func (b *BatchImpl) add(op interface{}) error {
 
 // validateOperation validates an operation
 func (b *BatchImpl) validateOperation(op interface{}) error {
-	// Try to validate the operation
+	// Try ValidateV2 first
+	type validatorV2 interface {
+		ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
+	}
+
+	if v, ok := op.(validatorV2); ok {
+		// Create a minimal ExecutionContext for validation
+		execCtx := &core.ExecutionContext{}
+		if err := v.ValidateV2(b.ctx, execCtx, b.fs); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Fallback to basic Validate method
 	type validator interface {
 		Validate(ctx context.Context, fsys interface{}) error
 	}
 
-	validated := false
 	if v, ok := op.(validator); ok {
 		if err := v.Validate(b.ctx, b.fs); err != nil {
 			return err
-		}
-		validated = true
-	}
-
-	// If not validated yet, try ValidateV2 which operations should have
-	if !validated {
-		type validatorV2 interface {
-			ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
-		}
-
-		if v, ok := op.(validatorV2); ok {
-			// Create a minimal ExecutionContext for validation
-			execCtx := &core.ExecutionContext{}
-			if err := v.ValidateV2(b.ctx, execCtx, b.fs); err != nil {
-				return err
-			}
 		}
 	}
 
@@ -431,12 +428,11 @@ func (b *BatchImpl) UnarchiveWithPatterns(archivePath, extractPath string, patte
 	return op, nil
 }
 
-// Run runs all operations in the batch with prerequisite resolution.
+// Run runs all operations in the batch using default options with prerequisite resolution.
 func (b *BatchImpl) Run() (interface{}, error) {
 	return b.RunWithOptions(map[string]interface{}{
-		"restorable":            false,
-		"max_backup_size_mb":    0,
-		"resolve_prerequisites": true,
+		"restorable":         false,
+		"max_backup_size_mb": 0,
 	})
 }
 
@@ -466,6 +462,7 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 			Int("operation_count", len(b.operations)).
 			Bool("restorable", pipelineOpts.Restorable).
 			Int("max_backup_mb", pipelineOpts.MaxBackupSizeMB).
+			Bool("resolve_prerequisites", pipelineOpts.ResolvePrerequisites).
 			Msg("executing batch")
 	}
 	
@@ -498,7 +495,7 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 	// Create prerequisite resolver (always enabled)
 	prereqResolver := execution.NewPrerequisiteResolver(b.registry, loggerToUse)
 	if b.logger != nil {
-		b.logger.Info().Msg("created prerequisite resolver")
+		b.logger.Info().Msg("created prerequisite resolver with operation factory")
 	}
 	
 	// Execute using the execution package with prerequisite resolver
