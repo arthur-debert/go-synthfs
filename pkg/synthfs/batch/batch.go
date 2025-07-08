@@ -584,6 +584,29 @@ func (b *BatchImpl) RunWithPrerequisitesAndBudget(maxBackupMB int) (interface{},
 	return b.RunRestorableWithBudget(maxBackupMB)
 }
 
+// RunWithSimpleBatch runs all operations with SimpleBatch behavior.
+// Note: As of Phase 7, this is the default behavior, so it's equivalent to Run().
+func (b *BatchImpl) RunWithSimpleBatch() (interface{}, error) {
+	return b.Run()
+}
+
+// RunWithSimpleBatchAndBudget runs all operations with SimpleBatch behavior and backup enabled.
+func (b *BatchImpl) RunWithSimpleBatchAndBudget(maxBackupMB int) (interface{}, error) {
+	return b.RunRestorableWithBudget(maxBackupMB)
+}
+
+// RunWithLegacyBatch runs all operations with legacy batch behavior.
+// Note: As of Phase 7, legacy behavior is no longer available - this delegates to SimpleBatch.
+func (b *BatchImpl) RunWithLegacyBatch() (interface{}, error) {
+	return b.Run()
+}
+
+// RunWithLegacyBatchAndBudget runs all operations with legacy batch behavior and backup enabled.
+// Note: As of Phase 7, legacy behavior is no longer available - this delegates to SimpleBatch.
+func (b *BatchImpl) RunWithLegacyBatchAndBudget(maxBackupMB int) (interface{}, error) {
+	return b.RunRestorableWithBudget(maxBackupMB)
+}
+
 // Helper methods
 
 // generateID creates a unique operation ID based on type and path.

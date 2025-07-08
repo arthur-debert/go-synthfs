@@ -220,6 +220,65 @@ func (b *Batch) RunRestorableWithBudget(maxBackupMB int) (*Result, error) {
 	return ConvertBatchResult(batchResult), nil
 }
 
+// RunWithPrerequisites runs all operations with prerequisite resolution enabled.
+// Note: As of Phase 7, prerequisite resolution is always enabled, so this is equivalent to Run().
+func (b *Batch) RunWithPrerequisites() (*Result, error) {
+	batchResult, err := b.impl.RunWithPrerequisites()
+	if err != nil {
+		return nil, err
+	}
+	return ConvertBatchResult(batchResult), nil
+}
+
+// RunWithPrerequisitesAndBudget runs all operations with prerequisite resolution and backup enabled.
+// Note: As of Phase 7, prerequisite resolution is always enabled.
+func (b *Batch) RunWithPrerequisitesAndBudget(maxBackupMB int) (*Result, error) {
+	batchResult, err := b.impl.RunWithPrerequisitesAndBudget(maxBackupMB)
+	if err != nil {
+		return nil, err
+	}
+	return ConvertBatchResult(batchResult), nil
+}
+
+// RunWithSimpleBatch runs all operations with SimpleBatch behavior.
+// Note: As of Phase 7, this is the default behavior, so it's equivalent to Run().
+func (b *Batch) RunWithSimpleBatch() (*Result, error) {
+	batchResult, err := b.impl.RunWithSimpleBatch()
+	if err != nil {
+		return nil, err
+	}
+	return ConvertBatchResult(batchResult), nil
+}
+
+// RunWithSimpleBatchAndBudget runs all operations with SimpleBatch behavior and backup enabled.
+func (b *Batch) RunWithSimpleBatchAndBudget(maxBackupMB int) (*Result, error) {
+	batchResult, err := b.impl.RunWithSimpleBatchAndBudget(maxBackupMB)
+	if err != nil {
+		return nil, err
+	}
+	return ConvertBatchResult(batchResult), nil
+}
+
+// RunWithLegacyBatch runs all operations with legacy batch behavior.
+// Note: As of Phase 7, legacy behavior is no longer available - this delegates to SimpleBatch.
+func (b *Batch) RunWithLegacyBatch() (*Result, error) {
+	batchResult, err := b.impl.RunWithLegacyBatch()
+	if err != nil {
+		return nil, err
+	}
+	return ConvertBatchResult(batchResult), nil
+}
+
+// RunWithLegacyBatchAndBudget runs all operations with legacy batch behavior and backup enabled.
+// Note: As of Phase 7, legacy behavior is no longer available - this delegates to SimpleBatch.
+func (b *Batch) RunWithLegacyBatchAndBudget(maxBackupMB int) (*Result, error) {
+	batchResult, err := b.impl.RunWithLegacyBatchAndBudget(maxBackupMB)
+	if err != nil {
+		return nil, err
+	}
+	return ConvertBatchResult(batchResult), nil
+}
+
 // ConvertBatchResult converts a batch package result to main package Result
 func ConvertBatchResult(batchResult interface{}) *Result {
 	// Extract fields from the batch result interface

@@ -106,43 +106,44 @@ type NoConflictPrerequisite struct {
 4. When false (default), use existing batch behavior (DONE)
 5. **Tests**: Add tests for new resolver, existing tests unchanged (DONE)
 
-### Phase 4: Create SimpleBatch Alternative (No Breaking Changes)
+### Phase 4: Create SimpleBatch Alternative (No Breaking Changes) **(COMPLETED ✅)**
 
 **Goal**: New simplified batch that doesn't handle prerequisites
 
-1. Create `batch/simple_batch.go` as new implementation
-2. No parent dir logic, just creates operations
-3. Add `NewSimpleBatch()` constructor
-4. Existing `NewBatch()` returns current implementation
-5. **Tests**: New tests for SimpleBatch, old batch tests unchanged
+1. ✅ Create `batch/simple_batch.go` as new implementation (Fixed compilation issues)
+2. ✅ No parent dir logic, just creates operations
+3. ✅ Add `NewSimpleBatch()` constructor
+4. ✅ Existing `NewBatch()` returns current implementation
+5. ✅ **Tests**: New tests for SimpleBatch, old batch tests unchanged
 
-### Phase 5: Migration Path (No Breaking Changes)
+### Phase 5: Migration Path (No Breaking Changes) **(COMPLETED ✅)**
 
 **Goal**: Allow gradual migration to new design
 
-1. Add `UseSimpleBatch bool` to batch options
-2. When true, use SimpleBatch + prerequisite resolution
-3. When false (default), use existing behavior
-4. Update documentation with migration guide
-5. **Tests**: Integration tests for both paths
+1. ✅ Add `UseSimpleBatch bool` to batch options via `options.go`
+2. ✅ When true, use SimpleBatch + prerequisite resolution
+3. ✅ When false (default), use existing behavior
+4. ✅ Update documentation with migration guide
+5. ✅ **Tests**: Integration tests for both paths
 
-### Phase 6: Switch Defaults (Controlled Breaking Change)
+### Phase 6: Switch Defaults (Controlled Breaking Change) **(COMPLETED ✅)**
 
 **Goal**: Make new behavior default, deprecate old
 
-1. Change `UseSimpleBatch` default to true
-2. Add deprecation notices to old batch methods
-3. Update all internal usage to new pattern
-4. **Tests**: Update tests to use new pattern primarily
+1. ✅ Change `UseSimpleBatch` default to true
+2. ✅ Add deprecation notices to old batch methods
+3. ✅ Update all internal usage to new pattern
+4. ✅ **Tests**: Update tests to use new pattern primarily
 
-### Phase 7: Cleanup (Major Version)
+### Phase 7: Cleanup (Major Version) **(COMPLETED ✅)**
 
 **Goal**: Remove old implementation
 
-1. Remove old batch implementation
-2. Remove compatibility flags
-3. Simplify codebase
-4. **Tests**: Remove old test paths
+1. ✅ Remove old batch implementation (converted to use prerequisite resolution)
+2. ✅ Remove compatibility flags
+3. ✅ Simplify codebase  
+4. ✅ **Tests**: Remove old test paths
+5. ✅ Added missing convenience methods (RunWithSimpleBatch, RunWithLegacyBatch, etc.)
 
 ## Current Status (2024)
 
