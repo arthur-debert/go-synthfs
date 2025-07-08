@@ -1,4 +1,4 @@
-THIS SHOULD BE A LINTER ERRORpackage core
+package core
 
 import (
 	"context"
@@ -10,6 +10,7 @@ type PipelineOptions struct {
 	Restorable           bool // Whether to enable reversible operations with backup
 	MaxBackupSizeMB      int  // Maximum backup size in MB (default: 10MB)
 	ResolvePrerequisites bool // Whether to resolve prerequisites like parent directories (default: false)
+	UseSimpleBatch       bool // Whether to use SimpleBatch instead of the original batch (default: false for backward compatibility)
 }
 
 // OperationResult holds the outcome of a single operation's execution

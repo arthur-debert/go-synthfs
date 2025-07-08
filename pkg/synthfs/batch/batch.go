@@ -496,14 +496,14 @@ func (b *BatchImpl) Run() (interface{}, error) {
 // RunWithOptions runs all operations in the batch with specified options.
 func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 	startTime := time.Now()
-
+	
 	// Extract options and convert to core.PipelineOptions
 	pipelineOpts := core.PipelineOptions{
 		Restorable:           false,
 		MaxBackupSizeMB:      10,
-		ResolvePrerequisites: false, // Disabled by default for backward compatibility (Phase 5)
+		ResolvePrerequisites: true, // Phase 6: Enable prerequisite resolution by default
 	}
-
+	
 	if optsMap, ok := opts.(map[string]interface{}); ok {
 		if r, ok := optsMap["restorable"].(bool); ok {
 			pipelineOpts.Restorable = r
