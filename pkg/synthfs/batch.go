@@ -19,13 +19,15 @@ type Batch struct {
 
 // NewBatch creates a new operation batch with default filesystem and context.
 // 
-// As of Phase 7, this uses prerequisite resolution for automatic dependency management
+// As of Phase 7, this uses SimpleBatch with prerequisite resolution for automatic dependency management
 // instead of hardcoded parent directory creation, providing better extensibility and testability.
 func NewBatch() *Batch {
 	fs := filesystem.NewOSFileSystem(".")
 	registry := GetDefaultRegistry()
 	logger := NewLoggerAdapter(Logger())
-	impl := batch.NewBatch(fs, registry).
+	
+	// Phase 7: Use SimpleBatch by default (old BatchImpl was removed)
+	impl := batch.NewSimpleBatch(fs, registry).
 		WithContext(context.Background()).
 		WithLogger(logger)
 	return &Batch{impl: impl}
