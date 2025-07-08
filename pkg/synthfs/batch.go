@@ -254,6 +254,27 @@ func (b *Batch) RunRestorableWithBudget(maxBackupMB int) (*Result, error) {
 	return ConvertBatchResult(batchResult), nil
 }
 
+// RunWithPrerequisites runs all operations with prerequisite resolution enabled.
+// This enables automatic parent directory creation via prerequisite resolution.
+func (b *Batch) RunWithPrerequisites() (*Result, error) {
+	opts := PipelineOptions{
+		Restorable:           false,
+		MaxBackupSizeMB:      0,
+		ResolvePrerequisites: true,
+	}
+	return b.RunWithOptions(opts)
+}
+
+// RunWithPrerequisitesAndBudget runs all operations with prerequisite resolution and backup enabled.
+func (b *Batch) RunWithPrerequisitesAndBudget(maxBackupMB int) (*Result, error) {
+	opts := PipelineOptions{
+		Restorable:           true,
+		MaxBackupSizeMB:      maxBackupMB,
+		ResolvePrerequisites: true,
+	}
+	return b.RunWithOptions(opts)
+}
+
 // ConvertBatchResult converts a batch package result to main package Result
 func ConvertBatchResult(batchResult interface{}) *Result {
 	// Extract fields from the batch result interface

@@ -473,15 +473,14 @@ func (b *BatchImpl) UnarchiveWithPatterns(archivePath, extractPath string, patte
 	return op, nil
 }
 
-// Run runs all operations in the batch with prerequisite resolution enabled by default.
+// Run runs all operations in the batch using default options.
 func (b *BatchImpl) Run() (interface{}, error) {
-	// Enable prerequisite resolution by default
-	opts := map[string]interface{}{
-		"resolve_prerequisites": true,
-		"restorable":            false,
-		"max_backup_size_mb":    0,
+	// Use default pipeline options
+	defaultOpts := map[string]interface{}{
+		"restorable":        false,
+		"max_backup_size_mb": 0,
 	}
-	return b.RunWithOptions(opts)
+	return b.RunWithOptions(defaultOpts)
 }
 
 // RunWithOptions runs all operations in the batch with specified options.
@@ -492,7 +491,7 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 	pipelineOpts := core.PipelineOptions{
 		Restorable:           false,
 		MaxBackupSizeMB:      10,
-		ResolvePrerequisites: true, // Always enable prerequisite resolution (Phase 7)
+		ResolvePrerequisites: false, // Disabled by default for backward compatibility (Phase 5)
 	}
 
 	if optsMap, ok := opts.(map[string]interface{}); ok {
@@ -606,23 +605,31 @@ func (b *BatchImpl) RunRestorable() (interface{}, error) {
 // RunRestorableWithBudget runs all operations with backup enabled using a custom budget.
 func (b *BatchImpl) RunRestorableWithBudget(maxBackupMB int) (interface{}, error) {
 	opts := map[string]interface{}{
-		"restorable":            true,
-		"max_backup_size_mb":    maxBackupMB,
-		"resolve_prerequisites": true, // Enable prerequisite resolution
+		"restorable":         true,
+		"max_backup_size_mb": maxBackupMB,
 	}
 	return b.RunWithOptions(opts)
 }
 
-// RunWithSimpleBatch is deprecated. All batch operations now use prerequisite resolution.
-// This method is kept for backward compatibility and is equivalent to Run().
-func (b *BatchImpl) RunWithSimpleBatch() (interface{}, error) {
-	return b.Run()
+// RunWithPrerequisites runs all operations with prerequisite resolution enabled.
+// This enables automatic parent directory creation via prerequisite resolution.
+func (b *BatchImpl) RunWithPrerequisites() (interface{}, error) {
+	opts := map[string]interface{}{
+		"resolve_prerequisites": true,
+		"restorable":            false,
+		"max_backup_size_mb":    0,
+	}
+	return b.RunWithOptions(opts)
 }
 
-// RunWithSimpleBatchAndBudget is deprecated. Use RunRestorableWithBudget instead.
-// This method is kept for backward compatibility.
-func (b *BatchImpl) RunWithSimpleBatchAndBudget(maxBackupMB int) (interface{}, error) {
-	return b.RunRestorableWithBudget(maxBackupMB)
+// RunWithPrerequisitesAndBudget runs all operations with prerequisite resolution and backup enabled.
+func (b *BatchImpl) RunWithPrerequisitesAndBudget(maxBackupMB int) (interface{}, error) {
+	opts := map[string]interface{}{
+		"resolve_prerequisites": true,
+		"restorable":            true,
+		"max_backup_size_mb":    maxBackupMB,
+	}
+	return b.RunWithOptions(opts)
 }
 
 // Helper methods
