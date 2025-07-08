@@ -25,15 +25,25 @@ type BatchImpl struct {
 	idCounter  int
 	registry   core.OperationFactory
 	logger     core.Logger
+	pathTracker *pathStateTracker
 }
 
 // Note: BatchOptions is now defined in options.go
 
-// NewBatch creates a new operation batch with prerequisite resolution (Phase 7).
-// This constructor uses prerequisite resolution instead of automatic parent directory creation
-// for better extensibility and cleaner separation of concerns.
+// NewBatch creates a new operation batch.
+// DEPRECATED: This method will be removed in the next major version.
+// Use NewBatchWithOptions() with appropriate BatchOptions instead.
+// The new SimpleBatch implementation provides better extensibility through prerequisite resolution.
 func NewBatch(fs interface{}, registry core.OperationFactory) Batch {
-	return NewBatchWithOptions(fs, registry, nil)
+	return &BatchImpl{
+		operations:  []interface{}{},
+		fs:          fs,
+		ctx:         context.Background(),
+		idCounter:   0,
+		pathTracker: newPathStateTracker(fs),
+		registry:    registry,
+		logger:      nil, // Will be set by WithLogger method
+	}
 }
 
 // NewBatchWithOptions creates a new operation batch with specified options.

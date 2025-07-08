@@ -11,60 +11,48 @@ import (
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
+// BatchOptions represents configuration options for batch creation
+type BatchOptions struct {
+	UseSimpleBatch bool // When true, use SimpleBatch + prerequisite resolution (default: true in Phase 6)
+}
+
 // Batch represents a collection of filesystem operations that can be validated and executed as a unit.
 // This is a wrapper around the batch package implementation to maintain the public API.
 type Batch struct {
 	impl batch.Batch
 }
 
-// BatchOptions configures batch creation behavior
-type BatchOptions struct {
-	UseSimpleBatch bool // Whether to use SimpleBatch instead of traditional Batch (default: false, will change to true in future versions)
-}
-
-// NewSimpleBatch creates a new operation batch using the SimpleBatch implementation.
-// This implementation relies on prerequisite resolution instead of automatic parent directory creation.
-// This is the recommended approach for new code.
-func NewSimpleBatch() *Batch {
-	return NewBatchWithOptions(BatchOptions{UseSimpleBatch: true})
-}
-
-// NewLegacyBatch creates a new operation batch using the legacy implementation.
-// DEPRECATED: This method is provided for backward compatibility only.
-// Use NewBatch() or NewSimpleBatch() for new code, as they provide better
-// extensibility through prerequisite resolution.
-func NewLegacyBatch() *Batch {
-	return NewBatchWithOptions(BatchOptions{UseSimpleBatch: false})
-}
-
 // NewBatch creates a new operation batch with default filesystem and context.
-// This uses prerequisite resolution for dependency management instead of automatic 
-// parent directory creation, providing better extensibility and testability.
-// Now defaults to SimpleBatch implementation (Phase 6: Switch Defaults).
+// 
+// BEHAVIOR CHANGE (Phase 6): As of Phase 6, this function now defaults to SimpleBatch behavior
+// which uses prerequisite resolution instead of automatic parent directory creation.
+// This provides better extensibility and testability. If you need the old behavior temporarily,
+// use NewBatchWithLegacyBehavior() or set UseSimpleBatch: false in BatchOptions.
 func NewBatch() *Batch {
+	// Phase 6: UseSimpleBatch defaults to true
 	return NewBatchWithOptions(BatchOptions{UseSimpleBatch: true})
 }
 
-// NewBatchWithOptions creates a new operation batch with custom options.
+// NewBatchWithOptions creates a new operation batch with specified options.
 func NewBatchWithOptions(opts BatchOptions) *Batch {
 	fs := filesystem.NewOSFileSystem(".")
 	registry := GetDefaultRegistry()
 	logger := NewLoggerAdapter(Logger())
 	
-	var impl batch.Batch
-	if opts.UseSimpleBatch {
-		// Use SimpleBatch implementation with prerequisite resolution enabled by default
-		impl = batch.NewSimpleBatch(fs, registry).
-			WithContext(context.Background()).
-			WithLogger(logger)
-	} else {
-		// Use traditional batch implementation
-		impl = batch.NewBatch(fs, registry).
-			WithContext(context.Background()).
-			WithLogger(logger)
-	}
+	// Use batch package factory
+	batchOpts := batch.BatchOptions{UseSimpleBatch: opts.UseSimpleBatch}
+	impl := batch.NewBatchWithOptions(fs, registry, batchOpts).
+		WithContext(context.Background()).
+		WithLogger(logger)
 	
 	return &Batch{impl: impl}
+}
+
+// NewBatchWithLegacyBehavior creates a batch with the old hardcoded parent directory behavior.
+// DEPRECATED: This function is deprecated and will be removed in the next major version.
+// Use NewBatchWithOptions with UseSimpleBatch: false if you need the old behavior temporarily.
+func NewBatchWithLegacyBehavior() *Batch {
+	return NewBatchWithOptions(BatchOptions{UseSimpleBatch: false})
 }
 
 // WithFileSystem sets the filesystem for the batch operations.
