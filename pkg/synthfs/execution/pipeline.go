@@ -8,6 +8,21 @@ import (
 	"github.com/gammazero/toposort"
 )
 
+// OperationInterface defines the interface for operations in the pipeline  
+// This should match the interface defined in executor.go
+type OperationInterface interface {
+	ID() core.OperationID
+	Describe() core.OperationDesc
+	Dependencies() []core.OperationID
+	Conflicts() []core.OperationID
+	AddDependency(depID core.OperationID)
+	ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
+	ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
+	ReverseOps(ctx context.Context, fsys interface{}, budget *core.BackupBudget) ([]interface{}, *core.BackupData, error)
+	Rollback(ctx context.Context, fsys interface{}) error
+	GetItem() interface{}
+}
+
 // Pipeline manages a sequence of operations
 type Pipeline interface {
 	Add(ops ...interface{}) error

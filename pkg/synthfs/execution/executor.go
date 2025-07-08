@@ -41,6 +41,7 @@ type OperationInterface interface {
 	Describe() core.OperationDesc
 	Dependencies() []core.OperationID
 	Conflicts() []core.OperationID
+	AddDependency(depID core.OperationID)
 	ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
 	ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
 	ReverseOps(ctx context.Context, fsys interface{}, budget *core.BackupBudget) ([]interface{}, *core.BackupData, error)
@@ -63,10 +64,16 @@ func (e *Executor) Run(ctx context.Context, pipeline PipelineInterface, fs inter
 
 // RunWithOptions runs all operations in the pipeline with specified options
 func (e *Executor) RunWithOptions(ctx context.Context, pipeline PipelineInterface, fs interface{}, opts core.PipelineOptions) *core.Result {
+	return e.RunWithOptionsAndResolver(ctx, pipeline, fs, opts, nil)
+}
+
+// RunWithOptionsAndResolver runs all operations in the pipeline with specified options and a custom prerequisite resolver
+func (e *Executor) RunWithOptionsAndResolver(ctx context.Context, pipeline PipelineInterface, fs interface{}, opts core.PipelineOptions, resolver core.PrerequisiteResolver) *core.Result {
 	e.logger.Info().
 		Int("operation_count", len(pipeline.Operations())).
 		Bool("restorable", opts.Restorable).
 		Int("max_backup_mb", opts.MaxBackupSizeMB).
+		Bool("resolve_prerequisites", opts.ResolvePrerequisites).
 		Msg("starting execution")
 
 	start := time.Now()
@@ -103,11 +110,14 @@ func (e *Executor) RunWithOptions(ctx context.Context, pipeline PipelineInterfac
 	if opts.ResolvePrerequisites {
 		e.logger.Info().Msg("resolving operation prerequisites")
 		
-		// Create a prerequisite resolver - we need a dummy operation factory for this
-		// In a real implementation, this would be passed in or configured
-		resolver := NewPrerequisiteResolver(nil, e.logger)
+		// Use provided resolver or create default one
+		prereqResolver := resolver
+		if prereqResolver == nil {
+			e.logger.Debug().Msg("no prerequisite resolver provided - creating default resolver with nil factory")
+			prereqResolver = NewPrerequisiteResolver(nil, e.logger)
+		}
 		
-		if err := pipeline.ResolvePrerequisites(resolver, fs); err != nil {
+		if err := pipeline.ResolvePrerequisites(prereqResolver, fs); err != nil {
 			e.logger.Info().Err(err).Msg("prerequisite resolution failed")
 			result.Success = false
 			result.Errors = append(result.Errors, fmt.Errorf("prerequisite resolution failed: %w", err))

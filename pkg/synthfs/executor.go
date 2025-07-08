@@ -137,6 +137,12 @@ func (pw *pipelineWrapper) Validate(ctx context.Context, fs interface{}) error {
 	return pw.pipeline.Validate(ctx, fsys)
 }
 
+func (pw *pipelineWrapper) ResolvePrerequisites(resolver core.PrerequisiteResolver, fs interface{}) error {
+	// The main package pipeline doesn't support prerequisite resolution yet
+	// This is a no-op for now
+	return nil
+}
+
 // operationWrapper wraps Operation to implement execution.OperationInterface
 type operationWrapper struct {
 	op Operation
@@ -234,4 +240,9 @@ func (ow *operationWrapper) GetDstPath() string {
 		return dst
 	}
 	return ""
+}
+
+func (ow *operationWrapper) AddDependency(depID core.OperationID) {
+	// Delegate to the original operation's AddDependency method
+	ow.op.AddDependency(depID)
 }

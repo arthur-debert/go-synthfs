@@ -127,6 +127,12 @@ func (w *operationWrapper) GetItem() interface{} {
 	return nil
 }
 
+func (w *operationWrapper) AddDependency(depID core.OperationID) {
+	if op, ok := w.op.(interface{ AddDependency(core.OperationID) }); ok {
+		op.AddDependency(depID)
+	}
+}
+
 // ensureParentDirectories generates CreateDir operations for missing parent directories
 func ensureParentDirectories(b *BatchImpl, path string) ([]core.OperationID, error) {
 	// Clean and normalize the path
