@@ -116,28 +116,39 @@ type NoConflictPrerequisite struct {
 4. Existing `NewBatch()` returns current implementation **(DONE)**
 5. **Tests**: New tests for SimpleBatch, old batch tests unchanged **(DONE)**
 
-### Phase 5-6: Migration Path and Default Switch **(SIMPLIFIED - DONE)**
+### Phase 5: Migration Path (No Breaking Changes) **(DONE)**
 
 **Goal**: Allow gradual migration to new design
 
-The migration path was simplified to go directly to a unified approach instead of 
-maintaining parallel implementations. The final design uses prerequisite resolution
-consistently across all batch types.
+1. Add `UseSimpleBatch bool` to batch options **(DONE)**
+2. When true, use SimpleBatch + prerequisite resolution **(DONE)**
+3. When false (default), use existing behavior **(DONE)**
+4. Update documentation with migration guide **(DONE)**
+5. **Tests**: Integration tests for both paths **(DONE)**
 
-### Phase 7: Cleanup (Major Version) (DONE)
+### Phase 6: Switch Defaults (Controlled Breaking Change) **(NOT STARTED)**
+
+**Goal**: Make new behavior default, deprecate old
+
+1. Change `UseSimpleBatch` default to true
+2. Add deprecation notices to old batch methods
+3. Update all internal usage to new pattern
+4. **Tests**: Update tests to use new pattern primarily
+
+### Phase 7: Cleanup (Major Version) **(NOT STARTED)**
 
 **Goal**: Remove old implementation
 
-1. Remove old batch implementation (DONE)
-2. Remove compatibility flags (DONE)
-3. Simplify codebase (DONE)
-4. **Tests**: Remove old test paths (DONE)
+1. Remove old batch implementation
+2. Remove compatibility flags
+3. Simplify codebase
+4. **Tests**: Remove old test paths
 
 ## Implementation Completion Summary
 
-**ALL PHASES COMPLETED** ✅
+**PHASES 1-5 COMPLETED** ✅ | **PHASES 6-7 PENDING** ⏳
 
-The operation-driven prerequisites design has been fully implemented across all 7 phases:
+The operation-driven prerequisites design has been implemented through Phase 5:
 
 ### ✅ **Phase 1-3: Core Infrastructure** 
 - Prerequisite interfaces and concrete types implemented in `core/` package
@@ -147,19 +158,20 @@ The operation-driven prerequisites design has been fully implemented across all 
 
 ### ✅ **Phase 4-5: Migration Infrastructure**
 - `SimpleBatch` implementation created as alternative to legacy batch
-- Migration path with `WithSimpleBatch()` and constructor options
+- Migration path with `NewBatchWithOptions()` and `UseSimpleBatch` flag
 - Both legacy and new behavior supported during transition period
+- `RunWithPrerequisites()` methods for opt-in prerequisite resolution
+- Complete migration guide documentation created
 
-### ✅ **Phase 6: Default Switch** 
-- New prerequisite-based behavior became the default
-- Legacy behavior deprecated with clear migration notices
-- All internal usage updated to new pattern
+### ⏳ **Phase 6: Default Switch** (Pending)
+- Change `UseSimpleBatch` default to true
+- Add deprecation notices to old batch methods
+- Update all internal usage to new pattern
 
-### ✅ **Phase 7: Cleanup**
-- Legacy batch implementation removed
-- `useSimpleBatch` compatibility flags removed
-- Codebase simplified to always use prerequisite resolution
-- Clean, unified API surface
+### ⏳ **Phase 7: Cleanup** (Pending)
+- Remove legacy batch implementation
+- Remove compatibility flags
+- Simplify codebase to always use prerequisite resolution
 
 ### **Key Benefits Achieved:**
 
