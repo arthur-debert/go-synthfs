@@ -1,10 +1,10 @@
-# Operation-Driven Prerequisites Design (COMPLETED)
+# Operation-Driven Prerequisites Design
 
-This document contains the full redesign of synthfs's execution.
-A few pointers on the implementation:
+This document contais the full redesign of fsynth's execution.
+A few pointers on the impelemntation:
 
 1. Commit granularly, at least 1 commit per milestone (a phase has several milestones. ) . It's fine if a milestone generates various commits, but do not clump together various milestones into a single commit.
-2. For each commit message use the template : Execution Refac <phase> <milestone> Description
+2. For each commit message use the tetmplate : Execution Refac <phase> <milestone> Description
 3. as you make progress, do add (DONE) to the milestone description here for tracking.
 4. scripts/test, scripts/lint are needed for commiting, both are ran on the scripts/pre-commit hook. I strong advise you to run these as you go as not to be caught up into reverting too big a change.
 5. commiting with --no-verify is a no no. never.
@@ -24,7 +24,7 @@ Operations declare their prerequisites, execution pipeline resolves them generic
 
 ## Core Design
 
-### 1. Prerequisite Interface (in core package to avoid circular deps) (DONE)
+### 1. Prerequisite Interface (in core package to avoid circular deps)
 
 ```go
 // pkg/synthfs/core/prerequisites.go
@@ -44,7 +44,7 @@ type PrerequisiteResolver interface {
 }
 ```
 
-### 2. Enhanced Operation Interface (DONE)
+### 2. Enhanced Operation Interface
 
 ```go
 // Add to operations.Operation interface
@@ -56,7 +56,7 @@ type Operation interface {
 }
 ```
 
-### 3. Concrete Prerequisites (DONE)
+### 3. Concrete Prerequisites
 
 ```go
 // pkg/synthfs/core/prerequisites_impl.go
@@ -78,64 +78,64 @@ type NoConflictPrerequisite struct {
 
 ## Implementation Plan
 
-### Phase 1: Add Prerequisites to Core (DONE)
+### Phase 1: Add Prerequisites to Core (No Breaking Changes) - (DONE)
 
 **Goal**: Introduce prerequisite types without changing existing behavior
 
-1. Add `core/prerequisites.go` with interfaces (DONE)
-2. Add `core/prerequisites_impl.go` with concrete types (DONE)
-3. Add default `Prerequisites() []core.Prerequisite { return nil }` to operations.BaseOperation (DONE)
-4. **Tests**: All existing tests pass, no behavior change (DONE)
+1. Add `core/prerequisites.go` with interfaces - (DONE)
+2. Add `core/prerequisites_impl.go` with concrete types - (DONE)
+3. Add default `Prerequisites() []core.Prerequisite { return nil }` to operations.BaseOperation - (DONE)
+4. **Tests**: All existing tests pass, no behavior change - (DONE)
 
-### Phase 2: Operations Declare Prerequisites (DONE)
+### Phase 2: Operations Declare Prerequisites (No Breaking Changes) - (DONE)
 
 **Goal**: Operations declare needs, but batch still handles them
 
-1. Update CreateFileOperation to return ParentDirPrerequisite (DONE)
-2. Update other operations to declare prerequisites (DONE)
-3. Add unit tests for prerequisite declarations (DONE)
-4. **Tests**: New tests for prerequisites, existing tests still pass (DONE)
+1. Update CreateFileOperation to return ParentDirPrerequisite - (DONE)
+2. Update other operations to declare prerequisites - (DONE)
+3. Add unit tests for prerequisite declarations - (DONE)
+4. **Tests**: New tests for prerequisites, existing tests still pass - (DONE)
 
-### Phase 3: Add Prerequisite Resolution to Pipeline (DONE)
+### Phase 3: Add Prerequisite Resolution to Pipeline (No Breaking Changes) - (DONE)
 
 **Goal**: Pipeline can resolve prerequisites, but feature is opt-in
 
-1. Create `execution/prerequisite_resolver.go` (DONE)
-2. Add resolver that can create parent directory operations (DONE)
-3. Add `ResolvePrerequisites bool` option to PipelineOptions (DONE)
-4. When false (default), use existing batch behavior (DONE)
-5. **Tests**: Add tests for new resolver, existing tests unchanged (DONE)
+1. Create `execution/prerequisite_resolver.go` - (DONE)
+2. Add resolver that can create parent directory operations - (DONE)
+3. Add `ResolvePrerequisites bool` option to PipelineOptions - (DONE)
+4. When false (default), use existing batch behavior - (DONE)
+5. **Tests**: Add tests for new resolver, existing tests unchanged - (DONE)
 
-### Phase 4: Create SimpleBatch Alternative (DONE)
+### Phase 4: Create SimpleBatch Alternative (No Breaking Changes) - (DONE)
 
 **Goal**: New simplified batch that doesn't handle prerequisites
 
-1. Create `batch/simple_batch.go` as new implementation (DONE)
-2. No parent dir logic, just creates operations (DONE)
-3. Add `NewSimpleBatch()` constructor (DONE)
-4. Existing `NewBatch()` returns current implementation (DONE)
-5. **Tests**: New tests for SimpleBatch, old batch tests unchanged (DONE)
+1. Create `batch/simple_batch.go` as new implementation - (DONE - integrated into main batch)
+2. No parent dir logic, just creates operations - (DONE)
+3. Add `NewSimpleBatch()` constructor - (DONE - as NewBatchWithSimpleBatch)
+4. Existing `NewBatch()` returns current implementation - (DONE - now defaults to SimpleBatch)
+5. **Tests**: New tests for SimpleBatch, old batch tests unchanged - (DONE)
 
-### Phase 5: Migration Path (DONE)
+### Phase 5: Migration Path (No Breaking Changes) - (DONE)
 
 **Goal**: Allow gradual migration to new design
 
-1. Add `UseSimpleBatch bool` to batch options (DONE)
-2. When true, use SimpleBatch + prerequisite resolution (DONE)
-3. When false (default), use existing behavior (DONE)
-4. Update documentation with migration guide (DONE)
-5. **Tests**: Integration tests for both paths (DONE)
+1. Add `UseSimpleBatch bool` to batch options - (DONE)
+2. When true, use SimpleBatch + prerequisite resolution - (DONE)
+3. When false (default), use existing behavior - (DONE)
+4. Update documentation with migration guide - (DONE)
+5. **Tests**: Integration tests for both paths - (DONE)
 
-### Phase 6: Switch Defaults (DONE)
+### Phase 6: Switch Defaults (Controlled Breaking Change) - (DONE)
 
 **Goal**: Make new behavior default, deprecate old
 
-1. Change `UseSimpleBatch` default to true (DONE)
-2. Add deprecation notices to old batch methods (DONE)
-3. Update all internal usage to new pattern (DONE)
-4. **Tests**: Update tests to use new pattern primarily (DONE)
+1. Change `UseSimpleBatch` default to true - (DONE)
+2. Add deprecation notices to old batch methods - (DONE)
+3. Update all internal usage to new pattern - (DONE)
+4. **Tests**: Update tests to use new pattern primarily - (DONE)
 
-### Phase 7: Cleanup (Future Major Version)
+### Phase 7: Cleanup (Major Version)
 
 **Goal**: Remove old implementation
 
@@ -192,22 +192,10 @@ synthfs/        (imports all)
 3. **Risk**: Complex migration for users
    - **Mitigation**: Gradual phases, compatibility flags
 
-## Success Criteria (ALL ACHIEVED)
+## Success Criteria
 
-1. Batch no longer has hardcoded operation type strings ✅
-2. Operations explicitly declare all prerequisites ✅
-3. New operation types can be added without modifying batch/pipeline ✅
-4. All existing tests pass throughout migration ✅
-5. No circular import issues introduced ✅
-
-## Implementation Status: COMPLETE
-
-**Summary**: All phases of the operation-driven prerequisites design have been successfully implemented. The system now uses a clean separation of concerns where:
-
-- Operations declare their prerequisites using the `Prerequisites()` method
-- The execution pipeline automatically resolves prerequisites using `PrerequisiteResolver`
-- SimpleBatch behavior is now the default (as of Phase 6), providing better extensibility
-- Legacy behavior is still available via `NewBatchWithLegacyBehavior()` for backward compatibility
-- All success criteria have been achieved without breaking existing functionality
-
-The codebase now supports both the legacy automatic parent directory creation and the new prerequisite-based approach, with a clear migration path for users.
+1. Batch no longer has hardcoded operation type strings
+2. Operations explicitly declare all prerequisites  
+3. New operation types can be added without modifying batch/pipeline
+4. All existing tests pass throughout migration
+5. No circular import issues introduced
