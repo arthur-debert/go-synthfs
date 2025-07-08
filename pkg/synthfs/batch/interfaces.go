@@ -8,6 +8,7 @@ import (
 )
 
 // Batch represents a collection of operations that can be validated and executed as a unit.
+// As of Phase 7, all batches use prerequisite resolution for dependency management.
 type Batch interface {
 	// Operation management
 	Operations() []interface{}
@@ -28,7 +29,6 @@ type Batch interface {
 	WithContext(ctx context.Context) Batch
 	WithRegistry(registry core.OperationFactory) Batch
 	WithLogger(logger core.Logger) Batch
-	WithSimpleBatch(enabled bool) Batch // Deprecated: no-op method for backward compatibility
 
 	// Execution
 	Run() (interface{}, error)
@@ -37,6 +37,10 @@ type Batch interface {
 	RunRestorableWithBudget(maxBackupMB int) (interface{}, error)
 	RunWithPrerequisites() (interface{}, error)
 	RunWithPrerequisitesAndBudget(maxBackupMB int) (interface{}, error)
+	RunWithSimpleBatch() (interface{}, error)
+	RunWithSimpleBatchAndBudget(maxBackupMB int) (interface{}, error)
+	RunWithLegacyBatch() (interface{}, error)
+	RunWithLegacyBatchAndBudget(maxBackupMB int) (interface{}, error)
 }
 
 // Result represents the outcome of executing a batch of operations
@@ -47,14 +51,5 @@ type Result interface {
 	GetDuration() interface{}
 	GetError() error
 	GetBudget() interface{} // Budget information from execution (may be nil for non-restorable runs)
-	GetRollback() interface{} // Rollback function (func(context.Context) error)
-}
-
-// BatchConstructors provides factory functions for creating different batch implementations
-type BatchConstructors interface {
-	// NewBatch creates a new full-featured batch with automatic parent directory creation
-	NewBatch(fs interface{}, registry core.OperationFactory) Batch
-	
-	// NewSimpleBatch creates a simplified batch that relies on prerequisite resolution
-	NewSimpleBatch(fs interface{}, registry core.OperationFactory) Batch
+	GetRollback() interface{} // Rollback function (may be nil)
 }

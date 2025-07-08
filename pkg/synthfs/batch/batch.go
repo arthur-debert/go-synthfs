@@ -1,4 +1,4 @@
-package batch
+THIS SHOULD BE A LINTER ERRORpackage batch
 
 import (
 	"context"
@@ -15,8 +15,9 @@ import (
 )
 
 // BatchImpl represents a collection of operations that can be validated and executed as a unit.
-// This implementation uses prerequisite resolution for dependency management instead of
-// hardcoded parent directory creation logic.
+// This implementation uses interface{} types to avoid circular dependencies.
+// As of Phase 7, this implementation always uses prerequisite resolution instead of 
+// automatic parent directory creation for cleaner separation of concerns.
 type BatchImpl struct {
 	operations []interface{}
 	fs         interface{} // Filesystem interface
@@ -26,8 +27,20 @@ type BatchImpl struct {
 	logger     core.Logger
 }
 
-// NewBatch creates a new operation batch.
+// BatchOptions provides configuration for batch creation
+type BatchOptions struct {
+	// Note: UseSimpleBatch option removed in Phase 7 - always uses prerequisite resolution
+}
+
+// NewBatch creates a new operation batch with prerequisite resolution (Phase 7).
+// This constructor uses prerequisite resolution instead of automatic parent directory creation
+// for better extensibility and cleaner separation of concerns.
 func NewBatch(fs interface{}, registry core.OperationFactory) Batch {
+	return NewBatchWithOptions(fs, registry, BatchOptions{})
+}
+
+// NewBatchWithOptions creates a new operation batch with specified options.
+func NewBatchWithOptions(fs interface{}, registry core.OperationFactory, opts BatchOptions) Batch {
 	return &BatchImpl{
 		operations: []interface{}{},
 		fs:         fs,
@@ -36,6 +49,14 @@ func NewBatch(fs interface{}, registry core.OperationFactory) Batch {
 		registry:   registry,
 		logger:     nil, // Will be set by WithLogger method
 	}
+}
+
+// NewBatchWithSimpleBatch creates a new operation batch with prerequisite resolution.
+// This constructor is now equivalent to NewBatch() as of Phase 7.
+// 
+// NOTE: This constructor is kept for API compatibility but is now equivalent to NewBatch().
+func NewBatchWithSimpleBatch(fs interface{}, registry core.OperationFactory) Batch {
+	return NewBatch(fs, registry)
 }
 
 // Operations returns all operations currently in the batch.
@@ -70,13 +91,7 @@ func (b *BatchImpl) WithLogger(logger core.Logger) Batch {
 	return b
 }
 
-// WithSimpleBatch sets a hint for using simple batch behavior (deprecated).
-// This is a no-op for backward compatibility. Use NewBatchWithOptions instead.
-func (b *BatchImpl) WithSimpleBatch(enabled bool) Batch {
-	// This is a no-op for backward compatibility
-	// The actual implementation selection is done at creation time via NewBatchWithOptions
-	return b
-}
+
 
 // RunWithPrerequisites runs all operations with prerequisite resolution enabled.
 func (b *BatchImpl) RunWithPrerequisites() (interface{}, error) {
@@ -481,6 +496,7 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 		Restorable:           false,
 		MaxBackupSizeMB:      10,
 		ResolvePrerequisites: true, // Enable prerequisite resolution by default
+		UseSimpleBatch:       true, // Default to true as of Phase 6 - new behavior
 	}
 
 	if optsMap, ok := opts.(map[string]interface{}); ok {
@@ -493,6 +509,9 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 		if rp, ok := optsMap["resolve_prerequisites"].(bool); ok {
 			pipelineOpts.ResolvePrerequisites = rp
 		}
+		if usb, ok := optsMap["use_simple_batch"].(bool); ok {
+			pipelineOpts.UseSimpleBatch = usb
+		}
 	}
 
 	// Log the start of execution
@@ -502,7 +521,39 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 			Bool("restorable", pipelineOpts.Restorable).
 			Int("max_backup_mb", pipelineOpts.MaxBackupSizeMB).
 			Bool("resolve_prerequisites", pipelineOpts.ResolvePrerequisites).
+			Bool("use_simple_batch", pipelineOpts.UseSimpleBatch).
 			Msg("executing batch")
+	}
+
+	// If UseSimpleBatch is enabled, delegate to SimpleBatch implementation
+	if pipelineOpts.UseSimpleBatch {
+		if b.logger != nil {
+			b.logger.Info().Msg("delegating to SimpleBatch implementation")
+		}
+		
+		// Create a SimpleBatch with the same operations
+		simpleBatch := NewSimpleBatch(b.fs, b.registry).
+			WithContext(b.ctx).
+			WithLogger(b.logger)
+		
+		// Add all operations to the SimpleBatch
+		for _, op := range b.operations {
+			// SimpleBatch expects operations to be added through its methods,
+			// but we already have created operations. We need to add them directly.
+			if simpleBatchImpl, ok := simpleBatch.(*SimpleBatchImpl); ok {
+				simpleBatchImpl.operations = append(simpleBatchImpl.operations, op)
+			}
+		}
+		
+		// Convert options back to interface{} map for SimpleBatch
+		simpleBatchOpts := map[string]interface{}{
+			"restorable":            pipelineOpts.Restorable,
+			"max_backup_size_mb":    pipelineOpts.MaxBackupSizeMB,
+			"resolve_prerequisites": pipelineOpts.ResolvePrerequisites,
+		}
+		
+		// Delegate to SimpleBatch
+		return simpleBatch.RunWithOptions(simpleBatchOpts)
 	}
 
 	// If no operations, return successful empty result
@@ -597,6 +648,54 @@ func (b *BatchImpl) RunRestorableWithBudget(maxBackupMB int) (interface{}, error
 		"restorable":            true,
 		"max_backup_size_mb":    maxBackupMB,
 		"resolve_prerequisites": true, // Enable prerequisite resolution
+	}
+	return b.RunWithOptions(opts)
+}
+
+// RunWithSimpleBatch runs all operations with prerequisite resolution enabled.
+// Note: As of Phase 6, this is now the default behavior. This method is kept for compatibility.
+func (b *BatchImpl) RunWithSimpleBatch() (interface{}, error) {
+	opts := map[string]interface{}{
+		"use_simple_batch":      true,
+		"resolve_prerequisites": true,
+		"restorable":            false,
+		"max_backup_size_mb":    0,
+	}
+	return b.RunWithOptions(opts)
+}
+
+// RunWithSimpleBatchAndBudget runs all operations with prerequisite resolution and backup enabled.
+// Note: As of Phase 6, simple batch behavior is now the default. This method is kept for compatibility.
+func (b *BatchImpl) RunWithSimpleBatchAndBudget(maxBackupMB int) (interface{}, error) {
+	opts := map[string]interface{}{
+		"use_simple_batch":      true,
+		"resolve_prerequisites": true,
+		"restorable":            true,
+		"max_backup_size_mb":    maxBackupMB,
+	}
+	return b.RunWithOptions(opts)
+}
+
+// RunWithLegacyBatch runs all operations using legacy batch behavior (without SimpleBatch delegation).
+// Deprecated: The legacy batch behavior is deprecated as of Phase 6. Use RunWithOptions with use_simple_batch: false if needed.
+func (b *BatchImpl) RunWithLegacyBatch() (interface{}, error) {
+	opts := map[string]interface{}{
+		"use_simple_batch":      false,
+		"resolve_prerequisites": true,
+		"restorable":            false,
+		"max_backup_size_mb":    0,
+	}
+	return b.RunWithOptions(opts)
+}
+
+// RunWithLegacyBatchAndBudget runs all operations using legacy batch behavior with backup enabled.
+// Deprecated: The legacy batch behavior is deprecated as of Phase 6. Use RunWithOptions with use_simple_batch: false if needed.
+func (b *BatchImpl) RunWithLegacyBatchAndBudget(maxBackupMB int) (interface{}, error) {
+	opts := map[string]interface{}{
+		"use_simple_batch":      false,
+		"resolve_prerequisites": true,
+		"restorable":            true,
+		"max_backup_size_mb":    maxBackupMB,
 	}
 	return b.RunWithOptions(opts)
 }
@@ -759,6 +858,12 @@ func (oa *operationAdapter) Conflicts() []core.OperationID {
 		return op.Conflicts()
 	}
 	return []core.OperationID{}
+}
+
+func (oa *operationAdapter) AddDependency(dep core.OperationID) {
+	if op, ok := oa.op.(interface{ AddDependency(core.OperationID) }); ok {
+		op.AddDependency(dep)
+	}
 }
 
 func (oa *operationAdapter) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {

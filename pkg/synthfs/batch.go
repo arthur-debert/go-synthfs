@@ -11,6 +11,11 @@ import (
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
+// BatchOptions represents configuration options for batch creation
+type BatchOptions struct {
+	UseSimpleBatch bool // When true, use SimpleBatch + prerequisite resolution (default: false in Phase 5, will be true in Phase 6)
+}
+
 // Batch represents a collection of filesystem operations that can be validated and executed as a unit.
 // This is a wrapper around the batch package implementation to maintain the public API.
 type Batch struct {
@@ -18,18 +23,23 @@ type Batch struct {
 }
 
 // NewBatch creates a new operation batch with default filesystem and context.
-// 
-// BEHAVIOR CHANGE (Phase 6): As of Phase 6, this function now defaults to SimpleBatch behavior
-// which uses prerequisite resolution instead of automatic parent directory creation.
-// This provides better extensibility and testability. If you need the old behavior temporarily,
-// use batch.NewBatchWithLegacyBehavior() or call WithSimpleBatch(false) on the result.
 func NewBatch() *Batch {
+	// Phase 5: UseSimpleBatch defaults to false for backward compatibility
+	return NewBatchWithOptions(BatchOptions{UseSimpleBatch: false})
+}
+
+// NewBatchWithOptions creates a new operation batch with specified options.
+func NewBatchWithOptions(opts BatchOptions) *Batch {
 	fs := filesystem.NewOSFileSystem(".")
 	registry := GetDefaultRegistry()
 	logger := NewLoggerAdapter(Logger())
-	impl := batch.NewBatch(fs, registry).
+	
+	// Use batch package factory
+	batchOpts := batch.BatchOptions{UseSimpleBatch: opts.UseSimpleBatch}
+	impl := batch.NewBatchWithOptions(fs, registry, batchOpts).
 		WithContext(context.Background()).
 		WithLogger(logger)
+	
 	return &Batch{impl: impl}
 }
 
