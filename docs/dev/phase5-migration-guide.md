@@ -1,125 +1,62 @@
-# Phase 5 Migration Guide: SimpleBatch Behavior
+# Phase 5 Migration Guide - COMPLETED
 
-This guide explains how to migrate from the legacy batch behavior to the new SimpleBatch behavior that uses prerequisite resolution.
+**Status: MIGRATION COMPLETED ✅**
 
-## Overview
+This migration guide is now obsolete as the synthfs batch system has been consolidated into a single implementation with prerequisite resolution enabled by default.
 
-The synthfs batch system now supports two modes:
+## What Changed
 
-1. **Legacy Mode** (default): Automatic parent directory creation with hardcoded logic
-2. **SimpleBatch Mode**: Clean prerequisite resolution without hardcoded logic
+The synthfs batch system no longer supports multiple modes. There is now only one implementation that:
 
-## Migration Options
+1. **Uses prerequisite resolution automatically**: All operations get their prerequisites resolved during execution
+2. **Provides clean architecture**: Operations declare what they need via `Prerequisites()` method
+3. **Eliminates complexity**: No feature flags, no migration paths, no backwards compatibility layers
 
-### Option 1: New Constructor (Recommended)
-
-For new code, use the `NewBatchWithSimpleBatch()` constructor:
-
-```go
-// New way - recommended for new code
-batch := synthfs.NewBatchWithSimpleBatch()
-batch.CreateFile("path/to/file.txt", []byte("content"))
-result, err := batch.Run() // Automatically resolves prerequisites
-```
-
-### Option 2: Enable Flag (For Existing Code)
-
-For existing code that needs gradual migration:
+## Current API
 
 ```go
-// Existing code
+// Create a new batch - prerequisite resolution is automatic
 batch := synthfs.NewBatch()
 
-// Enable SimpleBatch behavior
-batch = batch.WithSimpleBatch(true)
-
+// Add operations - prerequisites will be resolved automatically
 batch.CreateFile("path/to/file.txt", []byte("content"))
-result, err := batch.Run() // Now uses prerequisite resolution
+
+// Execute - parent directories created automatically if needed
+result, err := batch.Run()
 ```
 
-### Option 3: Explicit Prerequisite Methods
+## Benefits Achieved
 
-Use explicit prerequisite resolution methods (works in both modes):
+1. **Cleaner Architecture**: Single implementation path
+2. **Extensibility**: New operation types work automatically by implementing `Prerequisites()`
+3. **Testability**: Clear separation of concerns
+4. **Predictability**: Consistent behavior across all operations
+5. **Performance**: No overhead from feature flags or compatibility layers
+
+## Removed Features
+
+The following migration-related features have been removed:
+
+- ❌ **Legacy Mode**: Old hardcoded parent directory logic
+- ❌ **SimpleBatch Mode**: Separate implementation
+- ❌ **Feature Flags**: `UseSimpleBatch` and related options
+- ❌ **Migration Methods**: `WithSimpleBatch()`, `NewBatchWithOptions()`, etc.
+- ❌ **Compatibility Constructors**: `NewBatchWithSimpleBatch()` and similar
+
+## Migration No Longer Needed
+
+If you have existing code that was using the old migration methods, simply change:
 
 ```go
-batch := synthfs.NewBatch() // Legacy mode
-batch.CreateFile("path/to/file.txt", []byte("content"))
-result, err := batch.RunWithPrerequisites() // Forces prerequisite resolution
+// OLD migration code (no longer needed)
+batch := synthfs.NewBatchWithSimpleBatch()
+// or
+batch := synthfs.NewBatch().WithSimpleBatch(true)
+
+// NEW simplified code
+batch := synthfs.NewBatch() // Prerequisite resolution is now automatic
 ```
 
-## Key Differences
+## Result
 
-### Legacy Mode Behavior
-- Automatically creates parent directories during batch building
-- Uses internal path state tracking for conflict detection
-- Parent directories are created with hardcoded logic
-- Operations have automatic dependencies added
-
-### SimpleBatch Mode Behavior
-- No automatic parent directory creation during batch building
-- Relies on operation prerequisites (declared by operations themselves)
-- Parent directories are created by prerequisite resolver during execution
-- Clean separation of concerns
-
-## Benefits of SimpleBatch Mode
-
-1. **Cleaner Architecture**: Operations declare their own needs
-2. **Extensibility**: New operation types work automatically 
-3. **Testability**: Each component has single responsibility
-4. **Predictability**: No hidden dependency injection
-5. **Performance**: No overhead from path state tracking
-
-## Migration Timeline
-
-- **Phase 5** (Current): Both modes available, legacy is default
-- **Phase 6** (Future): SimpleBatch becomes default  
-- **Phase 7** (Future): Legacy mode removed
-
-## Testing Your Migration
-
-Both modes should produce the same results for basic operations:
-
-```go
-func TestMigration(t *testing.T) {
-    // Legacy mode
-    legacyBatch := synthfs.NewBatch()
-    legacyBatch.CreateFile("dir/file.txt", []byte("content"))
-    legacyResult, err := legacyBatch.Run()
-    
-    // SimpleBatch mode  
-    simpleBatch := synthfs.NewBatchWithSimpleBatch()
-    simpleBatch.CreateFile("dir/file.txt", []byte("content"))
-    simpleResult, err := simpleBatch.Run()
-    
-    // Both should succeed and create the same files
-    assert.True(t, legacyResult.Success)
-    assert.True(t, simpleResult.Success)
-}
-```
-
-## Troubleshooting
-
-### "Parent directory does not exist" errors
-
-If you get prerequisite validation errors in SimpleBatch mode, make sure you're calling the correct run method:
-
-```go
-// Wrong - might fail if prerequisites aren't resolved
-result, err := batch.RunWithOptions(synthfs.PipelineOptions{
-    ResolvePrerequisites: false, // This disables prerequisite resolution
-})
-
-// Right - prerequisites are resolved automatically  
-result, err := batch.Run() // SimpleBatch enables prerequisites by default
-```
-
-### Performance Differences
-
-SimpleBatch mode may be slightly faster due to:
-- No path state tracking overhead
-- No conflict checking during batch building
-- More efficient prerequisite resolution
-
-## Backwards Compatibility
-
-Legacy mode will continue to work exactly as before until Phase 7. No existing code needs to change immediately.
+The codebase is significantly simpler and more maintainable with automatic prerequisite resolution for all filesystem operations.
