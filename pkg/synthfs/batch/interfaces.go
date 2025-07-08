@@ -49,3 +49,12 @@ type Result interface {
 	GetBudget() interface{} // Budget information from execution (may be nil for non-restorable runs)
 	GetRollback() interface{} // Rollback function (func(context.Context) error)
 }
+
+// BatchConstructors provides factory functions for creating different batch implementations
+type BatchConstructors interface {
+	// NewBatch creates a new full-featured batch with automatic parent directory creation
+	NewBatch(fs interface{}, registry core.OperationFactory) Batch
+	
+	// NewSimpleBatch creates a simplified batch that relies on prerequisite resolution
+	NewSimpleBatch(fs interface{}, registry core.OperationFactory) Batch
+}

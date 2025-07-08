@@ -1,3 +1,4 @@
+// Package core provides prerequisite interfaces and types for the synthfs system.
 package core
 
 // Prerequisite represents a condition that must be met before an operation executes

@@ -20,32 +20,37 @@ import (
 // BatchImpl represents a collection of operations that can be validated and executed as a unit.
 // This implementation uses interface{} types to avoid circular dependencies.
 type BatchImpl struct {
-	operations       []interface{}
-	fs               interface{} // Filesystem interface
-	ctx              context.Context
-	idCounter        int
-	pathTracker      *pathStateTracker // Path state tracker
-	registry         core.OperationFactory
-	logger           core.Logger
-	useSimpleBatch   bool // Flag to enable SimpleBatch behavior (default: false for backward compatibility)
+	operations    []interface{}
+	fs            interface{} // Filesystem interface
+	ctx           context.Context
+	idCounter     int
+	pathTracker   *pathStateTracker // Path state tracker
+	registry      core.OperationFactory
+	logger        core.Logger
+	useSimpleBatch bool // Migration option: when true, use SimpleBatch behavior + prerequisite resolution
 }
 
-// NewBatch creates a new operation batch.
-// 
-// DEPRECATED: As of Phase 6, this constructor defaults to SimpleBatch behavior (useSimpleBatch=true).
-// The legacy behavior with automatic parent directory creation and path tracking is deprecated.
-// Use NewBatchWithSimpleBatch() explicitly for the new behavior, or set WithSimpleBatch(false) 
-// to temporarily restore legacy behavior. The legacy behavior will be removed in a future version.
+// BatchOptions provides configuration for batch creation
+type BatchOptions struct {
+	UseSimpleBatch bool // Enable new prerequisite-based design (default: false for backward compatibility)
+}
+
+// NewBatch creates a new operation batch with default options (backward compatible).
 func NewBatch(fs interface{}, registry core.OperationFactory) Batch {
+	return NewBatchWithOptions(fs, registry, BatchOptions{UseSimpleBatch: false})
+}
+
+// NewBatchWithOptions creates a new operation batch with specified options.
+func NewBatchWithOptions(fs interface{}, registry core.OperationFactory, opts BatchOptions) Batch {
 	return &BatchImpl{
-		operations:     []interface{}{},
-		fs:             fs,
-		ctx:            context.Background(),
-		idCounter:      0,
-		pathTracker:    nil, // No path tracker needed for SimpleBatch behavior (Phase 6 default)
-		registry:       registry,
-		logger:         nil, // Will be set by WithLogger method
-		useSimpleBatch: true, // Phase 6: Default to SimpleBatch behavior
+		operations:    []interface{}{},
+		fs:            fs,
+		ctx:           context.Background(),
+		idCounter:     0,
+		pathTracker:   newPathStateTracker(fs),
+		registry:      registry,
+		logger:        nil, // Will be set by WithLogger method
+		useSimpleBatch: opts.UseSimpleBatch,
 	}
 }
 
@@ -122,15 +127,16 @@ func (b *BatchImpl) WithLogger(logger core.Logger) Batch {
 	return b
 }
 
-// WithSimpleBatch enables SimpleBatch behavior that relies on prerequisite resolution
-// instead of hardcoded parent directory creation logic.
-func (b *BatchImpl) WithSimpleBatch(enabled bool) Batch {
-	b.useSimpleBatch = enabled
-	// If enabling SimpleBatch behavior, disable the path tracker as it's not needed
-	if enabled {
+// WithSimpleBatch sets the SimpleBatch behavior flag for migration.
+// When true, the batch will use the new prerequisite-based design.
+// When false (default), the batch uses the legacy behavior with automatic parent directory creation.
+func (b *BatchImpl) WithSimpleBatch(useSimpleBatch bool) Batch {
+	b.useSimpleBatch = useSimpleBatch
+	// If switching to SimpleBatch, we don't need path tracking
+	if useSimpleBatch {
 		b.pathTracker = nil
 	} else if b.pathTracker == nil {
-		// If disabling SimpleBatch behavior, recreate the path tracker
+		// If switching back to legacy, recreate path tracker
 		b.pathTracker = newPathStateTracker(b.fs)
 	}
 	return b
@@ -766,8 +772,8 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 		}
 	}
 	
-	// Execute using the execution package with prerequisite resolver
-	coreResult := executor.RunWithOptionsAndResolver(b.ctx, pipeline, b.fs, pipelineOpts, prereqResolver)
+	// Execute using the execution package
+	coreResult := executor.RunWithOptions(b.ctx, pipeline, b.fs, pipelineOpts)
 	
 	duration := time.Since(startTime)
 	
