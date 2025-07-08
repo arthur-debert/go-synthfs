@@ -25,7 +25,7 @@ type BatchImpl struct {
 	idCounter  int
 	registry   core.OperationFactory
 	logger     core.Logger
-	pathTracker *pathStateTracker
+
 }
 
 // Note: BatchOptions is now defined in options.go
@@ -98,6 +98,14 @@ func (b *BatchImpl) WithLogger(logger core.Logger) Batch {
 	return b
 }
 
+// WithSimpleBatch sets a hint for using simple batch behavior (deprecated).
+// This is a no-op for backward compatibility. Use NewBatchWithOptions instead.
+func (b *BatchImpl) WithSimpleBatch(enabled bool) Batch {
+	// This is a no-op for backward compatibility
+	// The actual implementation selection is done at creation time via NewBatchWithOptions
+	return b
+}
+
 
 
 // RunWithPrerequisites runs all operations with prerequisite resolution enabled.
@@ -118,6 +126,18 @@ func (b *BatchImpl) RunWithPrerequisitesAndBudget(maxBackupMB int) (interface{},
 		"resolve_prerequisites": true,
 	}
 	return b.RunWithOptions(opts)
+}
+
+// RunWithSimpleBatch runs all operations with prerequisite resolution enabled.
+// This method is now equivalent to RunWithPrerequisites() as of Phase 7.
+func (b *BatchImpl) RunWithSimpleBatch() (interface{}, error) {
+	return b.RunWithPrerequisites()
+}
+
+// RunWithSimpleBatchAndBudget runs all operations with prerequisite resolution and backup enabled.
+// This method is now equivalent to RunWithPrerequisitesAndBudget() as of Phase 7.
+func (b *BatchImpl) RunWithSimpleBatchAndBudget(maxBackupMB int) (interface{}, error) {
+	return b.RunWithPrerequisitesAndBudget(maxBackupMB)
 }
 
 // add adds an operation to the batch with basic validation
