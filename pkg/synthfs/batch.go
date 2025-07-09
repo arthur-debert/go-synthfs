@@ -2,34 +2,80 @@ package synthfs
 
 import (
 	"context"
-	"fmt"
 	"io/fs"
-	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/batch"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
-// Batch represents a collection of filesystem operations that can be validated and executed as a unit.
-// This is a wrapper around the batch package implementation to maintain the public API.
+// Batch is a wrapper around batch.Batch that provides convenience methods for operation results
 type Batch struct {
 	impl batch.Batch
 }
 
-// NewBatch creates a new operation batch with default filesystem and context.
-func NewBatch() *Batch {
-	fs := filesystem.NewOSFileSystem(".")
-	registry := GetDefaultRegistry()
-	logger := NewLoggerAdapter(Logger())
-	impl := batch.NewBatch(fs, registry).
-		WithContext(context.Background()).
-		WithLogger(logger)
-	return &Batch{impl: impl}
+// NewBatch creates a new batch with the clean implementation that has prerequisite resolution enabled by default
+func NewBatch(fs interface{}, registry core.OperationFactory) *Batch {
+	return &Batch{
+		impl: batch.NewBatch(fs, registry),
+	}
 }
 
+// Operations returns all operations currently in the batch.
+func (b *Batch) Operations() []interface{} {
+	return b.impl.Operations()
+}
+
+// Operation creation methods
+
+// CreateDir adds a directory creation operation to the batch.
+func (b *Batch) CreateDir(path string, mode ...fs.FileMode) (interface{}, error) {
+	return b.impl.CreateDir(path, mode...)
+}
+
+// CreateFile adds a file creation operation to the batch.
+func (b *Batch) CreateFile(path string, content []byte, mode ...fs.FileMode) (interface{}, error) {
+	return b.impl.CreateFile(path, content, mode...)
+}
+
+// Copy adds a copy operation to the batch.
+func (b *Batch) Copy(src, dst string) (interface{}, error) {
+	return b.impl.Copy(src, dst)
+}
+
+// Move adds a move operation to the batch.
+func (b *Batch) Move(src, dst string) (interface{}, error) {
+	return b.impl.Move(src, dst)
+}
+
+// Delete adds a delete operation to the batch.
+func (b *Batch) Delete(path string) (interface{}, error) {
+	return b.impl.Delete(path)
+}
+
+// CreateSymlink adds a symbolic link creation operation to the batch.
+func (b *Batch) CreateSymlink(target, linkPath string) (interface{}, error) {
+	return b.impl.CreateSymlink(target, linkPath)
+}
+
+// CreateArchive adds an archive creation operation to the batch.
+func (b *Batch) CreateArchive(archivePath string, format interface{}, sources ...string) (interface{}, error) {
+	return b.impl.CreateArchive(archivePath, format, sources...)
+}
+
+// Unarchive adds an unarchive operation to the batch.
+func (b *Batch) Unarchive(archivePath, extractPath string) (interface{}, error) {
+	return b.impl.Unarchive(archivePath, extractPath)
+}
+
+// UnarchiveWithPatterns adds an unarchive operation with pattern filtering to the batch.
+func (b *Batch) UnarchiveWithPatterns(archivePath, extractPath string, patterns ...string) (interface{}, error) {
+	return b.impl.UnarchiveWithPatterns(archivePath, extractPath, patterns...)
+}
+
+// Configuration methods
+
 // WithFileSystem sets the filesystem for the batch operations.
-func (b *Batch) WithFileSystem(fs FullFileSystem) *Batch {
+func (b *Batch) WithFileSystem(fs interface{}) *Batch {
 	b.impl = b.impl.WithFileSystem(fs)
 	return b
 }
@@ -52,127 +98,9 @@ func (b *Batch) WithLogger(logger core.Logger) *Batch {
 	return b
 }
 
-// Operations returns all operations currently in the batch.
-func (b *Batch) Operations() []Operation {
-	opsInterface := b.impl.Operations()
-	var operations []Operation
-	for _, op := range opsInterface {
-		if opTyped, ok := op.(Operation); ok {
-			operations = append(operations, opTyped)
-		}
-	}
-	return operations
-}
+// Execution methods
 
-// CreateDir adds a directory creation operation to the batch.
-func (b *Batch) CreateDir(path string, mode ...fs.FileMode) (Operation, error) {
-	op, err := b.impl.CreateDir(path, mode...)
-	if err != nil {
-		return nil, err
-	}
-	if opTyped, ok := op.(Operation); ok {
-		return opTyped, nil
-	}
-	return nil, fmt.Errorf("unexpected operation type: %T", op)
-}
-
-// CreateFile adds a file creation operation to the batch.
-func (b *Batch) CreateFile(path string, content []byte, mode ...fs.FileMode) (Operation, error) {
-	op, err := b.impl.CreateFile(path, content, mode...)
-	if err != nil {
-		return nil, err
-	}
-	if opTyped, ok := op.(Operation); ok {
-		return opTyped, nil
-	}
-	return nil, fmt.Errorf("unexpected operation type: %T", op)
-}
-
-// Copy adds a copy operation to the batch.
-func (b *Batch) Copy(src, dst string) (Operation, error) {
-	op, err := b.impl.Copy(src, dst)
-	if err != nil {
-		return nil, err
-	}
-	if opTyped, ok := op.(Operation); ok {
-		return opTyped, nil
-	}
-	return nil, fmt.Errorf("unexpected operation type: %T", op)
-}
-
-// Move adds a move operation to the batch.
-func (b *Batch) Move(src, dst string) (Operation, error) {
-	op, err := b.impl.Move(src, dst)
-	if err != nil {
-		return nil, err
-	}
-	if opTyped, ok := op.(Operation); ok {
-		return opTyped, nil
-	}
-	return nil, fmt.Errorf("unexpected operation type: %T", op)
-}
-
-// Delete adds a delete operation to the batch.
-func (b *Batch) Delete(path string) (Operation, error) {
-	op, err := b.impl.Delete(path)
-	if err != nil {
-		return nil, err
-	}
-	if opTyped, ok := op.(Operation); ok {
-		return opTyped, nil
-	}
-	return nil, fmt.Errorf("unexpected operation type: %T", op)
-}
-
-// CreateSymlink adds a symbolic link creation operation to the batch.
-func (b *Batch) CreateSymlink(target, linkPath string) (Operation, error) {
-	op, err := b.impl.CreateSymlink(target, linkPath)
-	if err != nil {
-		return nil, err
-	}
-	if opTyped, ok := op.(Operation); ok {
-		return opTyped, nil
-	}
-	return nil, fmt.Errorf("unexpected operation type: %T", op)
-}
-
-// CreateArchive adds an archive creation operation to the batch.
-func (b *Batch) CreateArchive(archivePath string, format ArchiveFormat, sources ...string) (Operation, error) {
-	op, err := b.impl.CreateArchive(archivePath, format, sources...)
-	if err != nil {
-		return nil, err
-	}
-	if opTyped, ok := op.(Operation); ok {
-		return opTyped, nil
-	}
-	return nil, fmt.Errorf("unexpected operation type: %T", op)
-}
-
-// Unarchive adds an unarchive operation to the batch.
-func (b *Batch) Unarchive(archivePath, extractPath string) (Operation, error) {
-	op, err := b.impl.Unarchive(archivePath, extractPath)
-	if err != nil {
-		return nil, err
-	}
-	if opTyped, ok := op.(Operation); ok {
-		return opTyped, nil
-	}
-	return nil, fmt.Errorf("unexpected operation type: %T", op)
-}
-
-// UnarchiveWithPatterns adds an unarchive operation with pattern filtering to the batch.
-func (b *Batch) UnarchiveWithPatterns(archivePath, extractPath string, patterns ...string) (Operation, error) {
-	op, err := b.impl.UnarchiveWithPatterns(archivePath, extractPath, patterns...)
-	if err != nil {
-		return nil, err
-	}
-	if opTyped, ok := op.(Operation); ok {
-		return opTyped, nil
-	}
-	return nil, fmt.Errorf("unexpected operation type: %T", op)
-}
-
-// Run runs all operations in the batch.
+// Run runs all operations in the batch using default options with prerequisite resolution.
 func (b *Batch) Run() (*Result, error) {
 	batchResult, err := b.impl.Run()
 	if err != nil {
@@ -182,14 +110,8 @@ func (b *Batch) Run() (*Result, error) {
 }
 
 // RunWithOptions runs all operations in the batch with specified options.
-func (b *Batch) RunWithOptions(opts PipelineOptions) (*Result, error) {
-	// Convert PipelineOptions to interface{} map for batch package
-	optsMap := map[string]interface{}{
-		"restorable":        opts.Restorable,
-		"max_backup_size_mb": opts.MaxBackupSizeMB,
-	}
-	
-	batchResult, err := b.impl.RunWithOptions(optsMap)
+func (b *Batch) RunWithOptions(opts interface{}) (*Result, error) {
+	batchResult, err := b.impl.RunWithOptions(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -214,144 +136,84 @@ func (b *Batch) RunRestorableWithBudget(maxBackupMB int) (*Result, error) {
 	return ConvertBatchResult(batchResult), nil
 }
 
-// ConvertBatchResult converts a batch package result to main package Result
+// Result conversion utilities
+
+// ConvertBatchResult converts a batch result interface{} to our typed Result
 func ConvertBatchResult(batchResult interface{}) *Result {
-	// Extract fields from the batch result interface
-	type resultGetter interface {
+	if r, ok := batchResult.(interface {
 		IsSuccess() bool
 		GetOperations() []interface{}
-		GetRestoreOps() []interface{} 
+		GetRestoreOps() []interface{}
 		GetDuration() interface{}
 		GetError() error
 		GetBudget() interface{}
 		GetRollback() interface{}
-	}
-	
-	r, ok := batchResult.(resultGetter)
-	if !ok {
-		return nil
-	}
-	
-	// Convert operations from []interface{} to []OperationResult
-	var operationResults []OperationResult
-	for _, op := range r.GetOperations() {
-		// The operations are core.OperationResult from execution package
-		if coreOpResult, ok := op.(*core.OperationResult); ok {
-			// Extract the actual operation from the result
-			if actualOp := coreOpResult.Operation; actualOp != nil {
-				// Try to get the original operation from adapters
-				var origOp Operation
-				if adapter, ok := actualOp.(interface{ GetOriginalOperation() interface{} }); ok {
-					if o, ok := adapter.GetOriginalOperation().(Operation); ok {
-						origOp = o
-					}
-				} else if mainOp, ok := actualOp.(Operation); ok {
-					origOp = mainOp
-				}
-				
-				if origOp != nil {
-					opResult := OperationResult{
-						OperationID: coreOpResult.OperationID,
-						Operation:   origOp,
-						Status:      coreOpResult.Status,
-						Error:       coreOpResult.Error,
-						Duration:    coreOpResult.Duration,
-						BackupData:  coreOpResult.BackupData,
-						BackupSizeMB: coreOpResult.BackupSizeMB,
-					}
-					operationResults = append(operationResults, opResult)
-				}
-			}
-		} else if coreOpResult, ok := op.(core.OperationResult); ok {
-			// Handle non-pointer version
-			if actualOp := coreOpResult.Operation; actualOp != nil {
-				// Try to get the original operation from adapters
-				var origOp Operation
-				if adapter, ok := actualOp.(interface{ GetOriginalOperation() interface{} }); ok {
-					if o, ok := adapter.GetOriginalOperation().(Operation); ok {
-						origOp = o
-					}
-				} else if mainOp, ok := actualOp.(Operation); ok {
-					origOp = mainOp
-				}
-				
-				if origOp != nil {
-					opResult := OperationResult{
-						OperationID: coreOpResult.OperationID,
-						Operation:   origOp,
-						Status:      coreOpResult.Status,
-						Error:       coreOpResult.Error,
-						Duration:    coreOpResult.Duration,
-						BackupData:  coreOpResult.BackupData,
-						BackupSizeMB: coreOpResult.BackupSizeMB,
-					}
-					operationResults = append(operationResults, opResult)
-				}
-			}
+	}); ok {
+		return &Result{
+			success:     r.IsSuccess(),
+			operations:  r.GetOperations(),
+			restoreOps:  r.GetRestoreOps(),
+			duration:    r.GetDuration(),
+			err:         r.GetError(),
+			budget:      r.GetBudget(),
+			rollback:    r.GetRollback(),
 		}
 	}
 	
-	// Convert restore operations
-	var restoreOps []Operation
-	for _, op := range r.GetRestoreOps() {
-		if mainOp, ok := op.(Operation); ok {
-			restoreOps = append(restoreOps, mainOp)
-		}
+	// Fallback for basic result structure
+	return &Result{
+		success:    true,
+		operations: []interface{}{},
+		restoreOps: []interface{}{},
+		duration:   nil,
+		err:        nil,
+		budget:     nil,
+		rollback:   nil,
 	}
-	
-	// Extract duration
-	var duration time.Duration
-	if d, ok := r.GetDuration().(time.Duration); ok {
-		duration = d
-	}
-	
-	// Extract budget
-	var budget *BackupBudget
-	if b := r.GetBudget(); b != nil {
-		if bg, ok := b.(*core.BackupBudget); ok {
-			budget = (*BackupBudget)(bg)
-		}
-	}
-	
-	// Convert rollback function signature
-	var rollback func(context.Context) error
-	if rb := r.GetRollback(); rb != nil {
-		// Try func(context.Context) error first
-		if rbFunc, ok := rb.(func(context.Context) error); ok {
-			rollback = rbFunc
-		} else if rbFunc, ok := rb.(func() error); ok {
-			// Fall back to func() error
-			rollback = func(ctx context.Context) error {
-				return rbFunc()
-			}
-		}
-	}
-	
-	// Create result
-	result := &Result{
-		Success:    r.IsSuccess(),
-		Operations: operationResults,
-		RestoreOps: restoreOps,
-		Duration:   duration,
-		Errors:     []error{},
-		Budget:     budget,
-		Rollback:   rollback,
-	}
-	
-	// Add error if present
-	if err := r.GetError(); err != nil {
-		result.Errors = append(result.Errors, err)
-	}
-	
-	// If the batch failed, mark operations as failed
-	if !r.IsSuccess() && len(result.Errors) > 0 {
-		for i := range result.Operations {
-			if result.Operations[i].Status == StatusSuccess {
-				result.Operations[i].Status = StatusFailure
-				result.Operations[i].Error = result.Errors[0]
-			}
-		}
-	}
-	
-	return result
+}
+
+// Result represents the outcome of executing a batch of operations
+type Result struct {
+	success     bool
+	operations  []interface{}
+	restoreOps  []interface{}
+	duration    interface{}
+	err         error
+	budget      interface{}
+	rollback    interface{}
+}
+
+// IsSuccess returns whether the batch execution was successful
+func (r *Result) IsSuccess() bool {
+	return r.success
+}
+
+// GetOperations returns the operations that were executed
+func (r *Result) GetOperations() []interface{} {
+	return r.operations
+}
+
+// GetRestoreOps returns operations needed to restore the state
+func (r *Result) GetRestoreOps() []interface{} {
+	return r.restoreOps
+}
+
+// GetDuration returns the execution duration
+func (r *Result) GetDuration() interface{} {
+	return r.duration
+}
+
+// GetError returns any error that occurred during execution
+func (r *Result) GetError() error {
+	return r.err
+}
+
+// GetBudget returns budget information if available
+func (r *Result) GetBudget() interface{} {
+	return r.budget
+}
+
+// GetRollback returns rollback information if available
+func (r *Result) GetRollback() interface{} {
+	return r.rollback
 }

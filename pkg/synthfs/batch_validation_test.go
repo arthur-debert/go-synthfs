@@ -11,8 +11,10 @@ import (
 func TestBatchCopyValidation(t *testing.T) {
 	t.Run("Copy non-existent source file", func(t *testing.T) {
 		// Create empty test filesystem
-		fs := filesystem.NewTestFileSystem()
-		batch := synthfs.NewBatch().WithFileSystem(fs)
+		testFS := filesystem.NewTestFileSystem()
+		registry := synthfs.GetDefaultRegistry()
+		fs := synthfs.NewTestFileSystem()
+		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		
 		// Try to copy non-existent file
 		_, err := batch.Copy("nonexistent.txt", "dest.txt")
@@ -29,12 +31,14 @@ func TestBatchCopyValidation(t *testing.T) {
 	
 	t.Run("Copy existing file", func(t *testing.T) {
 		// Create test filesystem with a file
-		fs := filesystem.NewTestFileSystem()
-		if err := fs.WriteFile("source.txt", []byte("test content"), 0644); err != nil {
+		testFS := filesystem.NewTestFileSystem()
+		if err := testFS.WriteFile("source.txt", []byte("test content"), 0644); err != nil {
 			t.Fatalf("Failed to create source file: %v", err)
 		}
 		
-		batch := synthfs.NewBatch().WithFileSystem(fs)
+		registry := synthfs.GetDefaultRegistry()
+		fs := synthfs.NewTestFileSystem()
+		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		
 		// Copy should succeed during validation
 		op, err := batch.Copy("source.txt", "dest.txt")
@@ -51,8 +55,10 @@ func TestBatchCopyValidation(t *testing.T) {
 func TestBatchMoveValidation(t *testing.T) {
 	t.Run("Move non-existent source file", func(t *testing.T) {
 		// Create empty test filesystem
-		fs := filesystem.NewTestFileSystem()
-		batch := synthfs.NewBatch().WithFileSystem(fs)
+		testFS := filesystem.NewTestFileSystem()
+		registry := synthfs.GetDefaultRegistry()
+		fs := synthfs.NewTestFileSystem()
+		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		
 		// Try to move non-existent file
 		_, err := batch.Move("nonexistent.txt", "dest.txt")
@@ -69,12 +75,14 @@ func TestBatchMoveValidation(t *testing.T) {
 	
 	t.Run("Move existing file", func(t *testing.T) {
 		// Create test filesystem with a file
-		fs := filesystem.NewTestFileSystem()
-		if err := fs.WriteFile("source.txt", []byte("test content"), 0644); err != nil {
+		testFS := filesystem.NewTestFileSystem()
+		if err := testFS.WriteFile("source.txt", []byte("test content"), 0644); err != nil {
 			t.Fatalf("Failed to create source file: %v", err)
 		}
 		
-		batch := synthfs.NewBatch().WithFileSystem(fs)
+		registry := synthfs.GetDefaultRegistry()
+		fs := synthfs.NewTestFileSystem()
+		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		
 		// Move should succeed during validation
 		op, err := batch.Move("source.txt", "dest.txt")

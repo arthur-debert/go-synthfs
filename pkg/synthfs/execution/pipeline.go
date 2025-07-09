@@ -8,15 +8,16 @@ import (
 	"github.com/gammazero/toposort"
 )
 
-// Pipeline manages a sequence of operations
+// Pipeline defines the interface for operation pipeline management
 type Pipeline interface {
 	Add(ops ...interface{}) error
 	Operations() []interface{}
 	Resolve() error
+	ResolvePrerequisites(resolver core.PrerequisiteResolver, fs interface{}) error
 	Validate(ctx context.Context, fs interface{}) error
 }
 
-// memPipeline is an in-memory implementation of the Pipeline interface
+// memPipeline is an in-memory implementation of Pipeline
 type memPipeline struct {
 	ops      []OperationInterface
 	idIndex  map[core.OperationID]int
@@ -24,65 +25,21 @@ type memPipeline struct {
 	logger   core.Logger
 }
 
-// NewMemPipeline creates a new in-memory operation pipeline
+// NewMemPipeline creates a new in-memory pipeline
 func NewMemPipeline(logger core.Logger) Pipeline {
+	if logger == nil {
+		logger = &noOpLogger{}
+	}
 	return &memPipeline{
-		ops:      make([]OperationInterface, 0),
+		ops:      []OperationInterface{},
 		idIndex:  make(map[core.OperationID]int),
 		resolved: false,
 		logger:   logger,
 	}
 }
 
-// Add appends operations to the pipeline
+// Add adds operations to the pipeline
 func (mp *memPipeline) Add(ops ...interface{}) error {
-	mp.logger.Trace().
-		Interface("pipeline_add_full_context", map[string]interface{}{
-			"existing_pipeline_state": func() []map[string]interface{} {
-				var existing []map[string]interface{}
-				for i, op := range mp.ops {
-					existing = append(existing, map[string]interface{}{
-						"index":        i,
-						"id":           string(op.ID()),
-						"type":         op.Describe().Type,
-						"path":         op.Describe().Path,
-						"details":      op.Describe().Details,
-						"dependencies": op.Dependencies(),
-						"conflicts":    op.Conflicts(),
-					})
-				}
-				return existing
-			}(),
-			"new_operations": func() []map[string]interface{} {
-				var newOps []map[string]interface{}
-				for _, opInterface := range ops {
-					if opInterface == nil {
-						newOps = append(newOps, map[string]interface{}{
-							"id":           "<nil>",
-							"type":         "<nil>",
-							"path":         "<nil>",
-							"details":      nil,
-							"dependencies": nil,
-							"conflicts":    nil,
-						})
-					} else if op, ok := opInterface.(OperationInterface); ok {
-						newOps = append(newOps, map[string]interface{}{
-							"id":           string(op.ID()),
-							"type":         op.Describe().Type,
-							"path":         op.Describe().Path,
-							"details":      op.Describe().Details,
-							"dependencies": op.Dependencies(),
-							"conflicts":    op.Conflicts(),
-						})
-					}
-				}
-				return newOps
-			}(),
-			"pipeline_resolved": mp.resolved,
-			"pipeline_size":     len(mp.ops),
-		}).
-		Msg("pipeline add operation - complete state dump")
-
 	mp.logger.Info().
 		Int("existing_operations", len(mp.ops)).
 		Int("new_operations", len(ops)).
@@ -182,61 +139,11 @@ func (mp *memPipeline) Resolve() error {
 	// Perform topological sort
 	sortedIDs, err := toposort.Toposort(edges)
 	if err != nil {
-		mp.logger.Trace().
-			Interface("topological_sort_failure", map[string]interface{}{
-				"edges": func() []map[string]interface{} {
-					var edgeList []map[string]interface{}
-					for _, edge := range edges {
-						edgeList = append(edgeList, map[string]interface{}{
-							"from": edge[0],
-							"to":   edge[1],
-						})
-					}
-					return edgeList
-				}(),
-				"operation_dependencies": func() []map[string]interface{} {
-					var opDeps []map[string]interface{}
-					for _, op := range mp.ops {
-						opDeps = append(opDeps, map[string]interface{}{
-							"id":           string(op.ID()),
-							"dependencies": op.Dependencies(),
-						})
-					}
-					return opDeps
-				}(),
-				"error":      err.Error(),
-				"error_type": fmt.Sprintf("%T", err),
-			}).
-			Msg("topological sort failed - complete dependency graph dump")
-
 		mp.logger.Info().
 			Err(err).
 			Msg("topological sort failed - circular dependency detected")
 		return fmt.Errorf("circular dependency detected: %w", err)
 	}
-
-	mp.logger.Trace().
-		Interface("topological_sort_success", map[string]interface{}{
-			"sorted_ids": sortedIDs,
-			"edges": func() []map[string]interface{} {
-				var edgeList []map[string]interface{}
-				for _, edge := range edges {
-					edgeList = append(edgeList, map[string]interface{}{
-						"from": edge[0],
-						"to":   edge[1],
-					})
-				}
-				return edgeList
-			}(),
-			"original_order": func() []string {
-				var ids []string
-				for _, op := range mp.ops {
-					ids = append(ids, string(op.ID()))
-				}
-				return ids
-			}(),
-		}).
-		Msg("topological sort succeeded - complete sorting details")
 
 	// Rebuild operations slice in topologically sorted order
 	resolvedOps := make([]OperationInterface, 0, len(mp.ops))
@@ -272,6 +179,136 @@ func (mp *memPipeline) Resolve() error {
 	mp.logger.Info().
 		Int("resolved_operations", len(resolvedOps)).
 		Msg("dependency resolution completed successfully")
+
+	return nil
+}
+
+// ResolvePrerequisites resolves prerequisites for all operations in the pipeline
+func (mp *memPipeline) ResolvePrerequisites(resolver core.PrerequisiteResolver, fs interface{}) error {
+	mp.logger.Info().
+		Int("operations", len(mp.ops)).
+		Msg("starting prerequisite resolution")
+
+	if len(mp.ops) == 0 {
+		mp.logger.Info().Msg("no operations to resolve prerequisites for")
+		return nil
+	}
+
+	// Track already resolved prerequisites to avoid duplicates
+	resolvedPrereqs := make(map[string]bool)
+	newOps := make([]OperationInterface, 0)
+
+	for _, op := range mp.ops {
+		// Get prerequisites for this operation
+		prereqs := op.Prerequisites()
+
+		mp.logger.Debug().
+			Str("op_id", string(op.ID())).
+			Int("prerequisites", len(prereqs)).
+			Msg("processing operation prerequisites")
+
+		// Process each prerequisite
+		for _, prereq := range prereqs {
+			prereqKey := fmt.Sprintf("%s:%s", prereq.Type(), prereq.Path())
+			
+			// Skip if already resolved
+			if resolvedPrereqs[prereqKey] {
+				mp.logger.Debug().
+					Str("prereq_type", prereq.Type()).
+					Str("prereq_path", prereq.Path()).
+					Msg("prerequisite already resolved")
+				continue
+			}
+
+			// Check if prerequisite is already satisfied
+			if err := prereq.Validate(fs); err == nil {
+				mp.logger.Debug().
+					Str("prereq_type", prereq.Type()).
+					Str("prereq_path", prereq.Path()).
+					Msg("prerequisite already satisfied")
+				resolvedPrereqs[prereqKey] = true
+				continue
+			}
+
+			// Try to resolve the prerequisite
+			if resolver.CanResolve(prereq) {
+				mp.logger.Debug().
+					Str("prereq_type", prereq.Type()).
+					Str("prereq_path", prereq.Path()).
+					Msg("resolving prerequisite")
+
+				resolvedOps, err := resolver.Resolve(prereq)
+				if err != nil {
+					mp.logger.Debug().
+						Str("prereq_type", prereq.Type()).
+						Str("prereq_path", prereq.Path()).
+						Err(err).
+						Msg("failed to resolve prerequisite")
+					return fmt.Errorf("failed to resolve prerequisite %s for path %s: %w", prereq.Type(), prereq.Path(), err)
+				}
+
+				// Add resolved operations to the pipeline
+				for _, resolvedOp := range resolvedOps {
+					if resolvedOpInterface, ok := resolvedOp.(OperationInterface); ok {
+						newOps = append(newOps, resolvedOpInterface)
+						
+						// Add dependency from original operation to resolved operation
+						if depAdder, ok := op.(interface{ AddDependency(core.OperationID) }); ok {
+							depAdder.AddDependency(resolvedOpInterface.ID())
+						}
+						
+						mp.logger.Debug().
+							Str("resolved_op_id", string(resolvedOpInterface.ID())).
+							Str("dependent_op_id", string(op.ID())).
+							Msg("created prerequisite operation and dependency")
+					}
+				}
+
+				resolvedPrereqs[prereqKey] = true
+			} else {
+				mp.logger.Debug().
+					Str("prereq_type", prereq.Type()).
+					Str("prereq_path", prereq.Path()).
+					Msg("prerequisite not resolvable - will be validated later")
+			}
+		}
+	}
+
+	// Add new operations to the pipeline
+	if len(newOps) > 0 {
+		mp.logger.Info().
+			Int("new_operations", len(newOps)).
+			Msg("adding resolved prerequisite operations")
+
+		for _, newOp := range newOps {
+			// Check for duplicate IDs
+			if _, exists := mp.idIndex[newOp.ID()]; exists {
+				mp.logger.Warn().
+					Str("op_id", string(newOp.ID())).
+					Msg("prerequisite operation ID already exists - skipping")
+				continue
+			}
+
+			// Add operation to pipeline
+			index := len(mp.ops)
+			mp.ops = append(mp.ops, newOp)
+			mp.idIndex[newOp.ID()] = index
+
+			mp.logger.Debug().
+				Str("op_id", string(newOp.ID())).
+				Str("op_type", newOp.Describe().Type).
+				Str("path", newOp.Describe().Path).
+				Msg("added prerequisite operation")
+		}
+
+		// Mark as unresolved since we added new operations
+		mp.resolved = false
+	}
+
+	mp.logger.Info().
+		Int("resolved_prerequisites", len(resolvedPrereqs)).
+		Int("new_operations", len(newOps)).
+		Msg("prerequisite resolution completed")
 
 	return nil
 }
@@ -429,3 +466,24 @@ func (mp *memPipeline) validateConflicts() error {
 
 	return nil
 }
+
+// noOpLogger implements core.Logger for when no logger is provided
+type noOpLogger struct{}
+
+func (l *noOpLogger) Trace() core.LogEvent { return &noOpLogEvent{} }
+func (l *noOpLogger) Debug() core.LogEvent { return &noOpLogEvent{} }
+func (l *noOpLogger) Info() core.LogEvent  { return &noOpLogEvent{} }
+func (l *noOpLogger) Warn() core.LogEvent  { return &noOpLogEvent{} }
+func (l *noOpLogger) Error() core.LogEvent { return &noOpLogEvent{} }
+
+// noOpLogEvent implements core.LogEvent with no-op methods
+type noOpLogEvent struct{}
+
+func (e *noOpLogEvent) Str(key, val string) core.LogEvent             { return e }
+func (e *noOpLogEvent) Int(key string, val int) core.LogEvent         { return e }
+func (e *noOpLogEvent) Bool(key string, val bool) core.LogEvent       { return e }
+func (e *noOpLogEvent) Dur(key string, val interface{}) core.LogEvent { return e }
+func (e *noOpLogEvent) Interface(key string, val interface{}) core.LogEvent { return e }
+func (e *noOpLogEvent) Err(err error) core.LogEvent                   { return e }
+func (e *noOpLogEvent) Float64(key string, val float64) core.LogEvent { return e }
+func (e *noOpLogEvent) Msg(msg string)                                {}

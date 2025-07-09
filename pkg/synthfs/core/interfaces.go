@@ -28,8 +28,8 @@ type OperationFactory interface {
 	SetItemForOperation(op interface{}, item interface{}) error
 }
 
-// OperationInterface defines the core operation interface for the batch package
-type OperationInterface interface {
+// BatchOperationInterface defines the core operation interface for the batch package
+type BatchOperationInterface interface {
 	OperationMetadata
 	DependencyAware
 	ExecutableV2

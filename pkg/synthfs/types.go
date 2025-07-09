@@ -62,6 +62,7 @@ type Operation interface {
 	core.DependencyAware   // Dependencies(), Conflicts()
 	Executable             // Execute(), Validate()
 	core.ExecutableV2      // ExecuteV2(), ValidateV2() - new methods
+	Prerequisites() []core.Prerequisite
 	Rollback(ctx context.Context, fsys FileSystem) error
 	GetItem() FsItem
 	GetChecksum(path string) *ChecksumRecord

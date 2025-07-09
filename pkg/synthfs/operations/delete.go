@@ -23,6 +23,17 @@ func NewDeleteOperation(id core.OperationID, path string) *DeleteOperation {
 	}
 }
 
+// Prerequisites returns the prerequisites for deleting a file/directory
+func (op *DeleteOperation) Prerequisites() []core.Prerequisite {
+	var prereqs []core.Prerequisite
+	
+	// For delete operations, we need the source to exist
+	// Note: This is optional for idempotent delete operations
+	prereqs = append(prereqs, core.NewSourceExistsPrerequisite(op.description.Path))
+	
+	return prereqs
+}
+
 // Execute performs the deletion.
 func (op *DeleteOperation) Execute(ctx context.Context, fsys interface{}) error {
 	path := op.description.Path
@@ -333,7 +344,11 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 							itemPath,
 						)
 						mode, _ := itemMap["Mode"].(fs.FileMode)
-						dirOp.SetItem(&minimalItem{path: itemPath, itemType: "directory", mode: mode})
+						dirOp.SetItem(&MinimalItem{
+							path:     itemPath,
+							itemType: "directory",
+							mode:     mode,
+						})
 						reverseOps = append(reverseOps, dirOp)
 					}
 				}
@@ -354,7 +369,7 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 							itemPath,
 						)
 						mode, _ := itemMap["Mode"].(fs.FileMode)
-						fileOp.SetItem(&minimalItem{
+						fileOp.SetItem(&MinimalItem{
 							path:     itemPath,
 							itemType: "file",
 							content:  content,
@@ -372,7 +387,7 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 			path,
 		)
 		// Set a minimal item with backed up content
-		fileOp.SetItem(&minimalItem{
+		fileOp.SetItem(&MinimalItem{
 			path:     path,
 			itemType: "file",
 			content:  backupData.BackupContent,
@@ -398,35 +413,4 @@ func getRemoveAllMethod(fsys interface{}) (func(string) error, bool) {
 		return fs.RemoveAll, true
 	}
 	return nil, false
-}
-
-
-// minimalItem is a minimal implementation of the item interface for reverse operations
-type minimalItem struct {
-	path     string
-	itemType string
-	content  []byte
-	mode     fs.FileMode
-}
-
-func (m *minimalItem) Path() string {
-	return m.path
-}
-
-func (m *minimalItem) Type() string {
-	return m.itemType
-}
-
-func (m *minimalItem) Content() []byte {
-	return m.content
-}
-
-func (m *minimalItem) Mode() fs.FileMode {
-	if m.mode == 0 {
-		if m.itemType == "directory" {
-			return 0755
-		}
-		return 0644
-	}
-	return m.mode
 }

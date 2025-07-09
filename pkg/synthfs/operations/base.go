@@ -48,6 +48,12 @@ func (op *BaseOperation) Conflicts() []core.OperationID {
 	return nil
 }
 
+// Prerequisites returns an empty list of prerequisites (default implementation).
+// Concrete operations should override this method to declare their prerequisites.
+func (op *BaseOperation) Prerequisites() []core.Prerequisite {
+	return nil
+}
+
 // Describe returns the operation's description.
 func (op *BaseOperation) Describe() core.OperationDesc {
 	return op.description

@@ -3,8 +3,10 @@ package operations
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"path/filepath"
+	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
@@ -19,6 +21,19 @@ func NewCreateFileOperation(id core.OperationID, path string) *CreateFileOperati
 	return &CreateFileOperation{
 		BaseOperation: NewBaseOperation(id, "create_file", path),
 	}
+}
+
+// Prerequisites returns the prerequisites for creating a file.
+func (op *CreateFileOperation) Prerequisites() []core.Prerequisite {
+	var prereqs []core.Prerequisite
+	
+	// Always need parent directory to exist (even if it's current directory)
+	prereqs = append(prereqs, core.NewParentDirPrerequisite(op.description.Path))
+	
+	// Need no conflict with existing files
+	prereqs = append(prereqs, core.NewNoConflictPrerequisite(op.description.Path))
+	
+	return prereqs
 }
 
 // Execute creates the file. The filesystem interface is generic to avoid coupling.
@@ -131,17 +146,6 @@ func (op *CreateFileOperation) Validate(ctx context.Context, fsys interface{}) e
 		}
 	}
 
-	// Check if file already exists
-	if stat, ok := getStatMethod(fsys); ok {
-		if _, err := stat(op.description.Path); err == nil {
-			return &core.ValidationError{
-				OperationID:   op.ID(),
-				OperationDesc: op.Describe(),
-				Reason:        "file already exists",
-			}
-		}
-	}
-
 	// Check if filesystem supports required operations
 	if _, ok := getWriteFileMethod(fsys); !ok {
 		return &core.ValidationError{
@@ -236,13 +240,68 @@ func (op *CreateFileOperation) Rollback(ctx context.Context, fsys interface{}) e
 
 // ReverseOps for CreateFileOperation - returns a delete operation
 func (op *CreateFileOperation) ReverseOps(ctx context.Context, fsys interface{}, budget interface{}) ([]interface{}, interface{}, error) {
-	// Create a delete operation to remove the file
-	reverseOp := NewDeleteOperation(
+	// If file doesn't exist, reverse op is to delete the created file
+	stat, ok := getStatMethod(fsys)
+	if !ok {
+		return nil, nil, fmt.Errorf("filesystem does not support Stat")
+	}
+
+	info, err := stat(op.description.Path)
+	if err != nil {
+		// File does not exist, so reverse is a simple delete
+		return []interface{}{NewDeleteOperation(core.OperationID(fmt.Sprintf("reverse_%s", op.ID())), op.description.Path)}, nil, nil
+	}
+
+	// File exists, so we need to back it up
+	open, ok := getOpenMethod(fsys)
+	if !ok {
+		return nil, nil, fmt.Errorf("filesystem does not support Open")
+	}
+
+	file, err := open(op.description.Path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to open existing file for backup: %w", err)
+	}
+	if closer, ok := file.(io.Closer); ok {
+		defer func() {
+			if closeErr := closer.Close(); closeErr != nil {
+				// Log error but don't fail the operation
+				// The file was already read successfully
+				_ = closeErr // Explicitly ignore the error
+			}
+		}()
+	}
+
+	content, err := io.ReadAll(file.(io.Reader))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read existing file for backup: %w", err)
+	}
+
+	backupData := &core.BackupData{
+		OperationID:   op.ID(),
+		BackupType:    "file",
+		OriginalPath:  op.description.Path,
+		BackupContent: content,
+		SizeMB:        float64(len(content)) / (1024 * 1024),
+		BackupTime:    time.Now(),
+		Metadata: map[string]interface{}{
+			"mode": info.(fs.FileInfo).Mode(),
+		},
+	}
+
+	// Create a file creation operation to restore the backed up content
+	reverseOp := NewCreateFileOperation(
 		core.OperationID(fmt.Sprintf("reverse_%s", op.ID())),
 		op.description.Path,
 	)
-	
-	return []interface{}{reverseOp}, nil, nil
+	reverseOp.SetItem(&MinimalItem{
+		path:     op.description.Path,
+		itemType: "file",
+		content:  content,
+		mode:     info.(fs.FileInfo).Mode(),
+	})
+
+	return []interface{}{reverseOp}, backupData, nil
 }
 
 // ReverseOps for CreateDirectoryOperation - returns a delete operation

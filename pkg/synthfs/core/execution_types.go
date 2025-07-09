@@ -7,8 +7,10 @@ import (
 
 // PipelineOptions controls how operations are executed
 type PipelineOptions struct {
-	Restorable      bool // Whether to enable reversible operations with backup
-	MaxBackupSizeMB int  // Maximum backup size in MB (default: 10MB)
+	Restorable         bool // Whether to enable reversible operations with backup
+	MaxBackupSizeMB    int  // Maximum backup size in MB (default: 10MB)
+	ResolvePrerequisites bool // Whether to resolve prerequisites like parent directories (default: true)
+	UseSimpleBatch     bool // Whether to use SimpleBatch implementation (default: true)
 }
 
 // OperationResult holds the outcome of a single operation's execution

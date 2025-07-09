@@ -15,30 +15,26 @@ import (
 	"github.com/arthur-debert/synthfs/pkg/synthfs/validation"
 )
 
-
-
 // BatchImpl represents a collection of operations that can be validated and executed as a unit.
-// This implementation uses interface{} types to avoid circular dependencies.
+// This implementation uses prerequisite resolution for automatic dependency management.
 type BatchImpl struct {
-	operations  []interface{}
-	fs          interface{} // Filesystem interface
-	ctx         context.Context
-	idCounter   int
-	pathTracker *pathStateTracker // Path state tracker
-	registry    core.OperationFactory
-	logger      core.Logger
+	operations []interface{}
+	fs         interface{} // Filesystem interface
+	ctx        context.Context
+	idCounter  int
+	registry   core.OperationFactory
+	logger     core.Logger
 }
 
-// NewBatch creates a new operation batch.
+// NewBatch creates a new operation batch with prerequisite resolution enabled.
 func NewBatch(fs interface{}, registry core.OperationFactory) Batch {
 	return &BatchImpl{
-		operations:  []interface{}{},
-		fs:          fs,
-		ctx:         context.Background(),
-		idCounter:   0,
-		pathTracker: newPathStateTracker(fs),
-		registry:    registry,
-		logger:      nil, // Will be set by WithLogger method
+		operations: []interface{}{},
+		fs:         fs,
+		ctx:        context.Background(),
+		idCounter:  0,
+		registry:   registry,
+		logger:     nil, // Will be set by WithLogger method
 	}
 }
 
@@ -53,8 +49,6 @@ func (b *BatchImpl) Operations() []interface{} {
 // WithFileSystem sets the filesystem for the batch operations.
 func (b *BatchImpl) WithFileSystem(fs interface{}) Batch {
 	b.fs = fs
-	// Recreate pathTracker with new filesystem
-	b.pathTracker = newPathStateTracker(fs)
 	return b
 }
 
@@ -76,90 +70,11 @@ func (b *BatchImpl) WithLogger(logger core.Logger) Batch {
 	return b
 }
 
-// add adds an operation to the batch and validates it
+// add adds an operation to the batch with basic validation
 func (b *BatchImpl) add(op interface{}) error {
-	// Validate the operation first
+	// Basic validation - prerequisites are handled by the execution pipeline
 	if err := b.validateOperation(op); err != nil {
-		// For create operations, if the error is "file already exists" and the file
-		// is scheduled for deletion, we should give a more specific error
-		if b.pathTracker != nil {
-			// Get operation description to check if it's a create operation
-			if describer, ok := op.(interface{ Describe() core.OperationDesc }); ok {
-				desc := describer.Describe()
-				if strings.HasPrefix(desc.Type, "create") && b.pathTracker.isDeleted(desc.Path) {
-					// Check if the error is about file existence
-					if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "file already exists") {
-						opID := ""
-						if idGetter, ok := op.(interface{ ID() core.OperationID }); ok {
-							opID = string(idGetter.ID())
-						}
-						return fmt.Errorf("validation error for operation %s (%s): path was scheduled for deletion", 
-							opID, desc.Path)
-					}
-				}
-			}
-		}
 		return err
-	}
-
-	// Check for conflicts with projected state
-	if err := b.checkPathConflicts(op); err != nil {
-		return err
-	}
-
-	// Update projected state
-	if b.pathTracker != nil {
-		if err := b.pathTracker.updateState(op); err != nil {
-			return err
-		}
-	}
-
-	// Auto-create parent directories if needed
-	if err := b.autoCreateParentDirs(op); err != nil {
-		return err
-	}
-
-	b.operations = append(b.operations, op)
-	return nil
-}
-
-// addWithoutAutoParent adds an operation without auto-creating parent directories
-// This is used when creating parent directories to avoid infinite recursion
-func (b *BatchImpl) addWithoutAutoParent(op interface{}) error {
-	// Validate the operation first
-	if err := b.validateOperation(op); err != nil {
-		// For create operations, if the error is "file already exists" and the file
-		// is scheduled for deletion, we should give a more specific error
-		if b.pathTracker != nil {
-			// Get operation description to check if it's a create operation
-			if describer, ok := op.(interface{ Describe() core.OperationDesc }); ok {
-				desc := describer.Describe()
-				if strings.HasPrefix(desc.Type, "create") && b.pathTracker.isDeleted(desc.Path) {
-					// Check if the error is about file existence
-					if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "file already exists") {
-						opID := ""
-						if idGetter, ok := op.(interface{ ID() core.OperationID }); ok {
-							opID = string(idGetter.ID())
-						}
-						return fmt.Errorf("validation error for operation %s (%s): path was scheduled for deletion", 
-							opID, desc.Path)
-					}
-				}
-			}
-		}
-		return err
-	}
-
-	// Check for conflicts with projected state
-	if err := b.checkPathConflicts(op); err != nil {
-		return err
-	}
-
-	// Update projected state
-	if b.pathTracker != nil {
-		if err := b.pathTracker.updateState(op); err != nil {
-			return err
-		}
 	}
 
 	b.operations = append(b.operations, op)
@@ -168,138 +83,28 @@ func (b *BatchImpl) addWithoutAutoParent(op interface{}) error {
 
 // validateOperation validates an operation
 func (b *BatchImpl) validateOperation(op interface{}) error {
-	// Try to validate the operation
-	// First check if it has a Validate method that accepts interface{}
+	// Try ValidateV2 first
+	type validatorV2 interface {
+		ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
+	}
+
+	if v, ok := op.(validatorV2); ok {
+		// Create a minimal ExecutionContext for validation
+		execCtx := &core.ExecutionContext{}
+		if err := v.ValidateV2(b.ctx, execCtx, b.fs); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Fallback to basic Validate method
 	type validator interface {
 		Validate(ctx context.Context, fsys interface{}) error
 	}
 
-	validated := false
 	if v, ok := op.(validator); ok {
 		if err := v.Validate(b.ctx, b.fs); err != nil {
 			return err
-		}
-		validated = true
-	}
-
-	// If not validated yet, try ValidateV2 which operations should have
-	if !validated {
-		type validatorV2 interface {
-			ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
-		}
-
-		if v, ok := op.(validatorV2); ok {
-			// Create a minimal ExecutionContext for validation
-			execCtx := &core.ExecutionContext{}
-			if err := v.ValidateV2(b.ctx, execCtx, b.fs); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-// checkPathConflicts checks for conflicts with the projected state
-func (b *BatchImpl) checkPathConflicts(op interface{}) error {
-	if b.pathTracker == nil {
-		return nil
-	}
-
-	// Get operation description
-	type describer interface {
-		Describe() core.OperationDesc
-	}
-	d, ok := op.(describer)
-	if !ok {
-		return nil
-	}
-
-	desc := d.Describe()
-	path := desc.Path
-
-	// Check for conflicts based on operation type
-	switch desc.Type {
-	case "create_file", "create_directory", "create_symlink", "create_archive":
-		// Check if path already exists in projected state
-		state, err := b.pathTracker.getState(path)
-		if err == nil && state != nil && state.WillExist {
-			// Special case: creating after deletion is OK
-			if !b.pathTracker.isDeleted(path) {
-				return fmt.Errorf("path %s conflicts with existing state", path)
-			}
-		}
-
-	case "copy", "move":
-		// Get destination path
-		if details, ok := desc.Details["destination"]; ok {
-			if dst, ok := details.(string); ok {
-				// Check if destination already exists
-				state, err := b.pathTracker.getState(dst)
-				if err == nil && state != nil && state.WillExist {
-					if !b.pathTracker.isDeleted(dst) {
-						return fmt.Errorf("destination path %s conflicts with existing state", dst)
-					}
-				}
-			}
-		}
-
-	case "delete":
-		// Don't check here - let the PathStateTracker handle all delete validation
-		// to ensure consistent error messages
-	}
-
-	return nil
-}
-
-// autoCreateParentDirs automatically creates parent directories if needed
-func (b *BatchImpl) autoCreateParentDirs(op interface{}) error {
-	// Get operation description
-	type describer interface {
-		Describe() core.OperationDesc
-	}
-	d, ok := op.(describer)
-	if !ok {
-		return nil
-	}
-
-	desc := d.Describe()
-	
-	// Only create parent dirs for operations that create new paths
-	switch desc.Type {
-	case "create_file", "create_directory", "create_symlink", "create_archive":
-		parentDeps, err := ensureParentDirectories(b, desc.Path)
-		if err != nil {
-			return fmt.Errorf("failed to ensure parent directories: %w", err)
-		}
-		
-		// Add dependencies to the operation
-		if len(parentDeps) > 0 {
-			if depAdder, ok := op.(interface{ AddDependency(core.OperationID) }); ok {
-				for _, depID := range parentDeps {
-					depAdder.AddDependency(depID)
-				}
-			}
-		}
-		
-	case "copy", "move":
-		// Also check destination path
-		if details, ok := desc.Details["destination"]; ok {
-			if dst, ok := details.(string); ok {
-				parentDeps, err := ensureParentDirectories(b, dst)
-				if err != nil {
-					return fmt.Errorf("failed to ensure parent directories for destination: %w", err)
-				}
-				
-				// Add dependencies to the operation
-				if len(parentDeps) > 0 {
-					if depAdder, ok := op.(interface{ AddDependency(core.OperationID) }); ok {
-						for _, depID := range parentDeps {
-							depAdder.AddDependency(depID)
-						}
-					}
-				}
-			}
 		}
 	}
 
@@ -332,7 +137,7 @@ func (b *BatchImpl) CreateDir(path string, mode ...fs.FileMode) (interface{}, er
 		return nil, err
 	}
 
-	// Add to batch (which validates)
+	// Add to batch
 	if err := b.add(op); err != nil {
 		return nil, fmt.Errorf("validation failed for CreateDir(%s): %w", path, err)
 	}
@@ -387,8 +192,8 @@ func (b *BatchImpl) Copy(src, dst string) (interface{}, error) {
 	// Set operation details
 	if err := b.setOperationDetails(op, map[string]interface{}{
 		"destination": dst,
-		"src": src,
-		"dst": dst,
+		"src":         src,
+		"dst":         dst,
 	}); err != nil {
 		return nil, err
 	}
@@ -434,8 +239,8 @@ func (b *BatchImpl) Move(src, dst string) (interface{}, error) {
 	// Set operation details
 	if err := b.setOperationDetails(op, map[string]interface{}{
 		"destination": dst,
-		"src": src,
-		"dst": dst,
+		"src":         src,
+		"dst":         dst,
 	}); err != nil {
 		return nil, err
 	}
@@ -624,14 +429,12 @@ func (b *BatchImpl) UnarchiveWithPatterns(archivePath, extractPath string, patte
 	return op, nil
 }
 
-// Run runs all operations in the batch using default options.
+// Run runs all operations in the batch using default options with prerequisite resolution.
 func (b *BatchImpl) Run() (interface{}, error) {
-	// Use default pipeline options
-	defaultOpts := map[string]interface{}{
-		"restorable":        false,
+	return b.RunWithOptions(map[string]interface{}{
+		"restorable":         false,
 		"max_backup_size_mb": 0,
-	}
-	return b.RunWithOptions(defaultOpts)
+	})
 }
 
 // RunWithOptions runs all operations in the batch with specified options.
@@ -640,8 +443,9 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 	
 	// Extract options and convert to core.PipelineOptions
 	pipelineOpts := core.PipelineOptions{
-		Restorable:      false,
-		MaxBackupSizeMB: 10,
+		Restorable:           false,
+		MaxBackupSizeMB:      10,
+		ResolvePrerequisites: true, // Always enabled
 	}
 	
 	if optsMap, ok := opts.(map[string]interface{}); ok {
@@ -659,6 +463,7 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 			Int("operation_count", len(b.operations)).
 			Bool("restorable", pipelineOpts.Restorable).
 			Int("max_backup_mb", pipelineOpts.MaxBackupSizeMB).
+			Bool("resolve_prerequisites", pipelineOpts.ResolvePrerequisites).
 			Msg("executing batch")
 	}
 	
@@ -686,13 +491,18 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 	executor := execution.NewExecutor(loggerToUse)
 	
 	// Create pipeline adapter
-	pipeline := &pipelineAdapter{operations: b.operations}
+	pipeline := &pipelineAdapter{operations: b.operations, logger: loggerToUse}
 	
-	// Execute using the execution package
-	coreResult := executor.RunWithOptions(b.ctx, pipeline, b.fs, pipelineOpts)
+	// Create prerequisite resolver (always enabled)
+	prereqResolver := execution.NewPrerequisiteResolver(b.registry, loggerToUse)
+	if b.logger != nil {
+		b.logger.Info().Msg("created prerequisite resolver with operation factory")
+	}
+	
+	// Execute using the execution package with prerequisite resolver
+	coreResult := executor.RunWithOptionsAndResolver(b.ctx, pipeline, b.fs, pipelineOpts, prereqResolver)
 	
 	duration := time.Since(startTime)
-	
 	
 	// Convert core.Result back to our interface{} result
 	var executionError error
@@ -743,7 +553,7 @@ func (b *BatchImpl) RunRestorable() (interface{}, error) {
 // RunRestorableWithBudget runs all operations with backup enabled using a custom budget.
 func (b *BatchImpl) RunRestorableWithBudget(maxBackupMB int) (interface{}, error) {
 	opts := map[string]interface{}{
-		"restorable":        true,
+		"restorable":         true,
 		"max_backup_size_mb": maxBackupMB,
 	}
 	return b.RunWithOptions(opts)
@@ -798,15 +608,117 @@ func (b *BatchImpl) setOperationPaths(op interface{}, src, dst string) error {
 	return nil
 }
 
+// pipelineAdapter adapts our operations to execution.PipelineInterface
+type pipelineAdapter struct {
+	operations []interface{}
+	pipeline   execution.Pipeline
+	logger     core.Logger
+}
+
+func (pa *pipelineAdapter) Add(ops ...interface{}) error {
+	// This adapter doesn't support adding operations after creation
+	return fmt.Errorf("pipelineAdapter does not support Add after creation")
+}
+
+func (pa *pipelineAdapter) Operations() []interface{} {
+	// If we have a pipeline, return its operations (which includes resolved prerequisites)
+	if pa.pipeline != nil {
+		return pa.pipeline.Operations()
+	}
+	// Otherwise return the original operations
+	return pa.operations
+}
+
+func (pa *pipelineAdapter) Resolve() error {
+	if pa.pipeline == nil {
+		// Use logger if available, otherwise use no-op logger
+		logger := pa.logger
+		if logger == nil {
+			logger = &noOpLogger{}
+		}
+		pa.pipeline = execution.NewMemPipeline(logger)
+		
+		// Add all operations to the pipeline, wrapping them if needed
+		for _, op := range pa.operations {
+			
+			// Check if operation already implements OperationInterface
+			if _, ok := op.(execution.OperationInterface); ok {
+				if err := pa.pipeline.Add(op); err != nil {
+					return err
+				}
+			} else {
+				// Wrap in operationAdapter
+				wrapped := &operationAdapter{op: op}
+				if err := pa.pipeline.Add(wrapped); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return pa.pipeline.Resolve()
+}
+
+func (pa *pipelineAdapter) ResolvePrerequisites(resolver core.PrerequisiteResolver, fs interface{}) error {
+	if pa.pipeline == nil {
+		// Use logger if available, otherwise use no-op logger
+		logger := pa.logger
+		if logger == nil {
+			logger = &noOpLogger{}
+		}
+		pa.pipeline = execution.NewMemPipeline(logger)
+		
+		// Add all operations to the pipeline, wrapping them if needed
+		for _, op := range pa.operations {
+			
+			// Check if operation already implements OperationInterface
+			if _, ok := op.(execution.OperationInterface); ok {
+				if err := pa.pipeline.Add(op); err != nil {
+					return err
+				}
+			} else {
+				// Wrap in operationAdapter
+				wrapped := &operationAdapter{op: op}
+				if err := pa.pipeline.Add(wrapped); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return pa.pipeline.ResolvePrerequisites(resolver, fs)
+}
+
+func (pa *pipelineAdapter) Validate(ctx context.Context, fs interface{}) error {
+	if pa.pipeline == nil {
+		// Use logger if available, otherwise use no-op logger
+		logger := pa.logger
+		if logger == nil {
+			logger = &noOpLogger{}
+		}
+		pa.pipeline = execution.NewMemPipeline(logger)
+		
+		// Add all operations to the pipeline, wrapping them if needed
+		for _, op := range pa.operations {
+			
+			// Check if operation already implements OperationInterface
+			if _, ok := op.(execution.OperationInterface); ok {
+				if err := pa.pipeline.Add(op); err != nil {
+					return err
+				}
+			} else {
+				// Wrap in operationAdapter
+				wrapped := &operationAdapter{op: op}
+				if err := pa.pipeline.Add(wrapped); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return pa.pipeline.Validate(ctx, fs)
+}
 
 // operationAdapter wraps interface{} operations to implement execution.OperationInterface
 type operationAdapter struct {
 	op interface{}
-}
-
-// newOperationAdapter creates a new operation adapter
-func newOperationAdapter(op interface{}) *operationAdapter {
-	return &operationAdapter{op: op}
 }
 
 // GetOriginalOperation returns the wrapped operation
@@ -842,6 +754,19 @@ func (oa *operationAdapter) Conflicts() []core.OperationID {
 	return []core.OperationID{}
 }
 
+func (oa *operationAdapter) Prerequisites() []core.Prerequisite {
+	if op, ok := oa.op.(interface{ Prerequisites() []core.Prerequisite }); ok {
+		return op.Prerequisites()
+	}
+	return []core.Prerequisite{}
+}
+
+func (oa *operationAdapter) AddDependency(dep core.OperationID) {
+	if op, ok := oa.op.(interface{ AddDependency(core.OperationID) }); ok {
+		op.AddDependency(dep)
+	}
+}
+
 func (oa *operationAdapter) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	// Try ExecuteV2 first
 	if op, ok := oa.op.(interface{ ExecuteV2(interface{}, *core.ExecutionContext, interface{}) error }); ok {
@@ -875,54 +800,61 @@ func (oa *operationAdapter) ValidateV2(ctx interface{}, execCtx *core.ExecutionC
 }
 
 func (oa *operationAdapter) ReverseOps(ctx context.Context, fsys interface{}, budget *core.BackupBudget) ([]interface{}, *core.BackupData, error) {
-	// Use reflection to call the method with the correct signature
-	// OperationsPackageAdapter.ReverseOps expects (context.Context, FileSystem, *BackupBudget) returns ([]Operation, *BackupData, error)
+	// Use reflection to call ReverseOps dynamically
 	opValue := reflect.ValueOf(oa.op)
-	reverseOpsMethod := opValue.MethodByName("ReverseOps")
+	method := opValue.MethodByName("ReverseOps")
 	
-	if !reverseOpsMethod.IsValid() {
-		return nil, nil, nil
-	}
-	
-	// Prepare arguments
-	ctxValue := reflect.ValueOf(ctx)
-	fsysValue := reflect.ValueOf(fsys)
-	budgetValue := reflect.ValueOf(budget)
-	
-	// Call the method
-	results := reverseOpsMethod.Call([]reflect.Value{ctxValue, fsysValue, budgetValue})
-	
-	if len(results) != 3 {
-		return nil, nil, nil
-	}
-	
-	// Extract results
-	var ops []interface{}
-	var backupData *core.BackupData
-	var err error
-	
-	// Convert operations slice
-	if !results[0].IsNil() {
-		opsSlice := results[0].Interface()
-		// Try to convert to []interface{}
-		if opsReflect := reflect.ValueOf(opsSlice); opsReflect.Kind() == reflect.Slice {
-			for i := 0; i < opsReflect.Len(); i++ {
-				ops = append(ops, opsReflect.Index(i).Interface())
+	if method.IsValid() {
+		// Call the method with appropriate arguments
+		args := []reflect.Value{
+			reflect.ValueOf(ctx),
+			reflect.ValueOf(fsys),
+			reflect.ValueOf(budget),
+		}
+		
+		results := method.Call(args)
+		if len(results) == 3 {
+			// Extract the results
+			var reverseOps []interface{}
+			if !results[0].IsNil() {
+				// Convert the slice to []interface{}
+				slice := results[0]
+				for i := 0; i < slice.Len(); i++ {
+					reverseOps = append(reverseOps, slice.Index(i).Interface())
+				}
 			}
+			
+			var backupData *core.BackupData
+			if !results[1].IsNil() {
+				if bd, ok := results[1].Interface().(*core.BackupData); ok {
+					backupData = bd
+				}
+			}
+			
+			var err error
+			if !results[2].IsNil() {
+				if e, ok := results[2].Interface().(error); ok {
+					err = e
+				}
+			}
+			
+			return reverseOps, backupData, err
 		}
 	}
 	
-	// Extract backup data
-	if !results[1].IsNil() {
-		backupData = results[1].Interface().(*core.BackupData)
+	// Fallback: Try the interface{} budget signature (used by operations package)
+	if op, ok := oa.op.(interface{ ReverseOps(context.Context, interface{}, interface{}) ([]interface{}, interface{}, error) }); ok {
+		reverseOps, backupData, err := op.ReverseOps(ctx, fsys, budget)
+		// Convert backupData from interface{} to *core.BackupData
+		if backupData != nil {
+			if bd, ok := backupData.(*core.BackupData); ok {
+				return reverseOps, bd, err
+			}
+		}
+		return reverseOps, nil, err
 	}
 	
-	// Extract error
-	if !results[2].IsNil() {
-		err = results[2].Interface().(error)
-	}
-	
-	return ops, backupData, err
+	return nil, nil, nil
 }
 
 func (oa *operationAdapter) Rollback(ctx context.Context, fsys interface{}) error {
@@ -939,29 +871,10 @@ func (oa *operationAdapter) GetItem() interface{} {
 	return nil
 }
 
-// pipelineAdapter adapts our operations to execution.PipelineInterface
-type pipelineAdapter struct {
-	operations []interface{}
-}
-
-func (pa *pipelineAdapter) Operations() []execution.OperationInterface {
-	var result []execution.OperationInterface
-	for _, op := range pa.operations {
-		result = append(result, newOperationAdapter(op))
+func (oa *operationAdapter) SetDescriptionDetail(key string, value interface{}) {
+	if op, ok := oa.op.(interface{ SetDescriptionDetail(string, interface{}) }); ok {
+		op.SetDescriptionDetail(key, value)
 	}
-	return result
-}
-
-func (pa *pipelineAdapter) Resolve() error {
-	// TODO: Implement dependency resolution
-	// For now, return no error
-	return nil
-}
-
-func (pa *pipelineAdapter) Validate(ctx context.Context, fs interface{}) error {
-	// TODO: Implement pipeline validation
-	// For now, return no error
-	return nil
 }
 
 // noOpLogger implements core.Logger for when no logger is provided
@@ -973,7 +886,6 @@ func (l *noOpLogger) Info() core.LogEvent  { return &noOpLogEvent{} }
 func (l *noOpLogger) Warn() core.LogEvent  { return &noOpLogEvent{} }
 func (l *noOpLogger) Error() core.LogEvent { return &noOpLogEvent{} }
 
-// noOpLogEvent implements core.LogEvent with no-op methods
 type noOpLogEvent struct{}
 
 func (e *noOpLogEvent) Str(key, val string) core.LogEvent             { return e }

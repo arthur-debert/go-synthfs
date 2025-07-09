@@ -21,6 +21,19 @@ func NewCreateDirectoryOperation(id core.OperationID, path string) *CreateDirect
 	}
 }
 
+// Prerequisites returns the prerequisites for creating a directory.
+func (op *CreateDirectoryOperation) Prerequisites() []core.Prerequisite {
+	var prereqs []core.Prerequisite
+	
+	// Always need parent directory to exist (even if it's current directory)
+	prereqs = append(prereqs, core.NewParentDirPrerequisite(op.description.Path))
+	
+	// Need no conflict with existing files (even though mkdir is idempotent for directories)
+	prereqs = append(prereqs, core.NewNoConflictPrerequisite(op.description.Path))
+	
+	return prereqs
+}
+
 // Execute creates the directory. The filesystem interface is generic to avoid coupling.
 func (op *CreateDirectoryOperation) Execute(ctx context.Context, fsys interface{}) error {
 	item := op.GetItem()

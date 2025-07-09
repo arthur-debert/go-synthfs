@@ -40,9 +40,8 @@ func TestArchiveOperations(t *testing.T) {
 
 		op := operations.NewCreateArchiveOperation(core.OperationID("test-op"), "archive.zip")
 		// Set archive format and sources in description
-		desc := op.Describe()
-		desc.Details["format"] = "zip"
-		desc.Details["sources"] = []string{"file1.txt", "file2.txt"}
+		op.SetDescriptionDetail("format", "zip")
+		op.SetDescriptionDetail("sources", []string{"file1.txt", "file2.txt"})
 
 		err := op.Execute(ctx, fs)
 		if err != nil {
@@ -134,8 +133,7 @@ func TestArchiveOperations(t *testing.T) {
 
 		op := operations.NewUnarchiveOperation(core.OperationID("test-op"), "archive.zip")
 		// Set extract_path in description
-		desc := op.Describe()
-		desc.Details["extract_path"] = "output"
+		op.SetDescriptionDetail("extract_path", "output")
 
 		if err := op.Execute(ctx, fs); err != nil {
 			t.Fatalf("Execute failed: %v", err)

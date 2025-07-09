@@ -349,8 +349,7 @@ func TestReverseOperations_Files(t *testing.T) {
 		op := operations.NewCopyOperation(core.OperationID("test-copy"), "source.txt")
 		op.SetPaths("source.txt", "dest.txt")
 		// Also set destination in description for consistency
-		desc := op.Describe()
-		desc.Details["destination"] = "dest.txt"
+		op.SetDescriptionDetail("destination", "dest.txt")
 
 		reverseOps, backupData, err := op.ReverseOps(ctx, fs, nil)
 		if err != nil {
@@ -381,8 +380,7 @@ func TestReverseOperations_Files(t *testing.T) {
 		op := operations.NewMoveOperation(core.OperationID("test-move"), "source.txt")
 		op.SetPaths("source.txt", "dest.txt")
 		// Also set destination in description for consistency
-		desc := op.Describe()
-		desc.Details["destination"] = "dest.txt"
+		op.SetDescriptionDetail("destination", "dest.txt")
 
 		reverseOps, backupData, err := op.ReverseOps(ctx, fs, nil)
 		if err != nil {

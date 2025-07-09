@@ -27,6 +27,38 @@ func NewCreateArchiveOperation(id core.OperationID, archivePath string) *CreateA
 	}
 }
 
+// Prerequisites returns the prerequisites for creating an archive
+func (op *CreateArchiveOperation) Prerequisites() []core.Prerequisite {
+	var prereqs []core.Prerequisite
+	
+	// Need parent directory for archive to exist
+	if filepath.Dir(op.description.Path) != "." && filepath.Dir(op.description.Path) != "/" {
+		prereqs = append(prereqs, core.NewParentDirPrerequisite(op.description.Path))
+	}
+	
+	// Need no conflict with existing files
+	prereqs = append(prereqs, core.NewNoConflictPrerequisite(op.description.Path))
+	
+	// Check sources exist (from item or details)
+	var sources []string
+	if item := op.GetItem(); item != nil {
+		if archiveItem, ok := item.(interface{ Sources() []string }); ok {
+			sources = archiveItem.Sources()
+		}
+	}
+	if len(sources) == 0 {
+		if detailSources, ok := op.description.Details["sources"].([]string); ok {
+			sources = detailSources
+		}
+	}
+	
+	for _, source := range sources {
+		prereqs = append(prereqs, core.NewSourceExistsPrerequisite(source))
+	}
+	
+	return prereqs
+}
+
 // Execute creates the archive.
 func (op *CreateArchiveOperation) Execute(ctx context.Context, fsys interface{}) error {
 	// Get sources - first try from item, then from details
@@ -338,6 +370,28 @@ func NewUnarchiveOperation(id core.OperationID, archivePath string) *UnarchiveOp
 	return &UnarchiveOperation{
 		BaseOperation: NewBaseOperation(id, "unarchive", archivePath),
 	}
+}
+
+// Prerequisites returns the prerequisites for unarchiving
+func (op *UnarchiveOperation) Prerequisites() []core.Prerequisite {
+	var prereqs []core.Prerequisite
+	
+	// Need archive to exist
+	prereqs = append(prereqs, core.NewSourceExistsPrerequisite(op.description.Path))
+	
+	// Need extract path parent directory to exist
+	if item := op.GetItem(); item != nil {
+		if extractor, ok := item.(interface{ ExtractPath() string }); ok {
+			extractPath := extractor.ExtractPath()
+			if extractPath != "" {
+				if filepath.Dir(extractPath) != "." && filepath.Dir(extractPath) != "/" {
+					prereqs = append(prereqs, core.NewParentDirPrerequisite(extractPath))
+				}
+			}
+		}
+	}
+	
+	return prereqs
 }
 
 // Execute extracts the archive.

@@ -415,7 +415,8 @@ func TestBatchUnarchive(t *testing.T) {
 		}
 
 		// Create a new batch with the file already in the filesystem
-		batch := NewBatch().WithFileSystem(fs)
+		registry := GetDefaultRegistry()
+	batch := NewBatch(fs, registry).WithFileSystem(fs)
 
 		// Add unarchive operation
 		op, err := batch.Unarchive(archivePath, "batch_extracted/")
@@ -427,9 +428,13 @@ func TestBatchUnarchive(t *testing.T) {
 			t.Fatal("Unarchive returned nil operation")
 		}
 
-		desc := op.Describe()
-		if desc.Type != "unarchive" {
-			t.Errorf("Expected operation type 'unarchive', got '%s'", desc.Type)
+		if opTyped, ok := op.(Operation); ok {
+			desc := opTyped.Describe()
+			if desc.Type != "unarchive" {
+				t.Errorf("Expected operation type 'unarchive', got '%s'", desc.Type)
+			}
+		} else {
+			t.Error("Expected operation to be of type Operation")
 		}
 
 		// Execute batch
@@ -438,8 +443,8 @@ func TestBatchUnarchive(t *testing.T) {
 			t.Fatalf("Batch execution failed: %v", err)
 		}
 
-		if !result.Success {
-			t.Fatalf("Batch execution was not successful: %v", result.Errors)
+		if !result.IsSuccess() {
+			t.Fatalf("Batch execution was not successful: %v", result.GetError())
 		}
 
 		// Verify extraction
@@ -467,7 +472,8 @@ func TestBatchUnarchive(t *testing.T) {
 		}
 
 		// Create new batch for this test
-		batch := NewBatch().WithFileSystem(fs)
+		registry := GetDefaultRegistry()
+	batch := NewBatch(fs, registry).WithFileSystem(fs)
 
 		// Add unarchive operation with patterns
 		_, err := batch.UnarchiveWithPatterns(archivePath, "pattern_extracted/", "*.txt", "docs/**")
@@ -481,8 +487,8 @@ func TestBatchUnarchive(t *testing.T) {
 			t.Fatalf("Batch execution failed: %v", err)
 		}
 
-		if !result.Success {
-			t.Fatalf("Batch execution was not successful: %v", result.Errors)
+		if !result.IsSuccess() {
+			t.Fatalf("Batch execution was not successful: %v", result.GetError())
 		}
 
 		// Verify only matching files were extracted

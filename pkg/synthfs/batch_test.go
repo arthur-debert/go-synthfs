@@ -10,7 +10,9 @@ import (
 func TestBatchBasicUsage(t *testing.T) {
 	// Use a test filesystem for controlled testing
 	testFS := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch().WithFileSystem(testFS).WithContext(context.Background())
+	registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS).WithContext(context.Background())
 
 	// Pre-create files needed for valid operations in Phase II
 	if err := testFS.WriteFile("source.txt", []byte("s"), 0644); err != nil {
@@ -33,7 +35,7 @@ func TestBatchBasicUsage(t *testing.T) {
 			t.Fatal("CreateDir returned nil operation")
 		}
 
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		if desc.Type != "create_directory" {
 			t.Errorf("Expected operation type 'create_directory', got '%s'", desc.Type)
 		}
@@ -54,7 +56,7 @@ func TestBatchBasicUsage(t *testing.T) {
 			t.Fatal("CreateFile returned nil operation")
 		}
 
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		if desc.Type != "create_file" {
 			t.Errorf("Expected operation type 'create_file', got '%s'", desc.Type)
 		}
@@ -95,7 +97,7 @@ func TestBatchBasicUsage(t *testing.T) {
 			t.Fatal("Delete returned nil operation")
 		}
 
-		desc := op.Describe()
+		desc := op.(synthfs.Operation).Describe()
 		if desc.Type != "delete" {
 			t.Errorf("Expected operation type 'delete', got '%s'", desc.Type)
 		}
@@ -135,7 +137,9 @@ func TestBatchWithTestFileSystem(t *testing.T) {
 		t.Fatalf("Failed to setup test directory: %v", err)
 	}
 
-	batch := synthfs.NewBatch().WithFileSystem(testFS)
+	registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 	t.Run("CreateFile with parent directory auto-creation", func(t *testing.T) {
 		// This should auto-create the "auto-dir" directory
@@ -145,29 +149,35 @@ func TestBatchWithTestFileSystem(t *testing.T) {
 		}
 
 		ops := batch.Operations()
-		// Should have at least 2 operations: CreateDir for parent + CreateFile
-		if len(ops) < 2 {
-			t.Errorf("Expected at least 2 operations (auto-dir creation + file creation), got %d", len(ops))
+		// With new architecture, parent directories are created through prerequisite resolution
+		// during execution, not as separate operations in the batch
+		if len(ops) != 1 {
+			t.Logf("Note: With new architecture, only the file operation is in the batch. Parent dirs are created via prerequisites. Got %d operations", len(ops))
 		}
 
-		// Check that auto-dir creation operation was added
-		foundAutoDirOp := false
-		for _, op := range ops {
-			desc := op.Describe()
-			if desc.Type == "create_directory" && desc.Path == "auto-dir" {
-				foundAutoDirOp = true
-				break
-			}
+		// Execute the batch to verify parent directory is created
+		result, err := batch.Run()
+		if err != nil {
+			t.Fatalf("Batch execution failed: %v", err)
 		}
-		if !foundAutoDirOp {
-			t.Error("Expected auto-generated CreateDir operation for 'auto-dir', but not found")
+
+		if !result.IsSuccess() {
+			t.Fatalf("Batch execution was not successful: %v", result.GetError())
+		}
+
+		// Verify the parent directory was created during execution
+		// Check in testFS since that's what the batch is using
+		if _, err := testFS.Stat("auto-dir"); err != nil {
+			t.Error("Expected 'auto-dir' to be created during execution, but it doesn't exist")
 		}
 	})
 }
 
 func TestBatchIDGeneration(t *testing.T) {
 	testFS := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch().WithFileSystem(testFS)
+	registry := synthfs.GetDefaultRegistry()
+	fs := synthfs.NewTestFileSystem()
+	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 	// Create multiple operations and check ID uniqueness
 	op1, err := batch.CreateDir("dir1")
@@ -183,9 +193,9 @@ func TestBatchIDGeneration(t *testing.T) {
 		t.Fatalf("Failed to create file1.txt: %v", err)
 	}
 
-	id1 := op1.ID()
-	id2 := op2.ID()
-	id3 := op3.ID()
+	id1 := op1.(synthfs.Operation).ID()
+	id2 := op2.(synthfs.Operation).ID()
+	id3 := op3.(synthfs.Operation).ID()
 
 	if id1 == id2 {
 		t.Error("Operation IDs should be unique, but got duplicates")
