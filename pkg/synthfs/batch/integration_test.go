@@ -6,13 +6,14 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/batch"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
 func TestPhase3_CompleteWorkflow(t *testing.T) {
 	ctx := context.Background()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 
 	// Prepare some initial files
 	if err := fs.WriteFile("source.txt", []byte("source content"), 0644); err != nil {
@@ -173,7 +174,7 @@ func TestPhase3_CompleteWorkflow(t *testing.T) {
 
 func TestPhase3_BudgetExceeded(t *testing.T) {
 	ctx := context.Background()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 
 	// Create a large file that will exceed a small budget
 	largeContent := make([]byte, 2*1024*1024) // 2MB
@@ -246,7 +247,7 @@ func TestPhase3_BudgetExceeded(t *testing.T) {
 
 func TestPhase3_MixedOperations_PartialBudget(t *testing.T) {
 	ctx := context.Background()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 
 	// Create files of different sizes
 	if err := fs.WriteFile("small.txt", []byte("small"), 0644); err != nil {
@@ -341,7 +342,7 @@ func TestPhase3_MixedOperations_PartialBudget(t *testing.T) {
 
 func TestPhase3_OperationFailure_BudgetRestore(t *testing.T) {
 	ctx := context.Background()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 
 	// Create an operation that targets a non-existent file to simulate failure
 	registry := synthfs.GetDefaultRegistry()
@@ -407,7 +408,7 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Full directory restore with sufficient budget", func(t *testing.T) {
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		originalDir := "my_restorable_dir"
 		originalFiles := map[string]string{
 			filepath.Join(originalDir, "file1.txt"):                "content of file1",
@@ -556,7 +557,7 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 	})
 
 	t.Run("Partial directory restore due to budget exhaustion", func(t *testing.T) {
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		originalDir := "my_partial_dir"
 		// file1: 8 bytes, file2: 18 bytes
 		originalFiles := map[string]string{

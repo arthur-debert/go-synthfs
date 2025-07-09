@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
 func TestBatchDuplicatePathDetection(t *testing.T) {
@@ -13,7 +14,7 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 
 	t.Run("Detect duplicate file creation", func(t *testing.T) {
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(fs)
 		_, err := batch.CreateFile("test.txt", []byte("content1"))
 		if err != nil {
@@ -35,7 +36,7 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 
 	t.Run("Detect duplicate directory creation", func(t *testing.T) {
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(fs)
 		_, err := batch.CreateDir("testdir")
 		if err != nil {
@@ -56,7 +57,7 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 	})
 
 	t.Run("Detect duplicate delete operations", func(t *testing.T) {
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 		// Pre-create the file to be deleted to satisfy Phase II validation
 		err := testFS.WriteFile("somefile.txt", []byte("content"), 0644)
 		if err != nil {
@@ -84,7 +85,7 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 	})
 
 	t.Run("Detect copy destination conflicts", func(t *testing.T) {
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 		// Pre-create source files
 		err := testFS.WriteFile("source1.txt", []byte("s1"), 0644)
 		if err != nil {
@@ -96,7 +97,7 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		_, err = batch.Copy("source1.txt", "destination.txt")
 		if err != nil {
@@ -117,7 +118,7 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 	})
 
 	t.Run("Detect move destination conflicts", func(t *testing.T) {
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 		// Pre-create source files
 		err := testFS.WriteFile("old1.txt", []byte("o1"), 0644)
 		if err != nil {
@@ -129,7 +130,7 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		_, err = batch.Move("old1.txt", "new.txt")
 		if err != nil {
@@ -150,7 +151,7 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 	})
 
 	t.Run("Detect symlink creation conflicts", func(t *testing.T) {
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 		// Pre-create targets
 		err := testFS.WriteFile("target1.txt", []byte("t1"), 0644)
 		if err != nil {
@@ -162,7 +163,7 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		_, err = batch.CreateSymlink("target1.txt", "link.txt")
 		if err != nil {
@@ -183,7 +184,7 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 	})
 
 	t.Run("Detect archive creation conflicts", func(t *testing.T) {
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 		// Pre-create source files
 		err := testFS.WriteFile("src1.txt", []byte("s1"), 0644)
 		if err != nil {
@@ -195,7 +196,7 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		_, err = batch.CreateArchive("backup.tar.gz", synthfs.ArchiveFormatTarGz, "src1.txt")
 		if err != nil {
@@ -216,14 +217,14 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 	})
 
 	t.Run("Allow creating a file after its deletion", func(t *testing.T) {
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 		err := testFS.WriteFile("file.txt", []byte("content"), 0644)
 		if err != nil {
 			t.Fatalf("Failed to create test file: %v", err)
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		// This sequence should be allowed by a smart tracker.
 		// Delete the original file.
@@ -249,7 +250,7 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 	})
 
 	t.Run("Allow valid, non-conflicting operations", func(t *testing.T) {
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 		// Pre-create files to avoid non-existence errors
 		err := testFS.WriteFile("to-copy.txt", []byte("c"), 0644)
 		if err != nil {
@@ -269,7 +270,7 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 		// A mix of valid operations that should all be added successfully.
@@ -300,13 +301,13 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 	})
 
 	t.Run("Mixed conflict scenarios", func(t *testing.T) {
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 		if err := testFS.WriteFile("file.txt", []byte("content"), 0644); err != nil {
 			t.Fatal(err)
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 
 		// Scenario 1: Create then delete -> With new architecture, might be allowed
 		batch1 := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)

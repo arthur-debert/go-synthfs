@@ -1,4 +1,4 @@
-package synthfs_test
+package testutil_test
 
 import (
 	"io/fs"
@@ -6,10 +6,11 @@ import (
 	"testing/fstest"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
 func TestTestFileSystem(t *testing.T) {
-	tfs := synthfs.NewTestFileSystem()
+	tfs := testutil.NewTestFileSystem()
 
 	t.Run("WriteFile and Open", func(t *testing.T) {
 		content := []byte("test content")
@@ -150,7 +151,7 @@ func TestNewTestFileSystemFromMap(t *testing.T) {
 		},
 	}
 
-	tfs := synthfs.NewTestFileSystemFromMap(files)
+	tfs := testutil.NewTestFileSystemFromMap(files)
 
 	t.Run("Existing file", func(t *testing.T) {
 		info, err := tfs.Stat("existing.txt")
@@ -181,7 +182,7 @@ func TestNewTestFileSystemFromMap(t *testing.T) {
 
 func TestTestHelper(t *testing.T) {
 	t.Run("NewTestHelper", func(t *testing.T) {
-		helper := synthfs.NewTestHelper(t)
+		helper := testutil.NewTestHelper(t)
 
 		if helper.FileSystem() == nil {
 			t.Errorf("Expected non-nil filesystem")
@@ -200,7 +201,7 @@ func TestTestHelper(t *testing.T) {
 			},
 		}
 
-		helper := synthfs.NewTestHelperWithFiles(t, files)
+		helper := testutil.NewTestHelperWithFiles(t, files)
 
 		// The file should exist
 		if !helper.FileExists("test.txt") {
@@ -210,7 +211,7 @@ func TestTestHelper(t *testing.T) {
 	})
 
 	t.Run("AssertFileExists", func(t *testing.T) {
-		helper := synthfs.NewTestHelper(t)
+		helper := testutil.NewTestHelper(t)
 
 		// Create a file
 		content := []byte("test content")
@@ -224,7 +225,7 @@ func TestTestHelper(t *testing.T) {
 	})
 
 	t.Run("AssertDirExists", func(t *testing.T) {
-		helper := synthfs.NewTestHelper(t)
+		helper := testutil.NewTestHelper(t)
 
 		// Create a directory
 		helper.MkdirAll("testdir", 0755)
@@ -236,19 +237,19 @@ func TestTestHelper(t *testing.T) {
 	})
 
 	t.Run("AssertNotExists", func(t *testing.T) {
-		helper := synthfs.NewTestHelper(t)
+		helper := testutil.NewTestHelper(t)
 
 		// Check that file doesn't exist
 		helper.AssertFileNotExists("nonexistent.txt")
 	})
 
 	t.Run("ExecuteAndAssert", func(t *testing.T) {
-		helper := synthfs.NewTestHelper(t)
+		helper := testutil.NewTestHelper(t)
 
 		// Use the new Batch API instead of old ops
 		registry := synthfs.GetDefaultRegistry()
-	fs := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch(fs, registry).WithFileSystem(helper.FileSystem())
+		fs := testutil.NewTestFileSystem()
+		batch := synthfs.NewBatch(fs, registry).WithFileSystem(helper.FileSystem())
 		_, err := batch.CreateFile("success.txt", []byte("content"))
 		if err != nil {
 			t.Fatalf("CreateFile failed: %v", err)
@@ -265,12 +266,12 @@ func TestTestHelper(t *testing.T) {
 	})
 
 	t.Run("ExecuteAndExpectError", func(t *testing.T) {
-		helper := synthfs.NewTestHelper(t)
+		helper := testutil.NewTestHelper(t)
 
 		// Use the new Batch API with invalid operation to cause error
 		registry := synthfs.GetDefaultRegistry()
-	fs := synthfs.NewTestFileSystem()
-	batch := synthfs.NewBatch(fs, registry).WithFileSystem(helper.FileSystem())
+		fs := testutil.NewTestFileSystem()
+		batch := synthfs.NewBatch(fs, registry).WithFileSystem(helper.FileSystem())
 		_, err := batch.CreateFile("", []byte("content")) // Empty path should fail validation
 		if err == nil {
 			t.Fatal("Expected validation error for empty path")
@@ -281,10 +282,9 @@ func TestTestHelper(t *testing.T) {
 	})
 }
 
-
 func TestIsSubPath(t *testing.T) {
 	// This tests the internal isSubPath function via RemoveAll behavior
-	tfs := synthfs.NewTestFileSystem()
+	tfs := testutil.NewTestFileSystem()
 
 	// Create nested structure
 	if err := tfs.WriteFile("parent/child/file.txt", []byte("test"), 0644); err != nil {
@@ -323,7 +323,7 @@ func TestIsSubPath(t *testing.T) {
 
 // Test the fs.FS compliance of TestFileSystem
 func TestTestFileSystem_fstest_Compliance(t *testing.T) {
-	tfs := synthfs.NewTestFileSystem()
+	tfs := testutil.NewTestFileSystem()
 
 	// Add some test files
 	if err := tfs.WriteFile("file.txt", []byte("content"), 0644); err != nil {

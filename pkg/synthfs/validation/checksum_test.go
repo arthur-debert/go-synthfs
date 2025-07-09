@@ -4,13 +4,14 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
 func TestBatchChecksumming(t *testing.T) {
 	// Phase I, Milestone 3: Test basic checksumming for copy/move operations
 
 	t.Run("Copy operation computes source checksum", func(t *testing.T) {
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 
 		// Create source file
 		sourceContent := []byte("This is test content for checksumming")
@@ -20,7 +21,7 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 		// Copy operation should compute checksum
@@ -56,7 +57,7 @@ func TestBatchChecksumming(t *testing.T) {
 	})
 
 	t.Run("Move operation computes source checksum", func(t *testing.T) {
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 
 		// Create source file
 		sourceContent := []byte("This content will be moved with checksum validation")
@@ -66,7 +67,7 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 		// Move operation should compute checksum
@@ -102,7 +103,7 @@ func TestBatchChecksumming(t *testing.T) {
 	})
 
 	t.Run("Archive operation computes checksums for all sources", func(t *testing.T) {
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 
 		// Create multiple source files
 		files := map[string][]byte{
@@ -119,7 +120,7 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 		// Archive operation should compute checksums for all sources
@@ -163,7 +164,7 @@ func TestBatchChecksumming(t *testing.T) {
 	})
 
 	t.Run("Checksum computation handles directories gracefully", func(t *testing.T) {
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 
 		// Create directory
 		err := testFS.MkdirAll("testdir", 0755)
@@ -172,7 +173,7 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 		// Try to copy a directory (should not fail checksum computation)
@@ -190,7 +191,7 @@ func TestBatchChecksumming(t *testing.T) {
 	})
 
 	t.Run("Different files produce different checksums", func(t *testing.T) {
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 
 		// Create two files with different content
 		err := testFS.WriteFile("file1.txt", []byte("Content A"), 0644)
@@ -203,7 +204,7 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 		// Create two copy operations
@@ -233,7 +234,7 @@ func TestBatchChecksumming(t *testing.T) {
 	})
 
 	t.Run("Same file content produces same checksum", func(t *testing.T) {
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 
 		// Create two files with identical content
 		content := []byte("Identical content")
@@ -247,7 +248,7 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 		// Create two copy operations

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/batch"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
@@ -11,7 +12,7 @@ import (
 // TestPrerequisiteDeclaration verifies that operations properly declare prerequisites
 func TestPrerequisiteDeclaration(t *testing.T) {
 	t.Run("Operations declare expected prerequisites", func(t *testing.T) {
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		registry := synthfs.GetDefaultRegistry()
 		b := batch.NewBatch(fs, registry)
 

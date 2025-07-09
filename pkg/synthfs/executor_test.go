@@ -5,12 +5,13 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
 func TestExecutor_RunWithOptions_Basic(t *testing.T) {
 	ctx := context.Background()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 	executor := synthfs.NewExecutor()
 	pipeline := synthfs.NewMemPipeline()
 
@@ -64,7 +65,7 @@ func TestExecutor_RunWithOptions_Basic(t *testing.T) {
 
 func TestExecutor_RunWithOptions_Restorable(t *testing.T) {
 	ctx := context.Background()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 	executor := synthfs.NewExecutor()
 	pipeline := synthfs.NewMemPipeline()
 

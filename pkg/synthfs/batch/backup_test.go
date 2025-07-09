@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/batch"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
@@ -161,7 +162,7 @@ func TestBackupData(t *testing.T) {
 
 func TestBatch_RunRestorable(t *testing.T) {
 	ctx := context.Background()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 	registry := synthfs.GetDefaultRegistry()
 	b := batch.NewBatch(fs, registry).WithFileSystem(fs).WithContext(ctx)
 
@@ -202,7 +203,7 @@ func TestBatch_RunRestorable(t *testing.T) {
 
 func TestBatch_RunRestorableWithBudget(t *testing.T) {
 	ctx := context.Background()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 	registry := synthfs.GetDefaultRegistry()
 	b := batch.NewBatch(fs, registry).WithFileSystem(fs).WithContext(ctx)
 

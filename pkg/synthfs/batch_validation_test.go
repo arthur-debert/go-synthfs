@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
@@ -13,7 +14,7 @@ func TestBatchCopyValidation(t *testing.T) {
 		// Create empty test filesystem
 		testFS := filesystem.NewTestFileSystem()
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		
 		// Try to copy non-existent file
@@ -37,7 +38,7 @@ func TestBatchCopyValidation(t *testing.T) {
 		}
 		
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		
 		// Copy should succeed during validation
@@ -57,7 +58,7 @@ func TestBatchMoveValidation(t *testing.T) {
 		// Create empty test filesystem
 		testFS := filesystem.NewTestFileSystem()
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		
 		// Try to move non-existent file
@@ -81,7 +82,7 @@ func TestBatchMoveValidation(t *testing.T) {
 		}
 		
 		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 		
 		// Move should succeed during validation

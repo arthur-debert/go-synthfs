@@ -5,12 +5,13 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
 func TestReverseOperations_CreateFile(t *testing.T) {
 	ctx := context.Background()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 
 	registry := synthfs.GetDefaultRegistry()
 	op, err := registry.CreateOperation(core.OperationID("test-create-file"), "create_file", "test.txt")
@@ -51,7 +52,7 @@ func TestReverseOperations_CreateFile(t *testing.T) {
 
 func TestReverseOperations_Delete(t *testing.T) {
 	ctx := context.Background()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 
 	// Create a test file first
 	content := []byte("test file content")
@@ -109,7 +110,7 @@ func TestReverseOperations_Delete(t *testing.T) {
 
 func TestReverseOperations_DeleteBudgetExceeded(t *testing.T) {
 	ctx := context.Background()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 
 	// Create a large test file that exceeds budget
 	largeContent := make([]byte, 11*1024*1024) // 11MB
@@ -142,7 +143,7 @@ func TestReverseOperations_DeleteBudgetExceeded(t *testing.T) {
 
 func TestReverseOperations_Move(t *testing.T) {
 	ctx := context.Background()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 
 	registry := synthfs.GetDefaultRegistry()
 	op, err := registry.CreateOperation(core.OperationID("test-move"), "move", "src.txt")
@@ -192,7 +193,7 @@ func TestReverseOperations_Move(t *testing.T) {
 
 func TestReverseOperations_Copy(t *testing.T) {
 	ctx := context.Background()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 
 	registry := synthfs.GetDefaultRegistry()
 	op, err := registry.CreateOperation(core.OperationID("test-copy"), "copy", "src.txt")

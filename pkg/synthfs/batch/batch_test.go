@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/batch"
 )
 
 func TestBatchRollback(t *testing.T) {
-	testFS := synthfs.NewTestFileSystem()
+	testFS := testutil.NewTestFileSystem()
 	registry := synthfs.GetDefaultRegistry()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 	b := batch.NewBatch(fs, registry).WithFileSystem(testFS)
 
 	// Add some operations
@@ -47,9 +48,9 @@ func TestBatchRollback(t *testing.T) {
 }
 
 func TestBatchOperationCounts(t *testing.T) {
-	testFS := synthfs.NewTestFileSystem()
+	testFS := testutil.NewTestFileSystem()
 	registry := synthfs.GetDefaultRegistry()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 	b := batch.NewBatch(fs, registry).WithFileSystem(testFS)
 
 	// Pre-create files for Copy, Move, Delete to be valid
