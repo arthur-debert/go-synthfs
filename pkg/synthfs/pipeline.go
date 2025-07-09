@@ -29,8 +29,9 @@ type Pipeline interface {
 
 // NewMemPipeline creates a new in-memory operation pipeline.
 func NewMemPipeline() Pipeline {
+	logger := DefaultLogger()
 	return &pipelineAdapter{
-		pipeline: execution.NewMemPipeline(NewLoggerAdapter(Logger())),
+		pipeline: execution.NewMemPipeline(NewLoggerAdapter(&logger)),
 	}
 }
 

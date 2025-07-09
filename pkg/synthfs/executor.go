@@ -34,8 +34,9 @@ type Executor struct {
 
 // NewExecutor creates a new Executor.
 func NewExecutor() *Executor {
+	logger := DefaultLogger()
 	return &Executor{
-		executor: execution.NewExecutor(NewLoggerAdapter(Logger())),
+		executor: execution.NewExecutor(NewLoggerAdapter(&logger)),
 	}
 }
 

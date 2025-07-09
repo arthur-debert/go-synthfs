@@ -1,16 +1,18 @@
-package synthfs
+package batch_test
 
 import (
 	"context"
 	"path/filepath"
 	"testing"
 
+	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/batch"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
 func TestPhase3_CompleteWorkflow(t *testing.T) {
 	ctx := context.Background()
-	fs := NewTestFileSystem()
+	fs := synthfs.NewTestFileSystem()
 
 	// Prepare some initial files
 	if err := fs.WriteFile("source.txt", []byte("source content"), 0644); err != nil {
@@ -23,61 +25,63 @@ func TestPhase3_CompleteWorkflow(t *testing.T) {
 		t.Fatalf("Failed to create file to move: %v", err)
 	}
 
-	registry := GetDefaultRegistry()
-	batch := NewBatch(fs, registry).WithContext(ctx)
+	registry := synthfs.GetDefaultRegistry()
+	b := batch.NewBatch(fs, registry).WithContext(ctx)
 
 	// Add various operations to test different reverse operation types
-	_, err := batch.CreateDir("new-dir")
+	_, err := b.CreateDir("new-dir")
 	if err != nil {
 		t.Fatalf("Failed to add CreateDir: %v", err)
 	}
 
-	_, err = batch.CreateFile("new-file.txt", []byte("new content"))
+	_, err = b.CreateFile("new-file.txt", []byte("new content"))
 	if err != nil {
 		t.Fatalf("Failed to add CreateFile: %v", err)
 	}
 
-	_, err = batch.Copy("source.txt", "copied.txt")
+	_, err = b.Copy("source.txt", "copied.txt")
 	if err != nil {
 		t.Fatalf("Failed to add Copy: %v", err)
 	}
 
-	_, err = batch.Move("to-move.txt", "moved.txt")
+	_, err = b.Move("to-move.txt", "moved.txt")
 	if err != nil {
 		t.Fatalf("Failed to add Move: %v", err)
 	}
 
-	_, err = batch.Delete("to-delete.txt")
+	_, err = b.Delete("to-delete.txt")
 	if err != nil {
 		t.Fatalf("Failed to add Delete: %v", err)
 	}
 
 	// Execute with restorable mode
-	result, err := batch.RunRestorable()
+	result, err := b.RunRestorable()
 	if err != nil {
 		t.Fatalf("RunRestorable failed: %v", err)
 	}
 
-	if !result.IsSuccess() {
-		t.Fatalf("Batch execution failed: %v", result.GetError())
+	res := result.(batch.Result)
+
+	if !res.IsSuccess() {
+		t.Fatalf("Batch execution failed: %v", res.GetError())
 	}
 
 	// Check that we have 5 operations and 5 reverse operations
-	if len(result.GetOperations()) != 5 {
-		t.Errorf("Expected 5 operations, got %d", len(result.GetOperations()))
+	if len(res.GetOperations()) != 5 {
+		t.Errorf("Expected 5 operations, got %d", len(res.GetOperations()))
 	}
 
-	if len(result.GetRestoreOps()) != 5 {
-		t.Errorf("Expected 5 restore operations, got %d", len(result.GetRestoreOps()))
+	if len(res.GetRestoreOps()) != 5 {
+		t.Errorf("Expected 5 restore operations, got %d", len(res.GetRestoreOps()))
 	}
 
 	// Check budget usage
-	if result.GetBudget() == nil {
+	if res.GetBudget() == nil {
 		t.Fatal("Expected budget to be initialized")
 	}
 
 	// Should have consumed some budget for the delete operation
-	if budget, ok := result.GetBudget().(*core.BackupBudget); ok {
+	if budget, ok := res.GetBudget().(*core.BackupBudget); ok {
 		if budget.UsedMB <= 0 {
 			t.Error("Expected some budget to be used for delete operation backup")
 		}
@@ -87,13 +91,13 @@ func TestPhase3_CompleteWorkflow(t *testing.T) {
 
 	// Verify that operations have backup data where expected
 	hasDeleteBackup := false
-	for _, opResultInterface := range result.GetOperations() {
+	for _, opResultInterface := range res.GetOperations() {
 		// Handle both synthfs.OperationResult and core.OperationResult
 		var backupData *core.BackupData
 		var opType string
-		
+
 		switch opResult := opResultInterface.(type) {
-		case OperationResult:
+		case synthfs.OperationResult:
 			if op, ok := opResult.Operation.(interface{ Describe() core.OperationDesc }); ok {
 				opType = op.Describe().Type
 			}
@@ -104,7 +108,7 @@ func TestPhase3_CompleteWorkflow(t *testing.T) {
 			}
 			backupData = opResult.BackupData
 		}
-		
+
 		if opType == "delete" && backupData != nil {
 			hasDeleteBackup = true
 			if backupData.BackupType != "file" {
@@ -147,8 +151,8 @@ func TestPhase3_CompleteWorkflow(t *testing.T) {
 
 	// Check that reverse operations are correctly typed
 	reverseOpTypes := make(map[string]int)
-	for _, restoreOpInterface := range result.GetRestoreOps() {
-		if restoreOp, ok := restoreOpInterface.(Operation); ok {
+	for _, restoreOpInterface := range res.GetRestoreOps() {
+		if restoreOp, ok := restoreOpInterface.(synthfs.Operation); ok {
 			reverseOpTypes[restoreOp.Describe().Type]++
 		}
 	}
@@ -169,7 +173,7 @@ func TestPhase3_CompleteWorkflow(t *testing.T) {
 
 func TestPhase3_BudgetExceeded(t *testing.T) {
 	ctx := context.Background()
-	fs := NewTestFileSystem()
+	fs := synthfs.NewTestFileSystem()
 
 	// Create a large file that will exceed a small budget
 	largeContent := make([]byte, 2*1024*1024) // 2MB
@@ -177,52 +181,51 @@ func TestPhase3_BudgetExceeded(t *testing.T) {
 		t.Fatalf("Failed to create large file: %v", err)
 	}
 
-	registry := GetDefaultRegistry()
-	batch := NewBatch(fs, registry).WithContext(ctx)
+	registry := synthfs.GetDefaultRegistry()
+	b := batch.NewBatch(fs, registry).WithContext(ctx)
 
 	// Add a delete operation for the large file
-	_, err := batch.Delete("large.txt")
+	_, err := b.Delete("large.txt")
 	if err != nil {
 		t.Fatalf("Failed to add Delete: %v", err)
 	}
 
 	// Execute with a small budget that should be exceeded
-	result, err := batch.RunRestorableWithBudget(1) // 1MB budget
+	result, err := b.RunRestorableWithBudget(1) // 1MB budget
 	if err != nil {
 		t.Fatalf("RunRestorableWithBudget failed: %v", err)
 	}
 
+	res := result.(batch.Result)
+
 	// The batch should still succeed, but without backup for the large file
-	if !result.IsSuccess() {
-		t.Fatalf("Batch execution failed: %v", result.GetError())
+	if !res.IsSuccess() {
+		t.Fatalf("Batch execution failed: %v", res.GetError())
 	}
 
 	// Check that the operation executed but has no backup
-	if len(result.GetOperations()) != 1 {
-		t.Errorf("Expected 1 operation, got %d", len(result.GetOperations()))
+	if len(res.GetOperations()) != 1 {
+		t.Errorf("Expected 1 operation, got %d", len(res.GetOperations()))
 	}
 
-	opResultInterface := result.GetOperations()[0]
-	
+	opResultInterface := res.GetOperations()[0]
+
 	// Handle both synthfs.OperationResult and core.OperationResult
 	var status core.OperationStatus
 	var backupData *core.BackupData
-	
+
 	switch v := opResultInterface.(type) {
-	case OperationResult:
+	case synthfs.OperationResult:
 		status = v.Status
 		backupData = v.BackupData
 	case core.OperationResult:
 		status = v.Status
 		backupData = v.BackupData
-	case *core.OperationResult:
-		status = v.Status
-		backupData = v.BackupData
 	default:
 		t.Fatalf("Unexpected operation result type: %T", opResultInterface)
 	}
-	
-	if status != StatusSuccess {
+
+	if status != core.StatusSuccess {
 		t.Error("Expected delete operation to succeed even when backup generation fails due to budget")
 	}
 
@@ -232,16 +235,18 @@ func TestPhase3_BudgetExceeded(t *testing.T) {
 	}
 
 	// Budget should remain mostly unused since backup failed
-	if budget, ok := result.GetBudget().(*core.BackupBudget); ok {
+	if budget, ok := res.GetBudget().(*core.BackupBudget); ok {
 		if budget.UsedMB > 0.1 {
 			t.Errorf("Expected minimal budget usage due to backup failure, got %f MB", budget.UsedMB)
 		}
+	} else {
+		t.Error("Expected budget to be of type *core.BackupBudget")
 	}
 }
 
 func TestPhase3_MixedOperations_PartialBudget(t *testing.T) {
 	ctx := context.Background()
-	fs := NewTestFileSystem()
+	fs := synthfs.NewTestFileSystem()
 
 	// Create files of different sizes
 	if err := fs.WriteFile("small.txt", []byte("small"), 0644); err != nil {
@@ -253,38 +258,40 @@ func TestPhase3_MixedOperations_PartialBudget(t *testing.T) {
 		t.Fatalf("Failed to create large file: %v", err)
 	}
 
-	registry := GetDefaultRegistry()
-	batch := NewBatch(fs, registry).WithContext(ctx)
+	registry := synthfs.GetDefaultRegistry()
+	b := batch.NewBatch(fs, registry).WithContext(ctx)
 
 	// Add operations in order: small delete first, then large delete
-	_, err := batch.Delete("small.txt")
+	_, err := b.Delete("small.txt")
 	if err != nil {
 		t.Fatalf("Failed to add Delete for small file: %v", err)
 	}
 
-	_, err = batch.Delete("large.txt")
+	_, err = b.Delete("large.txt")
 	if err != nil {
 		t.Fatalf("Failed to add Delete for large file: %v", err)
 	}
 
 	// Execute with 2MB budget - enough for small file but not large
-	result, err := batch.RunRestorableWithBudget(2)
+	result, err := b.RunRestorableWithBudget(2)
 	if err != nil {
 		t.Fatalf("RunRestorableWithBudget failed: %v", err)
 	}
+
+	res := result.(batch.Result)
 
 	// First operation should succeed with backup, second should succeed without backup
 	hasSmallSuccess := false
 	hasLargeSuccessNoBackup := false
 
-	for _, opResultInterface := range result.GetOperations() {
+	for _, opResultInterface := range res.GetOperations() {
 		// Handle both synthfs.OperationResult and core.OperationResult
 		var status core.OperationStatus
 		var backupData *core.BackupData
 		var path string
-		
+
 		switch v := opResultInterface.(type) {
-		case OperationResult:
+		case synthfs.OperationResult:
 			status = v.Status
 			backupData = v.BackupData
 			if op, ok := v.Operation.(interface{ Describe() core.OperationDesc }); ok {
@@ -296,21 +303,15 @@ func TestPhase3_MixedOperations_PartialBudget(t *testing.T) {
 			if op, ok := v.Operation.(interface{ Describe() core.OperationDesc }); ok {
 				path = op.Describe().Path
 			}
-		case *core.OperationResult:
-			status = v.Status
-			backupData = v.BackupData
-			if op, ok := v.Operation.(interface{ Describe() core.OperationDesc }); ok {
-				path = op.Describe().Path
-			}
 		}
-		
+
 		if path == "small.txt" {
-			if status == StatusSuccess && backupData != nil {
+			if status == core.StatusSuccess && backupData != nil {
 				hasSmallSuccess = true
 			}
 		}
 		if path == "large.txt" {
-			if status == StatusSuccess && backupData == nil {
+			if status == core.StatusSuccess && backupData == nil {
 				hasLargeSuccessNoBackup = true
 			}
 		}
@@ -325,7 +326,7 @@ func TestPhase3_MixedOperations_PartialBudget(t *testing.T) {
 	}
 
 	// Check budget usage - should have consumed some for small file
-	if budget, ok := result.GetBudget().(*core.BackupBudget); ok {
+	if budget, ok := res.GetBudget().(*core.BackupBudget); ok {
 		if budget.UsedMB <= 0 {
 			t.Error("Expected some budget usage for small file backup")
 		}
@@ -338,91 +339,26 @@ func TestPhase3_MixedOperations_PartialBudget(t *testing.T) {
 	}
 }
 
-// Commented out as TestPhase3_DirectoryRestore_FullContent provides more comprehensive checks.
-/*
-func TestPhase3_DirectoryDelete(t *testing.T) {
-	ctx := context.Background()
-	fs := NewTestFileSystem()
-
-	// Create a directory
-	if err := fs.MkdirAll("test-dir", 0755); err != nil {
-		t.Fatalf("Failed to create directory: %v", err)
-	}
-
-	registry := GetDefaultRegistry()
-	batch := NewBatch(fs, registry).WithContext(ctx)
-
-	// Add delete operation for directory
-	_, err := batch.Delete("test-dir")
-	if err != nil {
-		t.Fatalf("Failed to add Delete for directory: %v", err)
-	}
-
-	// Execute with restorable mode
-	result, err := batch.RunRestorable()
-	if err != nil {
-		t.Fatalf("RunRestorable failed: %v", err)
-	}
-
-	if !result.IsSuccess() {
-		t.Fatalf("Batch execution failed: %v", result.GetError())
-	}
-
-	// Check operation result
-	if len(result.GetOperations()) != 1 {
-		t.Errorf("Expected 1 operation, got %d", len(result.GetOperations()))
-	}
-
-	opResult := result.GetOperations()[0]
-	if opResult.Status != StatusSuccess {
-		t.Errorf("Expected operation to succeed, got status %s", opResult.Status)
-	}
-
-	if opResult.BackupData == nil {
-		t.Fatal("Expected backup data for directory delete")
-	}
-
-	if opResult.BackupData.BackupType != "directory" {
-		t.Errorf("Expected backup type 'directory', got '%s'", opResult.BackupData.BackupType)
-	}
-
-	// Directory backup should have minimal size
-	if opResult.BackupData.SizeMB != 0.01 {
-		t.Errorf("Expected directory backup size 0.01 MB, got %f", opResult.BackupData.SizeMB)
-	}
-
-	// Should have a reverse operation to recreate the directory
-	if len(result.GetRestoreOps()) != 1 {
-		t.Errorf("Expected 1 restore operation, got %d", len(result.GetRestoreOps()))
-	}
-
-	restoreOp := result.GetRestoreOps()[0]
-	if restoreOp.Describe().Type != "create_directory" {
-		t.Errorf("Expected restore operation type 'create_directory', got '%s'", restoreOp.Describe().Type)
-	}
-}
-*/
-
 func TestPhase3_OperationFailure_BudgetRestore(t *testing.T) {
 	ctx := context.Background()
-	fs := NewTestFileSystem()
+	fs := synthfs.NewTestFileSystem()
 
 	// Create an operation that targets a non-existent file to simulate failure
-	registry := GetDefaultRegistry()
+	registry := synthfs.GetDefaultRegistry()
 	opInterface, err := registry.CreateOperation("test-fail", "delete", "nonexistent.txt")
 	if err != nil {
 		t.Fatalf("Failed to create operation: %v", err)
 	}
-	op := opInterface.(Operation)
+	op := opInterface.(synthfs.Operation)
 
-	pipeline := NewMemPipeline()
+	pipeline := synthfs.NewMemPipeline()
 	err = pipeline.Add(op)
 	if err != nil {
 		t.Fatalf("Failed to add operation to pipeline: %v", err)
 	}
 
-	executor := NewExecutor()
-	opts := PipelineOptions{
+	executor := synthfs.NewExecutor()
+	opts := core.PipelineOptions{
 		Restorable:      true,
 		MaxBackupSizeMB: 10,
 	}
@@ -440,17 +376,17 @@ func TestPhase3_OperationFailure_BudgetRestore(t *testing.T) {
 	}
 
 	opResultInterface := result.GetOperations()[0]
-	if opResult, ok := opResultInterface.(OperationResult); ok {
-		if opResult.Status != StatusSuccess {
+		if opResult, ok := opResultInterface.(synthfs.OperationResult); ok {
+		if opResult.Status != core.StatusSuccess {
 			t.Errorf("Expected operation status success (idempotent), got %s", opResult.Status)
 		}
-		
+
 		// But there should be no backup data since file doesn't exist
 		if opResult.BackupData != nil {
 			t.Error("Expected no backup data for non-existent file")
 		}
 	} else {
-		t.Error("Expected operation result to be OperationResult type")
+		t.Error("Expected operation result to be core.OperationResult type")
 	}
 
 	// Budget should remain unused since no backup was created
@@ -467,16 +403,11 @@ func TestPhase3_OperationFailure_BudgetRestore(t *testing.T) {
 	}
 }
 
-// This test is now superseded by TestPhase3_DirectoryRestore_FullContent below,
-// as the metadata details are part of the full content restoration test.
-// Keeping it commented out for reference or if simpler metadata-only check is needed later.
-// func TestPhase3_DirectoryDelete_BackupMetadata(t *testing.T) { ... }
-
 func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Full directory restore with sufficient budget", func(t *testing.T) {
-		fs := NewTestFileSystem()
+		fs := synthfs.NewTestFileSystem()
 		originalDir := "my_restorable_dir"
 		originalFiles := map[string]string{
 			filepath.Join(originalDir, "file1.txt"):                "content of file1",
@@ -501,8 +432,8 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 		}
 
 		// 1. Delete the directory in a restorable batch
-		registry := GetDefaultRegistry()
-		batchDelete := NewBatch(fs, registry).WithContext(ctx)
+		registry := synthfs.GetDefaultRegistry()
+		batchDelete := batch.NewBatch(fs, registry).WithContext(ctx)
 		_, err := batchDelete.Delete(originalDir)
 		if err != nil {
 			t.Fatalf("Failed to add Delete op: %v", err)
@@ -512,8 +443,9 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 		if err != nil {
 			t.Fatalf("RunRestorableWithBudget for delete failed: %v", err)
 		}
-		if !resultDelete.IsSuccess() {
-			t.Fatalf("Delete batch was not successful: %v", resultDelete.GetError())
+		resDelete := resultDelete.(batch.Result)
+		if !resDelete.IsSuccess() {
+			t.Fatalf("Delete batch was not successful: %v", resDelete.GetError())
 		}
 
 		// Verify directory is gone
@@ -524,13 +456,13 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 		// Verify BackupData for the delete operation
 		var deleteBackupData *core.BackupData
 		foundDeleteOp := false
-		for _, opResInterface := range resultDelete.GetOperations() {
+		for _, opResInterface := range resDelete.GetOperations() {
 			// Handle both synthfs.OperationResult and core.OperationResult
 			var opType, opPath string
 			var backupData *core.BackupData
-			
+
 			switch v := opResInterface.(type) {
-			case OperationResult:
+			case synthfs.OperationResult:
 				if op, ok := v.Operation.(interface{ Describe() core.OperationDesc }); ok {
 					desc := op.Describe()
 					opType = desc.Type
@@ -544,15 +476,8 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 					opPath = desc.Path
 				}
 				backupData = v.BackupData
-			case *core.OperationResult:
-				if op, ok := v.Operation.(interface{ Describe() core.OperationDesc }); ok {
-					desc := op.Describe()
-					opType = desc.Type
-					opPath = desc.Path
-				}
-				backupData = v.BackupData
 			}
-			
+
 			if opType == "delete" && opPath == originalDir {
 				deleteBackupData = backupData
 				foundDeleteOp = true
@@ -571,23 +496,20 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 
 		// Handle both old format ([]BackedUpItem) and new format ([]interface{})
 		var itemCount int
-		if backedUpItems, ok := deleteBackupData.Metadata["items"].([]BackedUpItem); ok {
-			// Old format from SimpleOperation
-			itemCount = len(backedUpItems)
-		} else if items, ok := deleteBackupData.Metadata["items"].([]interface{}); ok {
+		if items, ok := deleteBackupData.Metadata["items"].([]interface{}); ok {
 			// New format from operations package
 			itemCount = len(items)
 		} else {
 			t.Fatal("Metadata items not found or not in expected format")
 		}
-		
+
 		// Expected items: originalDir (.), file1, sub, sub/file2, sub/deep, sub/deep/file3, empty_sub (7 items)
 		if itemCount != 7 {
 			t.Errorf("Expected 7 backed up items, got %d", itemCount)
 		}
 
 		// 2. Execute the RestoreOps
-		restoreOps := resultDelete.GetRestoreOps()
+		restoreOps := resDelete.GetRestoreOps()
 		if len(restoreOps) == 0 {
 			t.Fatal("No RestoreOps generated")
 		}
@@ -596,10 +518,10 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 		// The pipeline within batchRestore will handle their execution.
 		// For simplicity, we'll use a new pipeline and executor directly.
 
-		restorePipeline := NewMemPipeline()
+		restorePipeline := synthfs.NewMemPipeline()
 		// Convert restore ops to Operation type
 		for _, op := range restoreOps {
-			if opTyped, ok := op.(Operation); ok {
+			if opTyped, ok := op.(synthfs.Operation); ok {
 				err = restorePipeline.Add(opTyped)
 				if err != nil {
 					t.Fatalf("Failed to add RestoreOp to pipeline: %v", err)
@@ -607,7 +529,7 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 			}
 		}
 
-		executor := NewExecutor()
+		executor := synthfs.NewExecutor()
 		// Run restore ops without further backup/budgeting for the restore itself
 		resultRestore := executor.Run(ctx, restorePipeline, fs)
 		if !resultRestore.IsSuccess() {
@@ -634,7 +556,7 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 	})
 
 	t.Run("Partial directory restore due to budget exhaustion", func(t *testing.T) {
-		fs := NewTestFileSystem()
+		fs := synthfs.NewTestFileSystem()
 		originalDir := "my_partial_dir"
 		// file1: 8 bytes, file2: 18 bytes
 		originalFiles := map[string]string{
@@ -654,36 +576,38 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 			}
 		}
 
-		registry := GetDefaultRegistry()
-		batchDelete := NewBatch(fs, registry).WithContext(ctx)
+		registry := synthfs.GetDefaultRegistry()
+		batchDelete := batch.NewBatch(fs, registry).WithContext(ctx)
 		_, err := batchDelete.Delete(originalDir)
 		if err != nil {
 			t.Fatalf("Failed to add Delete op: %v", err)
 		}
 
 		// Budget of 0 MB. Any file content backup will exceed this.
-		deleteResult, err := batchDelete.RunWithOptions(PipelineOptions{Restorable: true, MaxBackupSizeMB: 0})
+		deleteResult, err := batchDelete.RunWithOptions(core.PipelineOptions{Restorable: true, MaxBackupSizeMB: 0})
 		if err != nil {
 			t.Fatalf("Run for delete batch failed: %v", err)
 		}
 
+		resDelete := deleteResult.(batch.Result)
+
 		// The delete operation itself should succeed.
 		// The ReverseOps generation within it would have returned an error, which Executor logs.
-		if !deleteResult.IsSuccess() {
-			t.Fatalf("Delete operation batch was not successful: %v", deleteResult.GetError())
+		if !resDelete.IsSuccess() {
+			t.Fatalf("Delete operation batch was not successful: %v", resDelete.GetError())
 		}
 
 		// Find the delete op result to check its BackupData
 		var deleteBackupData *core.BackupData
-		ops := deleteResult.GetOperations()
+		ops := resDelete.GetOperations()
 		foundDeleteOp := false
 		for i := range ops {
 			// Handle both synthfs.OperationResult and core.OperationResult
 			var opPath string
 			var backupData *core.BackupData
-			
+
 			switch v := ops[i].(type) {
-			case OperationResult:
+			case synthfs.OperationResult:
 				if op, ok := v.Operation.(interface{ Describe() core.OperationDesc }); ok {
 					opPath = op.Describe().Path
 				}
@@ -693,13 +617,8 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 					opPath = op.Describe().Path
 				}
 				backupData = v.BackupData
-			case *core.OperationResult:
-				if op, ok := v.Operation.(interface{ Describe() core.OperationDesc }); ok {
-					opPath = op.Describe().Path
-				}
-				backupData = v.BackupData
 			}
-			
+
 			if opPath == originalDir {
 				deleteBackupData = backupData
 				foundDeleteOp = true
@@ -720,162 +639,9 @@ func TestPhase3_DirectoryRestore_FullContent(t *testing.T) {
 			return
 		}
 		if deleteBackupData.SizeMB != 0 { // With 0 budget, no file content should be backed up.
-			var items interface{}
-			if backedUpItems, ok := deleteBackupData.Metadata["items"].([]BackedUpItem); ok {
-				items = backedUpItems
-			} else {
-				items = deleteBackupData.Metadata["items"]
+			if _, ok := deleteBackupData.Metadata["items"].([]interface{}); ok {
+				t.Errorf("Expected SizeMB 0 when budget is 0, got %f", deleteBackupData.SizeMB)
 			}
-			t.Errorf("Expected SizeMB 0 when budget is 0, got %f. Items: %+v", deleteBackupData.SizeMB, items)
-		}
-
-		// Check RestoreOps: should only contain directory creations
-		restoreOps := deleteResult.GetRestoreOps()
-		expectedRestoreOpsCount := 2 // my_partial_dir, my_partial_dir/sub
-		if len(restoreOps) != expectedRestoreOpsCount {
-			t.Errorf("Expected %d RestoreOps (only directories), got %d", expectedRestoreOpsCount, len(restoreOps))
-			for idx, rop := range restoreOps {
-				if op, ok := rop.(Operation); ok {
-					t.Logf("RestoreOp[%d]: %s %s", idx, op.Describe().Type, op.Describe().Path)
-				}
-			}
-		}
-		for _, ro := range restoreOps {
-			if op, ok := ro.(Operation); ok {
-				if op.Describe().Type != "create_directory" {
-					t.Errorf("Expected only 'create_directory' RestoreOps, got %s for %s", op.Describe().Type, op.Describe().Path)
-				}
-			}
-		}
-
-		// Execute the RestoreOps
-		restorePipeline := NewMemPipeline()
-		if len(restoreOps) > 0 {
-			// Convert restore ops to Operation type
-			for _, op := range restoreOps {
-				if opTyped, ok := op.(Operation); ok {
-					err = restorePipeline.Add(opTyped)
-					if err != nil {
-						t.Fatalf("Failed to add RestoreOp to pipeline: %v", err)
-					}
-				}
-			}
-		}
-
-		executor := NewExecutor()
-		restoreRunResult := executor.Run(ctx, restorePipeline, fs)
-		if !restoreRunResult.IsSuccess() {
-			t.Fatalf("Restore pipeline execution failed: %v", restoreRunResult.GetError())
-		}
-
-		// Verify what was restored: only directory structure
-		if _, err := fs.Stat(originalDir); err != nil { // Check root dir
-			t.Errorf("Original directory %s not restored: %v", originalDir, err)
-		}
-		if _, err := fs.Stat(filepath.Join(originalDir, "sub")); err != nil { // Check sub dir
-			t.Errorf("Subdirectory %s/sub not restored: %v", originalDir, err)
-		}
-
-		// Verify files were NOT restored
-		_, errFile1 := fs.Stat(filepath.Join(originalDir, "file1.txt"))
-		if errFile1 == nil {
-			t.Error("Expected file1.txt NOT to be restored due to 0 budget, but it was found.")
-		}
-		_, errFile2 := fs.Stat(filepath.Join(originalDir, "sub", "file2.txt"))
-		if errFile2 == nil {
-			t.Error("Expected file2.txt NOT to be restored due to 0 budget, but it was found.")
 		}
 	})
 }
-
-// Commented out as TestPhase3_DirectoryRestore_FullContent provides more comprehensive checks
-// including metadata.
-// func TestPhase3_DirectoryDelete_BackupMetadata(t *testing.T) {
-// 	ctx := context.Background()
-// 	fs := NewTestFileSystem()
-
-// 	// Create a directory with a file inside to ensure it's not empty
-// 	if err := fs.MkdirAll("my-dir", 0755); err != nil {
-// 		t.Fatalf("Failed to create directory: %v", err)
-// 	}
-// 	if err := fs.WriteFile("my-dir/dummy.txt", []byte("content"), 0644); err != nil {
-// 		t.Fatalf("Failed to create file in directory: %v", err)
-// 	}
-
-// 	registry := GetDefaultRegistry()
-// 	batch := NewBatch(fs, registry).WithContext(ctx)
-
-// 	// Add delete operation for the directory
-// 	_, err := batch.Delete("my-dir")
-// 	if err != nil {
-// 		t.Fatalf("Failed to add Delete for directory: %v", err)
-// 	}
-
-// 	// Execute with restorable mode
-// 	result, err := batch.RunRestorable()
-// 	if err != nil {
-// 		t.Fatalf("RunRestorable failed: %v", err)
-// 	}
-
-// 	if !result.IsSuccess() {
-// 		t.Fatalf("Batch execution failed: %v", result.GetError())
-// 	}
-
-// 	// Find the delete operation result
-// 	var deleteOpResult *OperationResult
-// 	for i := range result.GetOperations() {
-// 		if result.GetOperations()[i].Operation.Describe().Type == "delete" && result.GetOperations()[i].Operation.Describe().Path == "my-dir" {
-// 			deleteOpResult = &result.GetOperations()[i]
-// 			break
-// 		}
-// 	}
-
-// 	if deleteOpResult == nil {
-// 		t.Fatal("Could not find the delete operation result for 'my-dir'")
-// 	}
-
-// 	if deleteOpResult.BackupData == nil {
-// 		t.Fatal("Expected BackupData for directory delete operation")
-// 	}
-
-// 	// This check would change with full directory backup; previously "directory"
-// 	// if deleteOpResult.BackupData.BackupType != "directory_tree" {
-// 	// 	t.Errorf("Expected BackupData type 'directory_tree', got '%s'", deleteOpResult.BackupData.BackupType)
-// 	// }
-
-// 	meta := deleteOpResult.BackupData.Metadata
-// 	if meta == nil {
-// 		t.Fatal("Expected metadata in BackupData")
-// 	}
-// 	// These metadata keys were specific to the simplified directory backup
-// 	// contentsRestored, ok := meta["contents_restored"].(bool)
-// 	// if !ok || contentsRestored {
-// 	// 	t.Errorf("Expected metadata 'contents_restored' to be false, got %v (ok: %v)", meta["contents_restored"], ok)
-// 	// }
-// 	// note, ok := meta["note"].(string)
-// 	// expectedNote := "Directory structure restored empty; contents are not backed up."
-// 	// if !ok || note != expectedNote {
-// 	// 	t.Errorf("Expected metadata 'note' to be '%s', got '%s' (ok: %v)", expectedNote, note, ok)
-// 	// }
-
-// 	// Verify the directory is actually gone
-// 	if _, err := fs.Stat("my-dir"); err == nil {
-// 		t.Error("Expected 'my-dir' to be deleted from filesystem")
-// 	}
-
-// 	// Optional: Verify the reverse operation would create an empty directory
-// 	// This also changes with full directory content backup
-// 	// if len(result.GetRestoreOps()) == 0 {
-// 	// 	t.Fatal("Expected restore operations to be generated")
-// 	// }
-// 	// foundRestoreDirOp := false
-// 	// for _, ro := range result.GetRestoreOps() {
-// 	// 	if ro.Describe().Type == "create_directory" && ro.Describe().Path == "my-dir" {
-// 	// 		foundRestoreDirOp = true
-// 	// 		break
-// 	// 	}
-// 	// }
-// 	// if !foundRestoreDirOp {
-// 	// 	t.Error("Expected a 'create_directory' restore operation for 'my-dir'")
-// 	// }
-// }

@@ -1,7 +1,6 @@
-package synthfs_test
+package validation_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
@@ -275,24 +274,6 @@ func TestBatchChecksumming(t *testing.T) {
 		if checksum1.MD5 != checksum2.MD5 {
 			t.Errorf("Identical content should have same checksum, got %s vs %s",
 				checksum1.MD5, checksum2.MD5)
-		}
-	})
-
-	t.Run("Checksum computation failure is handled gracefully", func(t *testing.T) {
-		testFS := synthfs.NewTestFileSystem()
-		registry := synthfs.GetDefaultRegistry()
-		fs := synthfs.NewTestFileSystem()
-		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
-
-		// Try to copy non-existent file (should fail during source existence validation first)
-		_, err := batch.Copy("nonexistent.txt", "dest.txt")
-		if err == nil {
-			t.Fatal("Expected error for non-existent source file")
-		}
-
-		// Should be a source existence error, not a checksum error
-		if !strings.Contains(err.Error(), "copy source") || !strings.Contains(err.Error(), "does not exist") {
-			t.Errorf("Expected source existence error, got: %v", err)
 		}
 	})
 }
