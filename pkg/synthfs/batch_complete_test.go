@@ -120,8 +120,22 @@ func TestBatchCompleteAPI(t *testing.T) {
 		// Real archive verification would require extracting and checking contents
 		t.Logf("Archive operations executed successfully: %d operations", len(result.GetOperations()))
 		for i, opResult := range result.GetOperations() {
-			operationResult := opResult.(*core.OperationResult)
-			desc := operationResult.Operation.(synthfs.Operation).Describe()
+			// Check if it's already a value type
+			var operationResult core.OperationResult
+			switch v := opResult.(type) {
+			case core.OperationResult:
+				operationResult = v
+			case *core.OperationResult:
+				operationResult = *v
+			default:
+				t.Fatalf("Unexpected operation result type: %T", opResult)
+			}
+			
+			// Get operation description
+			var desc core.OperationDesc
+			if op, ok := operationResult.Operation.(interface{ Describe() core.OperationDesc }); ok {
+				desc = op.Describe()
+			}
 			t.Logf("Operation %d: %s %s -> %s", i+1, desc.Type, desc.Path, operationResult.Status)
 		}
 	})
@@ -284,10 +298,26 @@ func TestBatchCompleteAPI(t *testing.T) {
 		// Inspect execution results (like Python example)
 		t.Logf("Execution Result: Success=%v, Duration=%v", result.IsSuccess(), result.GetDuration())
 		for i, opResult := range result.GetOperations() {
-			operationResult := opResult.(*core.OperationResult)
+			// Check if it's already a value type
+			var operationResult core.OperationResult
+			switch v := opResult.(type) {
+			case core.OperationResult:
+				operationResult = v
+			case *core.OperationResult:
+				operationResult = *v
+			default:
+				t.Fatalf("Unexpected operation result type: %T", opResult)
+			}
+			
+			// Get operation ID
+			var opID string
+			if op, ok := operationResult.Operation.(interface{ ID() core.OperationID }); ok {
+				opID = string(op.ID())
+			}
+			
 			t.Logf("  Operation %d: %s -> %s (Duration: %v)",
 				i+1,
-				operationResult.Operation.(synthfs.Operation).ID(),
+				opID,
 				operationResult.Status,
 				operationResult.Duration)
 		}

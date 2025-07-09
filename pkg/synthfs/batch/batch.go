@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"reflect"
 	"strings"
 	"time"
 
@@ -639,6 +640,7 @@ func (pa *pipelineAdapter) Resolve() error {
 		
 		// Add all operations to the pipeline, wrapping them if needed
 		for _, op := range pa.operations {
+			
 			// Check if operation already implements OperationInterface
 			if _, ok := op.(execution.OperationInterface); ok {
 				if err := pa.pipeline.Add(op); err != nil {
@@ -667,6 +669,7 @@ func (pa *pipelineAdapter) ResolvePrerequisites(resolver core.PrerequisiteResolv
 		
 		// Add all operations to the pipeline, wrapping them if needed
 		for _, op := range pa.operations {
+			
 			// Check if operation already implements OperationInterface
 			if _, ok := op.(execution.OperationInterface); ok {
 				if err := pa.pipeline.Add(op); err != nil {
@@ -695,6 +698,7 @@ func (pa *pipelineAdapter) Validate(ctx context.Context, fs interface{}) error {
 		
 		// Add all operations to the pipeline, wrapping them if needed
 		for _, op := range pa.operations {
+			
 			// Check if operation already implements OperationInterface
 			if _, ok := op.(execution.OperationInterface); ok {
 				if err := pa.pipeline.Add(op); err != nil {
@@ -796,9 +800,60 @@ func (oa *operationAdapter) ValidateV2(ctx interface{}, execCtx *core.ExecutionC
 }
 
 func (oa *operationAdapter) ReverseOps(ctx context.Context, fsys interface{}, budget *core.BackupBudget) ([]interface{}, *core.BackupData, error) {
-	if op, ok := oa.op.(interface{ ReverseOps(context.Context, interface{}, *core.BackupBudget) ([]interface{}, *core.BackupData, error) }); ok {
-		return op.ReverseOps(ctx, fsys, budget)
+	// Use reflection to call ReverseOps dynamically
+	opValue := reflect.ValueOf(oa.op)
+	method := opValue.MethodByName("ReverseOps")
+	
+	if method.IsValid() {
+		// Call the method with appropriate arguments
+		args := []reflect.Value{
+			reflect.ValueOf(ctx),
+			reflect.ValueOf(fsys),
+			reflect.ValueOf(budget),
+		}
+		
+		results := method.Call(args)
+		if len(results) == 3 {
+			// Extract the results
+			var reverseOps []interface{}
+			if !results[0].IsNil() {
+				// Convert the slice to []interface{}
+				slice := results[0]
+				for i := 0; i < slice.Len(); i++ {
+					reverseOps = append(reverseOps, slice.Index(i).Interface())
+				}
+			}
+			
+			var backupData *core.BackupData
+			if !results[1].IsNil() {
+				if bd, ok := results[1].Interface().(*core.BackupData); ok {
+					backupData = bd
+				}
+			}
+			
+			var err error
+			if !results[2].IsNil() {
+				if e, ok := results[2].Interface().(error); ok {
+					err = e
+				}
+			}
+			
+			return reverseOps, backupData, err
+		}
 	}
+	
+	// Fallback: Try the interface{} budget signature (used by operations package)
+	if op, ok := oa.op.(interface{ ReverseOps(context.Context, interface{}, interface{}) ([]interface{}, interface{}, error) }); ok {
+		reverseOps, backupData, err := op.ReverseOps(ctx, fsys, budget)
+		// Convert backupData from interface{} to *core.BackupData
+		if backupData != nil {
+			if bd, ok := backupData.(*core.BackupData); ok {
+				return reverseOps, bd, err
+			}
+		}
+		return reverseOps, nil, err
+	}
+	
 	return nil, nil, nil
 }
 

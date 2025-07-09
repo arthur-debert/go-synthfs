@@ -149,22 +149,26 @@ func TestBatchWithTestFileSystem(t *testing.T) {
 		}
 
 		ops := batch.Operations()
-		// Should have at least 2 operations: CreateDir for parent + CreateFile
-		if len(ops) < 2 {
-			t.Errorf("Expected at least 2 operations (auto-dir creation + file creation), got %d", len(ops))
+		// With new architecture, parent directories are created through prerequisite resolution
+		// during execution, not as separate operations in the batch
+		if len(ops) != 1 {
+			t.Logf("Note: With new architecture, only the file operation is in the batch. Parent dirs are created via prerequisites. Got %d operations", len(ops))
 		}
 
-		// Check that auto-dir creation operation was added
-		foundAutoDirOp := false
-		for _, op := range ops {
-			desc := op.(synthfs.Operation).Describe()
-			if desc.Type == "create_directory" && desc.Path == "auto-dir" {
-				foundAutoDirOp = true
-				break
-			}
+		// Execute the batch to verify parent directory is created
+		result, err := batch.Run()
+		if err != nil {
+			t.Fatalf("Batch execution failed: %v", err)
 		}
-		if !foundAutoDirOp {
-			t.Error("Expected auto-generated CreateDir operation for 'auto-dir', but not found")
+
+		if !result.IsSuccess() {
+			t.Fatalf("Batch execution was not successful: %v", result.GetError())
+		}
+
+		// Verify the parent directory was created during execution
+		// Check in testFS since that's what the batch is using
+		if _, err := testFS.Stat("auto-dir"); err != nil {
+			t.Error("Expected 'auto-dir' to be created during execution, but it doesn't exist")
 		}
 	})
 }

@@ -2,7 +2,7 @@ Intro to Synthfs
 
 	Anything that writes to the filesystem is always a blind spot in development: hard to test, hard to reason about and has to be carefully managed and mocked. For non server-client software, like desktop applications , the file system is every where. 
 
-
+    Synthfs gives you an api for lazy filesytem calls
 1. Synthfs Core Ideas
 
 	synthfs, a synthetic file system is a regular API allowing you to create, move, copy and remove  files, directories, links and archives with a regular form, giving you pure objects for the results.  

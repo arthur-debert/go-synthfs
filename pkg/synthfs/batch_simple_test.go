@@ -238,15 +238,15 @@ func TestBatchWithBackup(t *testing.T) {
 			Restorable: true,
 		})
 		
-		if !result.Success {
-			t.Fatalf("Batch execution was not successful: %v", result.Errors)
+		if !result.success {
+			t.Fatalf("Batch execution was not successful: %v", result.err)
 		}
 		
 		// Verify file was overwritten
 		AssertFileContent(t, fs, "existing.txt", []byte("new content"))
 		
 		// Verify restore operations were created
-		if len(result.RestoreOps) == 0 {
+		if len(result.restoreOps) == 0 {
 			t.Error("No restore operations were created")
 		}
 	})
