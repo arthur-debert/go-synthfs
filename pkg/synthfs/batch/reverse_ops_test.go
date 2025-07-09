@@ -33,7 +33,7 @@ func TestReverseOperations_CreateFile(t *testing.T) {
 		t.Fatal("Expected backup data to be created")
 	}
 
-	reverseOp := reverseOps[0].(synthfs.Operation)
+	reverseOp := reverseOps[0]
 	if reverseOp.Describe().Type != "delete" {
 		t.Errorf("Expected reverse operation type 'delete', got '%s'", reverseOp.Describe().Type)
 	}
@@ -81,7 +81,7 @@ func TestReverseOperations_Delete(t *testing.T) {
 		t.Fatal("Expected backup data to be created")
 	}
 
-	reverseOp := reverseOps[0].(synthfs.Operation)
+	reverseOp := reverseOps[0]
 	if reverseOp.Describe().Type != "create_file" {
 		t.Errorf("Expected reverse operation type 'create_file', got '%s'", reverseOp.Describe().Type)
 	}
@@ -162,7 +162,7 @@ func TestReverseOperations_Move(t *testing.T) {
 		t.Fatalf("Expected 1 reverse operation, got %d", len(reverseOps))
 	}
 
-	reverseOp := reverseOps[0].(synthfs.Operation)
+	reverseOp := reverseOps[0]
 	if reverseOp.Describe().Type != "move" {
 		t.Errorf("Expected reverse operation type 'move', got '%s'", reverseOp.Describe().Type)
 	}
@@ -173,7 +173,10 @@ func TestReverseOperations_Move(t *testing.T) {
 		t.Errorf("Expected reverse src path 'dst.txt', got '%s'", reverseDesc.Path)
 	}
 	// For move operations, we need to check the operation type
-	if reverseOp, ok := reverseOp.(interface{ GetSrcPath() string; GetDstPath() string }); ok {
+	if reverseOp, ok := reverseOp.(interface {
+		GetSrcPath() string
+		GetDstPath() string
+	}); ok {
 		if reverseOp.GetSrcPath() != "dst.txt" {
 			t.Errorf("Expected reverse src path 'dst.txt', got '%s'", reverseOp.GetSrcPath())
 		}
@@ -209,7 +212,7 @@ func TestReverseOperations_Copy(t *testing.T) {
 		t.Fatalf("Expected 1 reverse operation, got %d", len(reverseOps))
 	}
 
-	reverseOp := reverseOps[0].(synthfs.Operation)
+	reverseOp := reverseOps[0]
 	if reverseOp.Describe().Type != "delete" {
 		t.Errorf("Expected reverse operation type 'delete', got '%s'", reverseOp.Describe().Type)
 	}
