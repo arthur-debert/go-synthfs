@@ -263,7 +263,13 @@ func (op *CreateFileOperation) ReverseOps(ctx context.Context, fsys interface{},
 		return nil, nil, fmt.Errorf("failed to open existing file for backup: %w", err)
 	}
 	if closer, ok := file.(io.Closer); ok {
-		defer closer.Close()
+		defer func() {
+			if closeErr := closer.Close(); closeErr != nil {
+				// Log error but don't fail the operation
+				// The file was already read successfully
+				_ = closeErr // Explicitly ignore the error
+			}
+		}()
 	}
 
 	content, err := io.ReadAll(file.(io.Reader))

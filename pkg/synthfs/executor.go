@@ -85,9 +85,7 @@ func (e *Executor) convertResult(coreResult *core.Result) *Result {
 
 	// Convert restore operations
 	restoreOps := make([]interface{}, 0, len(coreResult.RestoreOps))
-	for _, coreRestoreOp := range coreResult.RestoreOps {
-		restoreOps = append(restoreOps, coreRestoreOp)
-	}
+	restoreOps = append(restoreOps, coreResult.RestoreOps...)
 
 	// Get first error if any
 	var firstErr error

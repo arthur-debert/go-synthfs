@@ -55,7 +55,9 @@ func TestEventIntegration(t *testing.T) {
 		// Execute the batch via the executor to capture events
 		pipeline := NewMemPipeline()
 		for _, op := range batch.Operations() {
-			pipeline.Add(op.(Operation))
+			if err := pipeline.Add(op.(Operation)); err != nil {
+				t.Fatalf("Failed to add operation to pipeline: %v", err)
+			}
 		}
 		result := executor.Run(ctx, pipeline, fs)
 
@@ -163,7 +165,9 @@ func TestEventIntegration(t *testing.T) {
 		// Execute the batch via the executor to capture events
 		pipeline := NewMemPipeline()
 		for _, op := range batch.Operations() {
-			pipeline.Add(op.(Operation))
+			if err := pipeline.Add(op.(Operation)); err != nil {
+				t.Fatalf("Failed to add operation to pipeline: %v", err)
+			}
 		}
 		result := executor.Run(ctx, pipeline, fs)
 

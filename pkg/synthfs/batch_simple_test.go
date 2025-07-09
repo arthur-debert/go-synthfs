@@ -232,21 +232,23 @@ func TestBatchWithBackup(t *testing.T) {
 		executor := NewExecutor()
 		pipeline := NewMemPipeline()
 		for _, op := range batch.Operations() {
-			pipeline.Add(op.(Operation))
+			if err := pipeline.Add(op.(Operation)); err != nil {
+				t.Fatalf("Failed to add operation to pipeline: %v", err)
+			}
 		}
 		result := executor.RunWithOptions(context.Background(), pipeline, fs, core.PipelineOptions{
 			Restorable: true,
 		})
 		
-		if !result.success {
-			t.Fatalf("Batch execution was not successful: %v", result.err)
+		if !result.IsSuccess() {
+			t.Fatalf("Batch execution was not successful: %v", result.GetError())
 		}
 		
 		// Verify file was overwritten
 		AssertFileContent(t, fs, "existing.txt", []byte("new content"))
 		
 		// Verify restore operations were created
-		if len(result.restoreOps) == 0 {
+		if len(result.GetRestoreOps()) == 0 {
 			t.Error("No restore operations were created")
 		}
 	})

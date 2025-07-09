@@ -321,8 +321,8 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 		result1, err := batch1.Run()
 		// The test expects this to fail, but it might succeed in new architecture
 		if err != nil || (result1 != nil && !result1.IsSuccess()) {
-			// This is actually expected by the test
-			// Do nothing - test passes
+			// This is actually expected by the test - conflicts are detected
+			t.Log("Create then delete conflict detected as expected")
 		}
 
 		// Scenario 2: Delete then create -> Already handled in previous test case
@@ -338,7 +338,7 @@ func TestBatchDuplicatePathDetection(t *testing.T) {
 		result2, err := batch2.Run()
 		if err != nil || (result2 != nil && !result2.IsSuccess()) {
 			// The test expects failure, which is what we got
-			// Do nothing - test passes
+			t.Log("Delete then create conflict detected as expected")
 		}
 	})
 }
