@@ -1,10 +1,11 @@
-package synthfs_test
+package filesystem_test
 
 import (
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -202,6 +203,142 @@ func TestOSFileSystem(t *testing.T) {
 			t.Errorf("Expected Remove to fail on non-existent file %s, but it succeeded", nonExistentPath)
 		} else if !errors.Is(err, fs.ErrNotExist) {
 			t.Errorf("Expected Remove on non-existent file to return fs.ErrNotExist, got %v", err)
+		}
+	})
+}
+
+func TestOSFileSystemExtended(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "synthfs-extended-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Logf("Warning: failed to remove temp dir: %v", err)
+		}
+	}()
+
+	osfs := filesystem.NewOSFileSystem(tempDir)
+
+	t.Run("Symlink and Readlink", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("Symlink tests may require elevated privileges on Windows")
+		}
+
+		// Create a target file
+		targetPath := "target.txt"
+		targetContent := []byte("target content")
+		err := osfs.WriteFile(targetPath, targetContent, 0644)
+		if err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+
+		// Create a symlink
+		linkPath := "link.txt"
+		err = osfs.Symlink(targetPath, linkPath)
+		if err != nil {
+			t.Fatalf("Symlink failed: %v", err)
+		}
+
+		// Read the symlink target
+		target, err := osfs.Readlink(linkPath)
+		if err != nil {
+			t.Fatalf("Readlink failed: %v", err)
+		}
+
+		if target != targetPath {
+			t.Errorf("Expected symlink target %q, got %q", targetPath, target)
+		}
+
+		// Verify the symlink works by reading through it
+		file, err := osfs.Open(linkPath)
+		if err != nil {
+			t.Fatalf("Open symlink failed: %v", err)
+		}
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil {
+				t.Logf("Warning: failed to close file: %v", closeErr)
+			}
+		}()
+
+		info, err := file.Stat()
+		if err != nil {
+			t.Fatalf("Stat symlink failed: %v", err)
+		}
+
+		// The size should match the target file
+		if info.Size() != int64(len(targetContent)) {
+			t.Errorf("Expected symlink size %d, got %d", len(targetContent), info.Size())
+		}
+	})
+
+	t.Run("Rename", func(t *testing.T) {
+		// Create a file to rename
+		oldPath := "old-name.txt"
+		content := []byte("rename test content")
+		err := osfs.WriteFile(oldPath, content, 0644)
+		if err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+
+		// Rename the file
+		newPath := "new-name.txt"
+		err = osfs.Rename(oldPath, newPath)
+		if err != nil {
+			t.Fatalf("Rename failed: %v", err)
+		}
+
+		// Old path should not exist
+		_, err = osfs.Stat(oldPath)
+		if err == nil {
+			t.Error("Expected old path to not exist after rename")
+		}
+
+		// New path should exist with correct content
+		file, err := osfs.Open(newPath)
+		if err != nil {
+			t.Fatalf("Open renamed file failed: %v", err)
+		}
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil {
+				t.Logf("Warning: failed to close file: %v", closeErr)
+			}
+		}()
+
+		info, err := file.Stat()
+		if err != nil {
+			t.Fatalf("Stat renamed file failed: %v", err)
+		}
+
+		if info.Size() != int64(len(content)) {
+			t.Errorf("Expected renamed file size %d, got %d", len(content), info.Size())
+		}
+	})
+
+	t.Run("Error cases", func(t *testing.T) {
+		// Symlink with non-existent target (should still work in OS)
+		err := osfs.Symlink("non-existent.txt", "broken-link.txt")
+		if err != nil {
+			t.Logf("Symlink to non-existent target failed (may be expected): %v", err)
+		}
+
+		// Readlink on non-symlink
+		normalFile := "normal.txt"
+		err = osfs.WriteFile(normalFile, []byte("content"), 0644)
+		if err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+
+		_, err = osfs.Readlink(normalFile)
+		if err == nil {
+			t.Error("Expected Readlink on normal file to fail")
+		}
+
+		// Rename non-existent file
+		err = osfs.Rename("does-not-exist.txt", "target.txt")
+		if err == nil {
+			t.Error("Expected Rename of non-existent file to fail")
 		}
 	})
 }
