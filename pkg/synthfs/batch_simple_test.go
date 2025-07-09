@@ -107,7 +107,7 @@ func TestBatchPrerequisiteResolutionForAllOperations(t *testing.T) {
 			t.Fatalf("Failed to add Move operation: %v", err)
 		}
 		
-		_, err = batch.CreateSymlink("../source1.txt", "dest/dir/link.txt")
+		_, err = batch.CreateSymlink("../../source1.txt", "dest/dir/link.txt")
 		if err != nil {
 			t.Fatalf("Failed to add CreateSymlink operation: %v", err)
 		}
@@ -118,7 +118,7 @@ func TestBatchPrerequisiteResolutionForAllOperations(t *testing.T) {
 		
 		result, err := batch.WithContext(ctx).Run()
 		if err != nil {
-			t.Fatalf("Batch execution failed: %v", err)
+			t.Fatalf("Batch execution failed with error: %v", err)
 		}
 		
 		if !result.IsSuccess() {
@@ -205,17 +205,8 @@ func TestErrorHandling(t *testing.T) {
 		
 		// Try to copy from non-existent source
 		_, err := batch.Copy("nonexistent.txt", "dest/copy.txt")
-		if err != nil {
-			t.Fatalf("Failed to add Copy operation: %v", err)
-		}
-		
-		// Execute - should fail due to missing source
-		result, err := batch.Run()
-		if err != nil {
-			// This is acceptable - the batch failed with an error
-			t.Logf("Batch failed with error as expected: %v", err)
-		} else if result.IsSuccess() {
-			t.Error("Batch should have failed due to missing source file")
+		if err == nil {
+			t.Fatalf("Expected an error when adding a Copy operation with a non-existent source")
 		}
 	})
 }
@@ -238,20 +229,24 @@ func TestBatchWithBackup(t *testing.T) {
 		}
 		
 		// Run with backup enabled
-		result, err := batch.RunRestorable()
-		if err != nil {
-			t.Fatalf("Batch execution with backup failed: %v", err)
+		executor := NewExecutor()
+		pipeline := NewMemPipeline()
+		for _, op := range batch.Operations() {
+			pipeline.Add(op.(Operation))
 		}
+		result := executor.RunWithOptions(context.Background(), pipeline, fs, core.PipelineOptions{
+			Restorable: true,
+		})
 		
-		if !result.IsSuccess() {
-			t.Fatalf("Batch execution was not successful: %v", result.GetError())
+		if !result.Success {
+			t.Fatalf("Batch execution was not successful: %v", result.Errors)
 		}
 		
 		// Verify file was overwritten
 		AssertFileContent(t, fs, "existing.txt", []byte("new content"))
 		
 		// Verify restore operations were created
-		if len(result.GetRestoreOps()) == 0 {
+		if len(result.RestoreOps) == 0 {
 			t.Error("No restore operations were created")
 		}
 	})

@@ -52,11 +52,13 @@ func TestEventIntegration(t *testing.T) {
 			t.Fatalf("Failed to add CreateDir operation: %v", err)
 		}
 
-		// Execute the batch directly
-		result, err := batch.Run()
-		if err != nil {
-			t.Fatalf("Batch execution failed: %v", err)
+		// Execute the batch via the executor to capture events
+		pipeline := NewMemPipeline()
+		for _, op := range batch.Operations() {
+			pipeline.Add(op.(Operation))
 		}
+		result := executor.Run(ctx, pipeline, fs)
+
 		if !result.IsSuccess() {
 			t.Fatalf("Batch execution failed: %v", result.GetError())
 		}
@@ -158,9 +160,15 @@ func TestEventIntegration(t *testing.T) {
 			t.Fatalf("Failed to add CreateFile operation with invalid path: %v", err)
 		}
 
-		result, err := batch.Run()
+		// Execute the batch via the executor to capture events
+		pipeline := NewMemPipeline()
+		for _, op := range batch.Operations() {
+			pipeline.Add(op.(Operation))
+		}
+		result := executor.Run(ctx, pipeline, fs)
+
 		// The batch should fail because of invalid path
-		if err == nil && result.IsSuccess() {
+		if result.IsSuccess() {
 			t.Skip("Expected batch to fail, but it succeeded")
 		}
 

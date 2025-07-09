@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
 func TestBatchCompleteAPI(t *testing.T) {
@@ -119,8 +120,8 @@ func TestBatchCompleteAPI(t *testing.T) {
 		// Real archive verification would require extracting and checking contents
 		t.Logf("Archive operations executed successfully: %d operations", len(result.GetOperations()))
 		for i, opResult := range result.GetOperations() {
-			operationResult := opResult.(*synthfs.OperationResult)
-			desc := operationResult.Operation.Describe()
+			operationResult := opResult.(*core.OperationResult)
+			desc := operationResult.Operation.(synthfs.Operation).Describe()
 			t.Logf("Operation %d: %s %s -> %s", i+1, desc.Type, desc.Path, operationResult.Status)
 		}
 	})
@@ -283,10 +284,10 @@ func TestBatchCompleteAPI(t *testing.T) {
 		// Inspect execution results (like Python example)
 		t.Logf("Execution Result: Success=%v, Duration=%v", result.IsSuccess(), result.GetDuration())
 		for i, opResult := range result.GetOperations() {
-			operationResult := opResult.(*synthfs.OperationResult)
+			operationResult := opResult.(*core.OperationResult)
 			t.Logf("  Operation %d: %s -> %s (Duration: %v)",
 				i+1,
-				operationResult.Operation.ID(),
+				operationResult.Operation.(synthfs.Operation).ID(),
 				operationResult.Status,
 				operationResult.Duration)
 		}

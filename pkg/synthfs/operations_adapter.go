@@ -41,6 +41,11 @@ func (a *OperationsPackageAdapter) Conflicts() []core.OperationID {
 	return a.opsOperation.Conflicts()
 }
 
+// Prerequisites returns the operation's prerequisites.
+func (a *OperationsPackageAdapter) Prerequisites() []core.Prerequisite {
+	return a.opsOperation.Prerequisites()
+}
+
 // Execute performs the operation.
 func (a *OperationsPackageAdapter) Execute(ctx context.Context, fsys FileSystem) error {
 	return a.opsOperation.Execute(ctx, fsys)

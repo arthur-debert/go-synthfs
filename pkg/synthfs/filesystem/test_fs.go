@@ -3,6 +3,8 @@ package filesystem
 import (
 	"context"
 	"io/fs"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"testing/fstest"
@@ -80,12 +82,19 @@ func (tfs *TestFileSystem) RemoveAll(name string) error {
 
 // Symlink implements WriteFS for testing
 func (tfs *TestFileSystem) Symlink(oldname, newname string) error {
-	if !fs.ValidPath(oldname) || !fs.ValidPath(newname) {
+	if !fs.ValidPath(newname) {
 		return &fs.PathError{Op: "symlink", Path: newname, Err: fs.ErrInvalid}
 	}
 
+	targetPath := oldname
+	if strings.Contains(oldname, "..") {
+		// Handle relative paths for tests that need it
+		dir := filepath.Dir(newname)
+		targetPath = filepath.Clean(filepath.Join(dir, oldname))
+	}
+
 	// Check if target exists
-	if _, exists := tfs.MapFS[oldname]; !exists {
+	if _, exists := tfs.MapFS[targetPath]; !exists {
 		// Unlike real symlinks, for testing we'll require the target to exist
 		return &fs.PathError{Op: "symlink", Path: oldname, Err: fs.ErrNotExist}
 	}
