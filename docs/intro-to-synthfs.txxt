@@ -49,6 +49,9 @@ Intro to Synthfs
 
 	By synthfs is nothing like that: the operating system, the user, others applications can alter data between an operation's creation and execution.  It's critical to understand this: synthfs validation presumes no concurrent changes to file system.  
 
+    This is a solid representation of the model, for a throrough one, see ./correctness.txxt
+
+	
     2.1 No guarantees, it's all best effort optimistic .
 
         This has clear implications: synthfs is a useful tool and abstraction for tightly  controlled environments, and should never be used under concurrency (not even low concurrency) and mission critical data.  But for software that runs on the user's machine, in locations that the application controls, it's usually safe enough. If the execution encounters an issue : either because an operation files, or we detect a change to the data we're dealing with we'll stop and, to the best extend possible revert the previous state.  synthfs does some good sanity checking for conflicts and checking that data has not changed between scheduling and running (with some limits, not a true deep validation but for the files at hand). These are here to make sure that simple bugs (in synthfs and your app) are safer,  and as a sanity check. But don't see these as strong guarantees of any sort, because they are not.
@@ -101,6 +104,7 @@ Intro to Synthfs
 
 				The engine keeps tabs of new paths, and their contents, and can do this safely.
 	
+ 
 	3. Restore System
 
 		synthfs offers users the ability to restore changes in case a pipeline fails. Again, this is useful for the simple case, but it's critical that there is a clear understanding of what this actually entails. 
