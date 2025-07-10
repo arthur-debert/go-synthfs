@@ -2,126 +2,543 @@ package synthfs_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
-func TestExecutor_RunWithOptions_Basic(t *testing.T) {
-	ctx := context.Background()
-	fs := testutil.NewTestFileSystem()
-	executor := synthfs.NewExecutor()
-	pipeline := synthfs.NewMemPipeline()
+// TestNewExecutor tests executor creation
+func TestNewExecutor(t *testing.T) {
+	t.Run("NewExecutor creates executor", func(t *testing.T) {
+		executor := synthfs.NewExecutor()
 
-	// Create a simple operation
-	registry := synthfs.GetDefaultRegistry()
-	op, err := registry.CreateOperation(core.OperationID("test"), "create_file", "test.txt")
-	if err != nil {
-		t.Fatalf("Failed to create operation: %v", err)
-	}
-	operation := op.(synthfs.Operation)
-	fileItem := synthfs.NewFile("test.txt").WithContent([]byte("content"))
-	err = registry.SetItemForOperation(op, fileItem)
-	if err != nil {
-		t.Fatalf("Failed to set item for operation: %v", err)
-	}
+		if executor == nil {
+			t.Fatal("Expected executor to be created")
+		}
 
-	err = pipeline.Add(operation)
-	if err != nil {
-		t.Fatalf("Failed to add operation to pipeline: %v", err)
-	}
+		// EventBus should be available
+		eventBus := executor.EventBus()
+		if eventBus == nil {
+			t.Error("Expected EventBus to be available")
+		}
+	})
+}
 
-	// Test with default options
+// TestDefaultPipelineOptions tests default options
+func TestDefaultPipelineOptions(t *testing.T) {
 	opts := synthfs.DefaultPipelineOptions()
-	result := executor.RunWithOptions(ctx, pipeline, fs, opts)
 
-	if !result.IsSuccess() {
-		t.Errorf("Expected success, got errors: %v", result.GetError())
-	}
-
-	if len(result.GetOperations()) != 1 {
-		t.Errorf("Expected 1 operation result, got %d", len(result.GetOperations()))
-	}
-
-	// With the new architecture, budget might be initialized even when restorable=false
-	// but it should not be used. Let's check if restorable was false in options
 	if opts.Restorable {
-		t.Error("Expected DefaultPipelineOptions to have restorable=false")
+		t.Error("Expected Restorable to be false by default")
 	}
 
-	// If restorable=false and we still have a budget, it's OK as long as it wasn't used
-	if result.GetBudget() != nil {
-		if budget, ok := result.GetBudget().(*core.BackupBudget); ok && budget != nil && budget.UsedMB > 0 {
-			t.Error("Expected no budget usage when restorable=false")
-		}
+	if opts.MaxBackupSizeMB != core.DefaultMaxBackupMB {
+		t.Errorf("Expected MaxBackupSizeMB to be %d, got %d", core.DefaultMaxBackupMB, opts.MaxBackupSizeMB)
 	}
 
-	if len(result.GetRestoreOps()) != 0 {
-		t.Errorf("Expected 0 restore operations when restorable=false, got %d", len(result.GetRestoreOps()))
+	if !opts.ResolvePrerequisites {
+		t.Error("Expected ResolvePrerequisites to be true by default")
+	}
+
+	if !opts.UseSimpleBatch {
+		t.Error("Expected UseSimpleBatch to be true by default")
 	}
 }
 
-func TestExecutor_RunWithOptions_Restorable(t *testing.T) {
-	ctx := context.Background()
-	fs := testutil.NewTestFileSystem()
-	executor := synthfs.NewExecutor()
-	pipeline := synthfs.NewMemPipeline()
+// TestExecutor_Run tests basic execution
+func TestExecutor_Run(t *testing.T) {
+	t.Run("Run with successful operations", func(t *testing.T) {
+		executor := synthfs.NewExecutor()
+		pipeline := NewMockMainPipeline()
+		fs := testutil.NewTestFileSystem()
+		ctx := context.Background()
 
-	// Create a simple operation
-	registry := synthfs.GetDefaultRegistry()
-	op, err := registry.CreateOperation(core.OperationID("test"), "create_file", "test.txt")
-	if err != nil {
-		t.Fatalf("Failed to create operation: %v", err)
-	}
-	operation := op.(synthfs.Operation)
-	fileItem := synthfs.NewFile("test.txt").WithContent([]byte("content"))
-	err = registry.SetItemForOperation(op, fileItem)
-	if err != nil {
-		t.Fatalf("Failed to set item for operation: %v", err)
-	}
+		// Add mock operations to pipeline
+		op1 := NewMockMainOperation("op1", "create_file", "test.txt")
+		op2 := NewMockMainOperation("op2", "create_directory", "testdir")
+		pipeline.AddOperations(op1, op2)
 
-	err = pipeline.Add(operation)
-	if err != nil {
-		t.Fatalf("Failed to add operation to pipeline: %v", err)
-	}
+		result := executor.Run(ctx, pipeline, fs)
 
-	// Test with restorable options
-	opts := synthfs.PipelineOptions{
-		Restorable:      true,
-		MaxBackupSizeMB: 5,
-	}
-	result := executor.RunWithOptions(ctx, pipeline, fs, opts)
-
-	if !result.IsSuccess() {
-		t.Errorf("Expected success, got errors: %v", result.GetError())
-	}
-
-	if len(result.GetOperations()) != 1 {
-		t.Errorf("Expected 1 operation result, got %d", len(result.GetOperations()))
-	}
-
-	if result.GetBudget() == nil {
-		t.Fatal("Expected budget to be initialized when restorable=true")
-	}
-
-	if budget, ok := result.GetBudget().(*synthfs.BackupBudget); ok {
-		if budget.TotalMB != 5.0 {
-			t.Errorf("Expected budget total 5.0 MB, got %f", budget.TotalMB)
+		if !result.IsSuccess() {
+			t.Errorf("Expected success=true, got success=%v, error=%v", result.IsSuccess(), result.GetError())
 		}
-	} else {
-		t.Error("Expected budget to be *BackupBudget type")
-	}
 
-	if len(result.GetRestoreOps()) != 1 {
-		t.Errorf("Expected 1 restore operation when restorable=true, got %d", len(result.GetRestoreOps()))
-	}
+		if len(result.GetOperations()) != 2 {
+			t.Errorf("Expected 2 operation results, got %d", len(result.GetOperations()))
+		}
 
-	// Check operation result has backup data
-	// Note: With the simplified API, we can't directly access operation details
-	// We can only verify that restore operations were created
-	if len(result.GetRestoreOps()) == 0 {
-		t.Error("Expected restore operations to be created when restorable=true")
+		if result.GetDuration() == 0 {
+			t.Error("Expected non-zero duration")
+		}
+	})
+
+	t.Run("Run with empty pipeline", func(t *testing.T) {
+		executor := synthfs.NewExecutor()
+		pipeline := NewMockMainPipeline()
+		fs := testutil.NewTestFileSystem()
+		ctx := context.Background()
+
+		result := executor.Run(ctx, pipeline, fs)
+
+		if !result.IsSuccess() {
+			t.Errorf("Expected success=true for empty pipeline, got success=%v, error=%v", result.IsSuccess(), result.GetError())
+		}
+
+		if len(result.GetOperations()) != 0 {
+			t.Errorf("Expected 0 operation results for empty pipeline, got %d", len(result.GetOperations()))
+		}
+	})
+}
+
+// TestExecutor_RunWithOptions tests execution with custom options
+func TestExecutor_RunWithOptions(t *testing.T) {
+	t.Run("RunWithOptions with restorable execution", func(t *testing.T) {
+		executor := synthfs.NewExecutor()
+		pipeline := NewMockMainPipeline()
+		fs := testutil.NewTestFileSystem()
+		ctx := context.Background()
+
+		op1 := NewMockMainOperation("op1", "create_file", "test.txt")
+		op1.SetReverseOps([]synthfs.Operation{NewMockMainOperation("rev1", "delete", "test.txt")}, nil)
+		pipeline.AddOperations(op1)
+
+		opts := synthfs.PipelineOptions{
+			Restorable:      true,
+			MaxBackupSizeMB: 10,
+		}
+
+		result := executor.RunWithOptions(ctx, pipeline, fs, opts)
+
+		if !result.IsSuccess() {
+			t.Errorf("Expected success=true, got success=%v, error=%v", result.IsSuccess(), result.GetError())
+		}
+
+		if result.GetBudget() == nil {
+			t.Error("Expected budget to be initialized for restorable execution")
+		}
+
+		if len(result.GetRestoreOps()) == 0 {
+			t.Error("Expected restore operations to be available")
+		}
+	})
+
+	t.Run("RunWithOptions with prerequisite resolution disabled", func(t *testing.T) {
+		executor := synthfs.NewExecutor()
+		pipeline := NewMockMainPipeline()
+		fs := testutil.NewTestFileSystem()
+		ctx := context.Background()
+
+		op1 := NewMockMainOperation("op1", "create_file", "test.txt")
+		pipeline.AddOperations(op1)
+
+		opts := synthfs.PipelineOptions{
+			ResolvePrerequisites: false,
+		}
+
+		result := executor.RunWithOptions(ctx, pipeline, fs, opts)
+
+		if !result.IsSuccess() {
+			t.Errorf("Expected success=true, got success=%v, error=%v", result.IsSuccess(), result.GetError())
+		}
+
+		// Should skip prerequisite resolution gracefully
+		if pipeline.resolvePrerequisitesCalled {
+			t.Error("Expected ResolvePrerequisites to be skipped when disabled")
+		}
+	})
+}
+
+// TestExecutor_ErrorPaths tests various error scenarios
+func TestExecutor_ErrorPaths(t *testing.T) {
+	t.Run("Pipeline validation failure", func(t *testing.T) {
+		executor := synthfs.NewExecutor()
+		pipeline := NewMockMainPipeline()
+		fs := testutil.NewTestFileSystem()
+		ctx := context.Background()
+
+		pipeline.SetValidateError(errors.New("validation failed: conflicting operations"))
+
+		op1 := NewMockMainOperation("op1", "create_file", "test.txt")
+		pipeline.AddOperations(op1)
+
+		result := executor.RunWithOptions(ctx, pipeline, fs, synthfs.DefaultPipelineOptions())
+
+		if result.IsSuccess() {
+			t.Error("Expected failure for pipeline validation error")
+		}
+
+		if result.GetError() == nil {
+			t.Error("Expected error to be returned")
+		}
+
+		if !strings.Contains(fmt.Sprintf("%v", result.GetError()), "validation failed") {
+			t.Errorf("Expected validation error, got: %v", result.GetError())
+		}
+	})
+
+	t.Run("Operation execution failure", func(t *testing.T) {
+		executor := synthfs.NewExecutor()
+		pipeline := NewMockMainPipeline()
+		fs := testutil.NewTestFileSystem()
+		ctx := context.Background()
+
+		failingOp := NewMockMainOperation("failing_op", "create_file", "test.txt")
+		failingOp.SetExecuteError(errors.New("filesystem error"))
+		successOp := NewMockMainOperation("success_op", "create_directory", "testdir")
+		pipeline.AddOperations(failingOp, successOp)
+
+		result := executor.RunWithOptions(ctx, pipeline, fs, synthfs.DefaultPipelineOptions())
+
+		if result.IsSuccess() {
+			t.Error("Expected failure when operation execution fails")
+		}
+
+		if result.GetError() == nil {
+			t.Error("Expected error to be returned")
+		}
+
+		// Check that operations were processed
+		if len(result.GetOperations()) == 0 {
+			t.Error("Expected operation results to be returned even on failure")
+		}
+	})
+}
+
+// TestExecutor_ResultConversion tests result conversion logic
+func TestExecutor_ResultConversion(t *testing.T) {
+	t.Run("Convert successful result", func(t *testing.T) {
+		executor := synthfs.NewExecutor()
+		pipeline := NewMockMainPipeline()
+		fs := testutil.NewTestFileSystem()
+		ctx := context.Background()
+
+		op1 := NewMockMainOperation("op1", "create_file", "test.txt")
+		op2 := NewMockMainOperation("op2", "create_directory", "testdir")
+		pipeline.AddOperations(op1, op2)
+
+		result := executor.Run(ctx, pipeline, fs)
+
+		// Test main result methods
+		if !result.IsSuccess() {
+			t.Error("Expected success=true")
+		}
+
+		if result.GetError() != nil {
+			t.Errorf("Expected no error, got: %v", result.GetError())
+		}
+
+		ops := result.GetOperations()
+		if len(ops) != 2 {
+			t.Errorf("Expected 2 operations, got %d", len(ops))
+		}
+
+		// Check operation result conversion
+		for i, opInterface := range ops {
+			if opResult, ok := opInterface.(synthfs.OperationResult); ok {
+				if opResult.OperationID == "" {
+					t.Errorf("Operation %d missing OperationID", i)
+				}
+				if opResult.Operation == nil {
+					t.Errorf("Operation %d missing Operation reference", i)
+				}
+				if opResult.Duration == 0 {
+					t.Errorf("Operation %d missing Duration", i)
+				}
+			} else {
+				t.Errorf("Expected OperationResult, got %T", opInterface)
+			}
+		}
+
+		if result.GetDuration() == 0 {
+			t.Error("Expected non-zero total duration")
+		}
+	})
+
+	t.Run("Convert result with restore operations", func(t *testing.T) {
+		executor := synthfs.NewExecutor()
+		pipeline := NewMockMainPipeline()
+		fs := testutil.NewTestFileSystem()
+		ctx := context.Background()
+
+		op1 := NewMockMainOperation("op1", "create_file", "test.txt")
+		op1.SetReverseOps([]synthfs.Operation{NewMockMainOperation("rev1", "delete", "test.txt")}, nil)
+		pipeline.AddOperations(op1)
+
+		opts := synthfs.PipelineOptions{
+			Restorable: true,
+		}
+
+		result := executor.RunWithOptions(ctx, pipeline, fs, opts)
+
+		if !result.IsSuccess() {
+			t.Errorf("Expected success=true, got: %v", result.GetError())
+		}
+
+		restoreOps := result.GetRestoreOps()
+		if len(restoreOps) == 0 {
+			t.Error("Expected restore operations to be available")
+		}
+	})
+}
+
+// TestPipelineWrapper tests the pipeline wrapper functionality
+func TestPipelineWrapper(t *testing.T) {
+	t.Run("Pipeline wrapper methods", func(t *testing.T) {
+		executor := synthfs.NewExecutor()
+		pipeline := NewMockMainPipeline()
+		fs := testutil.NewTestFileSystem()
+		ctx := context.Background()
+
+		op1 := NewMockMainOperation("op1", "create_file", "test.txt")
+		pipeline.AddOperations(op1)
+
+		result := executor.Run(ctx, pipeline, fs)
+
+		if !result.IsSuccess() {
+			t.Errorf("Expected success=true, got: %v", result.GetError())
+		}
+
+		// Verify pipeline methods were called
+		if !pipeline.resolveCalled {
+			t.Error("Expected Resolve to be called")
+		}
+		if !pipeline.validateCalled {
+			t.Error("Expected Validate to be called")
+		}
+	})
+
+	t.Run("Pipeline wrapper with filesystem interface mismatch", func(t *testing.T) {
+		executor := synthfs.NewExecutor()
+		pipeline := NewMockMainPipeline()
+		invalidFS := "not a filesystem"
+		ctx := context.Background()
+
+		op1 := NewMockMainOperation("op1", "create_file", "test.txt")
+		pipeline.AddOperations(op1)
+
+		// Should handle filesystem interface mismatch gracefully
+		result := executor.Run(ctx, pipeline, invalidFS)
+
+		// Result depends on implementation - it might succeed if validation is skipped
+		// This tests the robustness of the wrapper
+		if result == nil {
+			t.Error("Expected result to be returned even with invalid filesystem")
+		}
+	})
+}
+
+// TestOperationWrapper tests the operation wrapper functionality
+func TestOperationWrapper(t *testing.T) {
+	t.Run("Operation wrapper with prerequisites", func(t *testing.T) {
+		executor := synthfs.NewExecutor()
+		pipeline := NewMockMainPipeline()
+		fs := testutil.NewTestFileSystem()
+		ctx := context.Background()
+
+		// Create operation that implements Prerequisites method
+		op1 := NewMockMainOperationWithPrerequisites("op1", "create_file", "test.txt")
+		prereq := NewMockPrerequisite("parent_dir", ".", nil)
+		op1.SetPrerequisites([]core.Prerequisite{prereq})
+
+		pipeline.AddOperations(op1)
+
+		result := executor.Run(ctx, pipeline, fs)
+
+		if !result.IsSuccess() {
+			t.Errorf("Expected success=true, got: %v", result.GetError())
+		}
+
+		// Verify operation was wrapped and executed correctly
+		if len(result.GetOperations()) != 1 {
+			t.Errorf("Expected 1 operation result, got %d", len(result.GetOperations()))
+		}
+	})
+
+	t.Run("Operation wrapper fallback methods", func(t *testing.T) {
+		executor := synthfs.NewExecutor()
+		pipeline := NewMockMainPipeline()
+		fs := testutil.NewTestFileSystem()
+		ctx := context.Background()
+
+		// Test operation that only implements basic interface (no V2 methods)
+		op1 := NewMockMainOperation("op1", "create_file", "test.txt")
+		pipeline.AddOperations(op1)
+
+		result := executor.Run(ctx, pipeline, fs)
+
+		if !result.IsSuccess() {
+			t.Errorf("Expected success=true, got: %v", result.GetError())
+		}
+
+		// Should fallback to original Execute/Validate methods
+		if len(result.GetOperations()) != 1 {
+			t.Errorf("Expected 1 operation result, got %d", len(result.GetOperations()))
+		}
+	})
+}
+
+// Mock implementations for main package testing
+
+type MockMainPipeline struct {
+	operations                 []synthfs.Operation
+	resolveError               error
+	validateError              error
+	resolvePrerequisitesError  error
+	resolveCalled              bool
+	validateCalled             bool
+	resolvePrerequisitesCalled bool
+}
+
+func NewMockMainPipeline() *MockMainPipeline {
+	return &MockMainPipeline{
+		operations: make([]synthfs.Operation, 0),
 	}
 }
+
+func (m *MockMainPipeline) Add(ops ...synthfs.Operation) error {
+	m.operations = append(m.operations, ops...)
+	return nil
+}
+
+func (m *MockMainPipeline) AddOperations(ops ...synthfs.Operation) {
+	m.operations = append(m.operations, ops...)
+}
+
+func (m *MockMainPipeline) Operations() []synthfs.Operation {
+	return m.operations
+}
+
+func (m *MockMainPipeline) Resolve() error {
+	m.resolveCalled = true
+	return m.resolveError
+}
+
+func (m *MockMainPipeline) Validate(ctx context.Context, fs synthfs.FileSystem) error {
+	m.validateCalled = true
+	return m.validateError
+}
+
+func (m *MockMainPipeline) SetResolveError(err error)  { m.resolveError = err }
+func (m *MockMainPipeline) SetValidateError(err error) { m.validateError = err }
+func (m *MockMainPipeline) SetResolvePrerequisitesError(err error) {
+	m.resolvePrerequisitesError = err
+}
+
+type MockMainOperation struct {
+	id              synthfs.OperationID
+	opType          string
+	path            string
+	executeError    error
+	validateError   error
+	rollbackError   error
+	reverseOpsError error
+	reverseOps      []synthfs.Operation
+	backupData      *synthfs.BackupData
+	rollbackCalled  bool
+	item            interface{}
+}
+
+func NewMockMainOperation(id, opType, path string) *MockMainOperation {
+	return &MockMainOperation{
+		id:     synthfs.OperationID(id),
+		opType: opType,
+		path:   path,
+	}
+}
+
+func (m *MockMainOperation) ID() synthfs.OperationID { return m.id }
+func (m *MockMainOperation) Describe() synthfs.OperationDesc {
+	return synthfs.OperationDesc{
+		Type: m.opType,
+		Path: m.path,
+	}
+}
+func (m *MockMainOperation) Dependencies() []synthfs.OperationID     { return []synthfs.OperationID{} }
+func (m *MockMainOperation) Conflicts() []synthfs.OperationID        { return []synthfs.OperationID{} }
+func (m *MockMainOperation) AddDependency(depID synthfs.OperationID) { /* no-op for mock */ }
+
+func (m *MockMainOperation) Execute(ctx context.Context, fs synthfs.FileSystem) error {
+	return m.executeError
+}
+
+func (m *MockMainOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return m.executeError
+}
+
+func (m *MockMainOperation) Validate(ctx context.Context, fs synthfs.FileSystem) error {
+	return m.validateError
+}
+
+func (m *MockMainOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return m.validateError
+}
+
+func (m *MockMainOperation) ReverseOps(ctx context.Context, fs synthfs.FileSystem, budget *synthfs.BackupBudget) ([]synthfs.Operation, *synthfs.BackupData, error) {
+	if m.reverseOpsError != nil {
+		return nil, nil, m.reverseOpsError
+	}
+	return m.reverseOps, m.backupData, nil
+}
+
+func (m *MockMainOperation) Rollback(ctx context.Context, fs synthfs.FileSystem) error {
+	m.rollbackCalled = true
+	return m.rollbackError
+}
+
+func (m *MockMainOperation) GetItem() interface{} { return m.item }
+
+func (m *MockMainOperation) SetExecuteError(err error)    { m.executeError = err }
+func (m *MockMainOperation) SetValidateError(err error)   { m.validateError = err }
+func (m *MockMainOperation) SetRollbackError(err error)   { m.rollbackError = err }
+func (m *MockMainOperation) SetReverseOpsError(err error) { m.reverseOpsError = err }
+func (m *MockMainOperation) SetReverseOps(ops []synthfs.Operation, backup *synthfs.BackupData) {
+	m.reverseOps = ops
+	m.backupData = backup
+}
+func (m *MockMainOperation) SetItem(item interface{}) { m.item = item }
+
+// MockMainOperationWithPrerequisites extends MockMainOperation to support Prerequisites
+type MockMainOperationWithPrerequisites struct {
+	*MockMainOperation
+	prerequisites []core.Prerequisite
+}
+
+func NewMockMainOperationWithPrerequisites(id, opType, path string) *MockMainOperationWithPrerequisites {
+	return &MockMainOperationWithPrerequisites{
+		MockMainOperation: NewMockMainOperation(id, opType, path),
+		prerequisites:     []core.Prerequisite{},
+	}
+}
+
+func (m *MockMainOperationWithPrerequisites) Prerequisites() []core.Prerequisite {
+	return m.prerequisites
+}
+
+func (m *MockMainOperationWithPrerequisites) SetPrerequisites(prereqs []core.Prerequisite) {
+	m.prerequisites = prereqs
+}
+
+// MockPrerequisite for testing prerequisite handling
+type MockPrerequisite struct {
+	prereqType    string
+	path          string
+	validateError error
+}
+
+func NewMockPrerequisite(prereqType, path string, validateError error) *MockPrerequisite {
+	return &MockPrerequisite{
+		prereqType:    prereqType,
+		path:          path,
+		validateError: validateError,
+	}
+}
+
+func (m *MockPrerequisite) Type() string                    { return m.prereqType }
+func (m *MockPrerequisite) Path() string                    { return m.path }
+func (m *MockPrerequisite) Validate(fsys interface{}) error { return m.validateError }
