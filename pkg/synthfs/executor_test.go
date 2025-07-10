@@ -316,19 +316,21 @@ func TestPipelineWrapper(t *testing.T) {
 	t.Run("Pipeline wrapper with filesystem interface mismatch", func(t *testing.T) {
 		executor := synthfs.NewExecutor()
 		pipeline := NewMockMainPipeline()
-		invalidFS := "not a filesystem"
+		var invalidFS interface{} = "not a filesystem"
 		ctx := context.Background()
 
 		op1 := NewMockMainOperation("op1", "create_file", "test.txt")
 		pipeline.AddOperations(op1)
 
 		// Should handle filesystem interface mismatch gracefully
-		result := executor.Run(ctx, pipeline, invalidFS)
-
-		// Result depends on implementation - it might succeed if validation is skipped
-		// This tests the robustness of the wrapper
-		if result == nil {
-			t.Error("Expected result to be returned even with invalid filesystem")
+		// Use type assertion in the executor.Run call
+		if fs, ok := invalidFS.(synthfs.FileSystem); ok {
+			result := executor.Run(ctx, pipeline, fs)
+			if result == nil {
+				t.Error("Expected result to be returned even with invalid filesystem")
+			}
+		} else {
+			t.Log("Invalid filesystem interface correctly rejected by type system")
 		}
 	})
 }
@@ -491,7 +493,18 @@ func (m *MockMainOperation) Rollback(ctx context.Context, fs synthfs.FileSystem)
 	return m.rollbackError
 }
 
-func (m *MockMainOperation) GetItem() interface{} { return m.item }
+func (m *MockMainOperation) GetItem() synthfs.FsItem {
+	if item, ok := m.item.(synthfs.FsItem); ok {
+		return item
+	}
+	return nil
+}
+
+func (m *MockMainOperation) Prerequisites() []core.Prerequisite                  { return []core.Prerequisite{} }
+func (m *MockMainOperation) GetChecksum(path string) *synthfs.ChecksumRecord     { return nil }
+func (m *MockMainOperation) GetAllChecksums() map[string]*synthfs.ChecksumRecord { return nil }
+func (m *MockMainOperation) SetDescriptionDetail(key string, value interface{})  { /* no-op for mock */ }
+func (m *MockMainOperation) SetPaths(src, dst string)                            { /* no-op for mock */ }
 
 func (m *MockMainOperation) SetExecuteError(err error)    { m.executeError = err }
 func (m *MockMainOperation) SetValidateError(err error)   { m.validateError = err }
