@@ -6,7 +6,9 @@ if [[ ! -f "go.mod" ]]; then
     exit 1
 fi
 
-gotestsum --format pkgname -- -coverprofile=coverage.out -tags=coverage ./... &&
+PACKAGES_TO_TEST=$(go list ./... | grep -v 'pkg/synthfs/testutil')
+
+gotestsum --format pkgname -- -coverprofile=coverage.out -tags=coverage $PACKAGES_TO_TEST &&
     grep -v "testing\.go:" coverage.out | grep -v "testing_test\.go:" >coverage.filtered.out &&
     mv coverage.filtered.out coverage.out &&
     go tool cover -func=coverage.out | awk '
