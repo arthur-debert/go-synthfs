@@ -6,11 +6,45 @@ if [[ ! -f "go.mod" ]]; then
     exit 1
 fi
 
+# Default mode
+COVERAGE_MODE="function"
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --by)
+      if [[ -n "$2" && "$2" != --* ]]; then
+        COVERAGE_MODE="$2"
+        shift 2
+      else
+        echo "Error: --by requires a value (file or function)"
+        exit 1
+      fi
+      ;;
+    *)
+      # unknown option
+      shift
+      ;;
+  esac
+done
+
+if [[ "$COVERAGE_MODE" != "function" && "$COVERAGE_MODE" != "file" ]]; then
+    echo "Error: Invalid value for --by. Must be 'file' or 'function'."
+    exit 1
+fi
+
 PACKAGES_TO_TEST=$(go list ./... | grep -v 'pkg/synthfs/testutil')
 
-gotestsum --format pkgname -- -coverprofile=coverage.out -tags=coverage $PACKAGES_TO_TEST &&
-    grep -v "testing\.go:" coverage.out | grep -v "testing_test\.go:" >coverage.filtered.out &&
-    mv coverage.filtered.out coverage.out &&
+gotestsum --format pkgname -- -coverprofile=coverage.out -tags=coverage $PACKAGES_TO_TEST
+if [[ $? -ne 0 ]]; then
+    echo "Tests failed."
+    exit 1
+fi
+
+grep -v "testing\.go:" coverage.out | grep -v "testing_test\.go:" >coverage.filtered.out &&
+    mv coverage.filtered.out coverage.out
+
+if [[ "$COVERAGE_MODE" == "function" ]]; then
     go tool cover -func=coverage.out | awk '
 function color_line(line, coverage_val) {
     if (coverage_val >= 80) {
@@ -21,7 +55,7 @@ function color_line(line, coverage_val) {
         printf "\033[31m%s\033[0m\n", line;  # Red
     }
 }
-BEGIN { 
+BEGIN {
     header = "";
     total_line = "";
     count = 0;
@@ -29,7 +63,7 @@ BEGIN {
 {
     # Strip module prefix from file paths
     gsub(/github\.com\/arthur-debert\/synthfs\//, "", $0);
-    
+
     if (NR == 1) {
         header = $0;
     } else if ($1 == "total:") {
@@ -45,7 +79,7 @@ BEGIN {
 END {
     # Print header
     print header;
-    
+
     # Sort lines by coverage (bubble sort for simplicity)
     for (i = 0; i < count-1; i++) {
         for (j = 0; j < count-1-i; j++) {
@@ -61,12 +95,12 @@ END {
             }
         }
     }
-    
+
     # Print sorted function lines with colors
     for (i = 0; i < count; i++) {
         color_line(lines[i], coverage_vals[i]);
     }
-    
+
     # Print total line with color
     if (total_line != "") {
         print "";  # Add blank line before total
@@ -79,3 +113,89 @@ END {
         color_line(total_line, total_coverage);
     }
 }'
+else # file mode
+    awk '
+function color_line(line, coverage_val) {
+    if (coverage_val >= 80) {
+        printf "\033[32m%s\033[0m\n", line;  # Green
+    } else if (coverage_val >= 60) {
+        printf "\033[33m%s\033[0m\n", line;  # Yellow
+    } else {
+        printf "\033[31m%s\033[0m\n", line;  # Red
+    }
+}
+# Process coverage.out file: mode: set
+# github.com/user/repo/file.go:line.col,line.col #stmts #covered
+/^mode:/ { next }
+{
+    # Separate file from the rest of the line
+    i = index($0, ":");
+    file = substr($0, 1, i-1);
+    rest = substr($0, i+1);
+
+    # Get num_statements and count from the rest of the line
+    split(rest, a, " ");
+    num_statements = a[2];
+    count = a[3];
+
+    # Aggregate stats per file
+    total_stmts[file] += num_statements;
+    if (count > 0) {
+        covered_stmts[file] += num_statements;
+    }
+}
+END {
+    count = 0;
+    total_total_stmts = 0;
+    total_covered_stmts = 0;
+
+    for (file in total_stmts) {
+        # Strip module prefix
+        gsub(/github\.com\/arthur-debert\/synthfs\//, "", file);
+
+        coverage = 0;
+        if (total_stmts[file] > 0) {
+            coverage = (covered_stmts[file] / total_stmts[file]) * 100;
+        }
+        lines[count] = sprintf("%-60s %.1f%%", file, coverage);
+        coverage_vals[count] = coverage;
+        count++;
+
+        total_total_stmts += total_stmts[file];
+        total_covered_stmts += covered_stmts[file];
+    }
+
+    # Sort lines by coverage
+    for (i = 0; i < count-1; i++) {
+        for (j = 0; j < count-1-i; j++) {
+            if (coverage_vals[j] < coverage_vals[j+1]) {
+                # Swap lines
+                temp_line = lines[j];
+                lines[j] = lines[j+1];
+                lines[j+1] = temp_line;
+                # Swap coverage values
+                temp_cov = coverage_vals[j];
+                coverage_vals[j] = coverage_vals[j+1];
+                coverage_vals[j+1] = temp_cov;
+            }
+        }
+    }
+
+    # Print header
+    print "File                                                         Coverage";
+    print "------------------------------------------------------------ --------";
+
+    # Print sorted file lines with colors
+    for (i = 0; i < count; i++) {
+        color_line(lines[i], coverage_vals[i]);
+    }
+
+    # Print total
+    total_coverage = 0;
+    if (total_total_stmts > 0) {
+        total_coverage = (total_covered_stmts / total_total_stmts) * 100;
+    }
+    total_line = sprintf("\n%-60s %.1f%%", "TOTAL:", total_coverage);
+    color_line(total_line, total_coverage);
+}' < coverage.out
+fi
