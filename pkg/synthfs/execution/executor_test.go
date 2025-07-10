@@ -702,16 +702,46 @@ func TestExecutor_RollbackFunction(t *testing.T) {
 func TestPipelineAdapter(t *testing.T) {
 	t.Run("Pipeline adapter with execution.Pipeline", func(t *testing.T) {
 		logger := NewMockLogger()
+		execPipeline := execution.NewMemPipeline(logger)
+
+		// Test through the adapter by using a Pipeline type instead of PipelineInterface
 		executor := execution.NewExecutor(logger)
-
-		// Create a mock Pipeline (not PipelineInterface)
-		pipeline := NewMockPipeline()
-		op1 := NewMockOperation("op1", "create_file", "test.txt")
-		pipeline.SetOperations([]interface{}{op1})
-
-		fs := NewMockFileSystem()
+		fs := NewMockFileSystemInterface()
 		ctx := context.Background()
 
+		// Add operation to pipeline
+		op1 := NewMockOperationInterface("op1", "create_file", "test.txt")
+		err := execPipeline.Add(op1)
+		if err != nil {
+			t.Fatalf("Failed to add operation to pipeline: %v", err)
+		}
+
+		// This should trigger the pipelineAdapter code path since execPipeline is a Pipeline, not PipelineInterface
+		result := executor.RunWithOptionsAndResolver(ctx, execPipeline, fs, execution.DefaultPipelineOptions(), nil)
+
+		if !result.Success {
+			t.Errorf("Expected success=true, got success=%v, errors=%v", result.Success, result.Errors)
+		}
+
+		// Verify that operations were processed
+		if len(result.Operations) != 1 {
+			t.Errorf("Expected 1 operation result, got %d", len(result.Operations))
+		}
+	})
+
+	t.Run("Pipeline adapter through MockPipeline", func(t *testing.T) {
+		logger := NewMockLogger()
+		executor := execution.NewExecutor(logger)
+
+		// Create a mock pipeline that implements the execution.Pipeline interface
+		pipeline := NewMockPipeline()
+		op1 := NewMockOperationInterface("op1", "create_file", "test.txt")
+		pipeline.SetOperations([]interface{}{op1})
+
+		fs := NewMockFileSystemInterface()
+		ctx := context.Background()
+
+		// This tests the adapter conversion from Pipeline to PipelineInterface
 		result := executor.RunWithOptionsAndResolver(ctx, pipeline, fs, execution.DefaultPipelineOptions(), nil)
 
 		if !result.Success {
@@ -725,6 +755,7 @@ func TestPipelineAdapter(t *testing.T) {
 		if !pipeline.validateCalled {
 			t.Error("Expected Validate to be called through adapter")
 		}
+		// Note: Add is not called during execution, only Operations, Resolve, ResolvePrerequisites, and Validate
 	})
 }
 
@@ -820,6 +851,7 @@ type MockPipeline struct {
 	resolveCalled              bool
 	validateCalled             bool
 	resolvePrerequisitesCalled bool
+	addCalled                  bool
 }
 
 func NewMockPipeline() *MockPipeline {
@@ -830,6 +862,7 @@ func NewMockPipeline() *MockPipeline {
 
 func (m *MockPipeline) Add(ops ...interface{}) error {
 	m.operations = append(m.operations, ops...)
+	m.addCalled = true
 	return nil
 }
 
