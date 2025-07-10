@@ -1,1 +1,779 @@
 package execution_test
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/execution"
+)
+
+// TestNewMemPipeline tests pipeline creation
+func TestNewMemPipeline(t *testing.T) {
+	t.Run("NewMemPipeline with logger", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+
+		if pipeline == nil {
+			t.Fatal("Expected pipeline to be created")
+		}
+
+		// Should have no operations initially
+		ops := pipeline.Operations()
+		if len(ops) != 0 {
+			t.Errorf("Expected 0 operations initially, got %d", len(ops))
+		}
+	})
+
+	t.Run("NewMemPipeline with nil logger", func(t *testing.T) {
+		pipeline := execution.NewMemPipeline(nil)
+
+		if pipeline == nil {
+			t.Fatal("Expected pipeline to be created even with nil logger")
+		}
+
+		// Should have no operations initially
+		ops := pipeline.Operations()
+		if len(ops) != 0 {
+			t.Errorf("Expected 0 operations initially, got %d", len(ops))
+		}
+	})
+}
+
+// TestPipeline_Add tests adding operations to the pipeline
+func TestPipeline_Add(t *testing.T) {
+	t.Run("Add valid operations", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+
+		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
+		op2 := NewMockPipelineOperation("op2", "create_directory", "dir1")
+
+		err := pipeline.Add(op1, op2)
+		if err != nil {
+			t.Fatalf("Expected no error adding operations, got: %v", err)
+		}
+
+		ops := pipeline.Operations()
+		if len(ops) != 2 {
+			t.Errorf("Expected 2 operations, got %d", len(ops))
+		}
+	})
+
+	t.Run("Add nil operation", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+
+		err := pipeline.Add(nil)
+		if err == nil {
+			t.Error("Expected error for nil operation")
+		}
+
+		expectedErr := "cannot add a nil operation to the pipeline"
+		if err.Error() != expectedErr {
+			t.Errorf("Expected error '%s', got: %s", expectedErr, err.Error())
+		}
+	})
+
+	t.Run("Add invalid operation type", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+
+		err := pipeline.Add("invalid operation")
+		if err == nil {
+			t.Error("Expected error for invalid operation type")
+		}
+
+		expectedErr := "invalid operation type: expected OperationInterface"
+		if err.Error() != expectedErr {
+			t.Errorf("Expected error '%s', got: %s", expectedErr, err.Error())
+		}
+	})
+
+	t.Run("Add duplicate operation IDs", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+
+		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
+		op2 := NewMockPipelineOperation("op1", "create_directory", "dir1") // Same ID
+
+		err := pipeline.Add(op1)
+		if err != nil {
+			t.Fatalf("First add should succeed, got: %v", err)
+		}
+
+		err = pipeline.Add(op2)
+		if err == nil {
+			t.Error("Expected error for duplicate operation ID")
+		}
+
+		expectedErr := "operation with ID 'op1' already exists in the pipeline"
+		if err.Error() != expectedErr {
+			t.Errorf("Expected error '%s', got: %s", expectedErr, err.Error())
+		}
+	})
+
+	t.Run("Add multiple operations at once", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+
+		ops := []interface{}{
+			NewMockPipelineOperation("op1", "create_file", "file1.txt"),
+			NewMockPipelineOperation("op2", "create_directory", "dir1"),
+			NewMockPipelineOperation("op3", "create_symlink", "link1"),
+		}
+
+		err := pipeline.Add(ops...)
+		if err != nil {
+			t.Fatalf("Expected no error, got: %v", err)
+		}
+
+		resultOps := pipeline.Operations()
+		if len(resultOps) != 3 {
+			t.Errorf("Expected 3 operations, got %d", len(resultOps))
+		}
+	})
+}
+
+// TestPipeline_Operations tests the Operations method
+func TestPipeline_Operations(t *testing.T) {
+	t.Run("Operations returns copy", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+
+		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
+		err := pipeline.Add(op1)
+		if err != nil {
+			t.Fatalf("Failed to add operation: %v", err)
+		}
+
+		ops1 := pipeline.Operations()
+		ops2 := pipeline.Operations()
+
+		// Should be different slices (copies)
+		if &ops1[0] == &ops2[0] {
+			t.Error("Operations should return copies, not the same slice")
+		}
+
+		// But should contain the same operations
+		if len(ops1) != len(ops2) {
+			t.Errorf("Expected same number of operations, got %d vs %d", len(ops1), len(ops2))
+		}
+	})
+
+	t.Run("Operations preserves order", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+
+		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
+		op2 := NewMockPipelineOperation("op2", "create_directory", "dir1")
+		op3 := NewMockPipelineOperation("op3", "create_symlink", "link1")
+
+		err := pipeline.Add(op1, op2, op3)
+		if err != nil {
+			t.Fatalf("Failed to add operations: %v", err)
+		}
+
+		ops := pipeline.Operations()
+		if len(ops) != 3 {
+			t.Fatalf("Expected 3 operations, got %d", len(ops))
+		}
+
+		// Check order
+		expectedIDs := []string{"op1", "op2", "op3"}
+		for i, op := range ops {
+			if pipelineOp, ok := op.(execution.OperationInterface); ok {
+				if string(pipelineOp.ID()) != expectedIDs[i] {
+					t.Errorf("Expected operation %d to have ID %s, got %s", i, expectedIDs[i], pipelineOp.ID())
+				}
+			}
+		}
+	})
+}
+
+// TestPipeline_Resolve tests dependency resolution
+func TestPipeline_Resolve(t *testing.T) {
+	t.Run("Resolve empty pipeline", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+
+		err := pipeline.Resolve()
+		if err != nil {
+			t.Errorf("Expected no error for empty pipeline, got: %v", err)
+		}
+	})
+
+	t.Run("Resolve already resolved pipeline", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+
+		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
+		err := pipeline.Add(op1)
+		if err != nil {
+			t.Fatalf("Failed to add operation: %v", err)
+		}
+
+		// First resolve
+		err = pipeline.Resolve()
+		if err != nil {
+			t.Fatalf("First resolve should succeed, got: %v", err)
+		}
+
+		// Second resolve should be no-op
+		err = pipeline.Resolve()
+		if err != nil {
+			t.Errorf("Second resolve should succeed, got: %v", err)
+		}
+	})
+
+	t.Run("Resolve operations without dependencies", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+
+		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
+		op2 := NewMockPipelineOperation("op2", "create_directory", "dir1")
+		pipeline.Add(op1, op2)
+
+		err := pipeline.Resolve()
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+
+		// Order should be preserved for independent operations
+		ops := pipeline.Operations()
+		if len(ops) != 2 {
+			t.Errorf("Expected 2 operations, got %d", len(ops))
+		}
+	})
+
+	t.Run("Resolve operations with dependencies", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+
+		op1 := NewMockPipelineOperation("op1", "create_directory", "dir1")
+		op2 := NewMockPipelineOperation("op2", "create_file", "dir1/file.txt")
+		op2.SetDependencies([]core.OperationID{"op1"}) // op2 depends on op1
+
+		pipeline.Add(op2, op1) // Add in reverse order
+
+		err := pipeline.Resolve()
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+
+		// After resolution, op1 should come before op2
+		ops := pipeline.Operations()
+		if len(ops) != 2 {
+			t.Fatalf("Expected 2 operations, got %d", len(ops))
+		}
+
+		firstOp := ops[0].(execution.OperationInterface)
+		secondOp := ops[1].(execution.OperationInterface)
+
+		if firstOp.ID() != "op1" {
+			t.Errorf("Expected first operation to be op1, got %s", firstOp.ID())
+		}
+		if secondOp.ID() != "op2" {
+			t.Errorf("Expected second operation to be op2, got %s", secondOp.ID())
+		}
+	})
+
+	t.Run("Resolve with missing dependency", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+
+		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
+		op1.SetDependencies([]core.OperationID{"missing_op"}) // Missing dependency
+
+		pipeline.Add(op1)
+
+		err := pipeline.Resolve()
+		if err == nil {
+			t.Error("Expected error for missing dependency")
+		}
+
+		if !strings.Contains(err.Error(), "dependency validation failed") {
+			t.Errorf("Expected dependency validation error, got: %v", err)
+		}
+	})
+
+	t.Run("Resolve with circular dependency", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+
+		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
+		op2 := NewMockPipelineOperation("op2", "create_file", "file2.txt")
+
+		op1.SetDependencies([]core.OperationID{"op2"})
+		op2.SetDependencies([]core.OperationID{"op1"}) // Circular dependency
+
+		pipeline.Add(op1, op2)
+
+		err := pipeline.Resolve()
+		if err == nil {
+			t.Error("Expected error for circular dependency")
+		}
+
+		if !strings.Contains(err.Error(), "circular dependency detected") {
+			t.Errorf("Expected circular dependency error, got: %v", err)
+		}
+	})
+
+	t.Run("Resolve complex dependency chain", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+
+		// Create a chain: op1 -> op2 -> op3
+		op1 := NewMockPipelineOperation("op1", "create_directory", "dir1")
+		op2 := NewMockPipelineOperation("op2", "create_directory", "dir1/subdir")
+		op3 := NewMockPipelineOperation("op3", "create_file", "dir1/subdir/file.txt")
+
+		op2.SetDependencies([]core.OperationID{"op1"})
+		op3.SetDependencies([]core.OperationID{"op2"})
+
+		pipeline.Add(op3, op1, op2) // Add in random order
+
+		err := pipeline.Resolve()
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+
+		// Should be ordered: op1, op2, op3
+		ops := pipeline.Operations()
+		expectedOrder := []string{"op1", "op2", "op3"}
+
+		for i, op := range ops {
+			pipelineOp := op.(execution.OperationInterface)
+			if string(pipelineOp.ID()) != expectedOrder[i] {
+				t.Errorf("Expected operation %d to be %s, got %s", i, expectedOrder[i], pipelineOp.ID())
+			}
+		}
+	})
+}
+
+// TestPipeline_ResolvePrerequisites tests prerequisite resolution
+func TestPipeline_ResolvePrerequisites(t *testing.T) {
+	t.Run("ResolvePrerequisites empty pipeline", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+		resolver := NewMockPrerequisiteResolver()
+		fs := NewMockFileSystem()
+
+		err := pipeline.ResolvePrerequisites(resolver, fs)
+		if err != nil {
+			t.Errorf("Expected no error for empty pipeline, got: %v", err)
+		}
+	})
+
+	t.Run("ResolvePrerequisites with satisfied prerequisites", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+		resolver := NewMockPrerequisiteResolver()
+		fs := NewMockFileSystem()
+
+		// Create operation with prerequisites that are already satisfied
+		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
+		prereq := NewMockPrerequisite("parent_dir", ".", nil) // Current dir always exists
+		op1.SetPrerequisites([]core.Prerequisite{prereq})
+
+		pipeline.Add(op1)
+
+		err := pipeline.ResolvePrerequisites(resolver, fs)
+		if err != nil {
+			t.Errorf("Expected no error for satisfied prerequisites, got: %v", err)
+		}
+
+		// Should not add new operations
+		ops := pipeline.Operations()
+		if len(ops) != 1 {
+			t.Errorf("Expected 1 operation (no new ones added), got %d", len(ops))
+		}
+	})
+
+	t.Run("ResolvePrerequisites with unsatisfied prerequisites", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+		resolver := NewMockPrerequisiteResolver()
+		fs := NewMockFileSystem()
+
+		// Create operation with unsatisfied prerequisite
+		op1 := NewMockPipelineOperation("op1", "create_file", "parent/file.txt")
+		prereq := NewMockPrerequisite("parent_dir", "parent", errors.New("not satisfied"))
+		op1.SetPrerequisites([]core.Prerequisite{prereq})
+
+		pipeline.Add(op1)
+
+		err := pipeline.ResolvePrerequisites(resolver, fs)
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+
+		// The existing MockPrerequisiteResolver returns empty slice, so no new operations added
+		ops := pipeline.Operations()
+		if len(ops) != 1 {
+			t.Errorf("Expected 1 operation (original only), got %d", len(ops))
+		}
+	})
+
+	t.Run("ResolvePrerequisites with resolver working normally", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+		resolver := NewMockPrerequisiteResolver()
+		fs := NewMockFileSystem()
+
+		op1 := NewMockPipelineOperation("op1", "create_file", "file.txt")
+		prereq := NewMockPrerequisite("parent_dir", "parent", errors.New("not satisfied"))
+		op1.SetPrerequisites([]core.Prerequisite{prereq})
+
+		pipeline.Add(op1)
+
+		err := pipeline.ResolvePrerequisites(resolver, fs)
+		if err != nil {
+			t.Errorf("Expected no error with basic resolver, got: %v", err)
+		}
+
+		// Should have 1 operation (original)
+		ops := pipeline.Operations()
+		if len(ops) != 1 {
+			t.Errorf("Expected 1 operation, got %d", len(ops))
+		}
+	})
+
+	t.Run("ResolvePrerequisites with multiple operations", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+		resolver := NewMockPrerequisiteResolver()
+		fs := NewMockFileSystem()
+
+		// Create two operations with prerequisites
+		op1 := NewMockPipelineOperation("op1", "create_file", "parent/file1.txt")
+		op2 := NewMockPipelineOperation("op2", "create_file", "parent/file2.txt")
+
+		prereq1 := NewMockPrerequisite("parent_dir", "parent", errors.New("not satisfied"))
+		prereq2 := NewMockPrerequisite("parent_dir", "parent", errors.New("not satisfied"))
+
+		op1.SetPrerequisites([]core.Prerequisite{prereq1})
+		op2.SetPrerequisites([]core.Prerequisite{prereq2})
+
+		pipeline.Add(op1, op2)
+
+		err := pipeline.ResolvePrerequisites(resolver, fs)
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+
+		// Should have 2 operations (original operations only)
+		ops := pipeline.Operations()
+		if len(ops) != 2 {
+			t.Errorf("Expected 2 operations (original only), got %d", len(ops))
+		}
+	})
+
+	t.Run("ResolvePrerequisites with unknown prerequisite type", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+		resolver := NewMockPrerequisiteResolver()
+		fs := NewMockFileSystem()
+
+		op1 := NewMockPipelineOperation("op1", "create_file", "file.txt")
+		prereq := NewMockPrerequisite("unknown_type", "something", errors.New("not satisfied"))
+		op1.SetPrerequisites([]core.Prerequisite{prereq})
+
+		pipeline.Add(op1)
+
+		err := pipeline.ResolvePrerequisites(resolver, fs)
+		if err != nil {
+			t.Errorf("Expected no error for unknown prerequisite type, got: %v", err)
+		}
+
+		// Should have original operation only
+		ops := pipeline.Operations()
+		if len(ops) != 1 {
+			t.Errorf("Expected 1 operation (original only), got %d", len(ops))
+		}
+	})
+}
+
+// TestPipeline_Validate tests pipeline validation
+func TestPipeline_Validate(t *testing.T) {
+	t.Run("Validate empty pipeline", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+		fs := NewMockFileSystem()
+		ctx := context.Background()
+
+		err := pipeline.Validate(ctx, fs)
+		if err != nil {
+			t.Errorf("Expected no error for empty pipeline, got: %v", err)
+		}
+	})
+
+	t.Run("Validate successful operations", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+		fs := NewMockFileSystem()
+		ctx := context.Background()
+
+		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
+		op2 := NewMockPipelineOperation("op2", "create_directory", "dir1")
+
+		pipeline.Add(op1, op2)
+
+		err := pipeline.Validate(ctx, fs)
+		if err != nil {
+			t.Errorf("Expected no error for valid operations, got: %v", err)
+		}
+	})
+
+	t.Run("Validate with missing dependencies", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+		fs := NewMockFileSystem()
+		ctx := context.Background()
+
+		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
+		op1.SetDependencies([]core.OperationID{"missing_op"})
+
+		pipeline.Add(op1)
+
+		err := pipeline.Validate(ctx, fs)
+		if err == nil {
+			t.Error("Expected error for missing dependencies")
+		}
+
+		if !strings.Contains(err.Error(), "missing dependency") {
+			t.Errorf("Expected missing dependency error, got: %v", err)
+		}
+	})
+
+	t.Run("Validate with operation validation failure", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+		fs := NewMockFileSystem()
+		ctx := context.Background()
+
+		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
+		op1.SetValidateError(errors.New("validation failed"))
+
+		pipeline.Add(op1)
+
+		err := pipeline.Validate(ctx, fs)
+		if err == nil {
+			t.Error("Expected error for operation validation failure")
+		}
+
+		if !strings.Contains(err.Error(), "validation failed for operation op1") {
+			t.Errorf("Expected operation validation error, got: %v", err)
+		}
+	})
+
+	t.Run("Validate with conflicts", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+		fs := NewMockFileSystem()
+		ctx := context.Background()
+
+		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
+		op2 := NewMockPipelineOperation("op2", "delete", "file1.txt")
+
+		// Make op1 conflict with op2
+		op1.SetConflicts([]core.OperationID{"op2"})
+
+		pipeline.Add(op1, op2)
+
+		err := pipeline.Validate(ctx, fs)
+		if err == nil {
+			t.Error("Expected error for conflicting operations")
+		}
+
+		if !strings.Contains(err.Error(), "conflicts with operation") {
+			t.Errorf("Expected conflict error, got: %v", err)
+		}
+	})
+
+	t.Run("Validate with non-conflicting potential conflicts", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+		fs := NewMockFileSystem()
+		ctx := context.Background()
+
+		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
+		op1.SetConflicts([]core.OperationID{"not_in_pipeline"}) // Conflict not in pipeline
+
+		pipeline.Add(op1)
+
+		err := pipeline.Validate(ctx, fs)
+		if err != nil {
+			t.Errorf("Expected no error for potential conflicts not in pipeline, got: %v", err)
+		}
+	})
+}
+
+// TestPipeline_Integration tests integration scenarios
+func TestPipeline_Integration(t *testing.T) {
+	t.Run("Full pipeline workflow", func(t *testing.T) {
+		logger := NewMockLogger()
+		pipeline := execution.NewMemPipeline(logger)
+		resolver := NewMockPrerequisiteResolver()
+		fs := NewMockFileSystem()
+		ctx := context.Background()
+
+		// Set up basic resolver (returns empty operations)
+
+		// Create operations with dependencies and prerequisites
+		op1 := NewMockPipelineOperation("op1", "create_directory", "base")
+		op2 := NewMockPipelineOperation("op2", "create_file", "parent/file.txt")
+		op3 := NewMockPipelineOperation("op3", "create_file", "base/file.txt")
+
+		// op2 has unsatisfied prerequisite
+		prereq := NewMockPrerequisite("parent_dir", "parent", errors.New("not satisfied"))
+		op2.SetPrerequisites([]core.Prerequisite{prereq})
+
+		// op3 depends on op1
+		op3.SetDependencies([]core.OperationID{"op1"})
+
+		// Add operations
+		err := pipeline.Add(op3, op2, op1) // Random order
+		if err != nil {
+			t.Fatalf("Failed to add operations: %v", err)
+		}
+
+		// Resolve prerequisites
+		err = pipeline.ResolvePrerequisites(resolver, fs)
+		if err != nil {
+			t.Fatalf("Failed to resolve prerequisites: %v", err)
+		}
+
+		// Resolve dependencies
+		err = pipeline.Resolve()
+		if err != nil {
+			t.Fatalf("Failed to resolve dependencies: %v", err)
+		}
+
+		// Validate
+		err = pipeline.Validate(ctx, fs)
+		if err != nil {
+			t.Fatalf("Failed to validate pipeline: %v", err)
+		}
+
+		// Check final state - should have original 3 operations since MockPrerequisiteResolver doesn't add any
+		ops := pipeline.Operations()
+		if len(ops) != 3 {
+			t.Errorf("Expected 3 operations (original), got %d", len(ops))
+		}
+
+		// Check that operations are properly ordered for dependencies
+		foundOrder := make([]string, len(ops))
+		for i, op := range ops {
+			pipelineOp := op.(execution.OperationInterface)
+			foundOrder[i] = string(pipelineOp.ID())
+		}
+
+		// op1 should come before op3 (dependency)
+		op1Idx := findIndex(foundOrder, "op1")
+		op3Idx := findIndex(foundOrder, "op3")
+		op2Idx := findIndex(foundOrder, "op2")
+
+		if op1Idx == -1 || op3Idx == -1 || op2Idx == -1 {
+			t.Errorf("Missing expected operations in final order: %v", foundOrder)
+		}
+
+		if op1Idx >= op3Idx {
+			t.Errorf("op1 should come before op3, but got order: %v", foundOrder)
+		}
+	})
+}
+
+// Helper function to find index of string in slice
+func findIndex(slice []string, target string) int {
+	for i, item := range slice {
+		if item == target {
+			return i
+		}
+	}
+	return -1
+}
+
+// Mock implementations for pipeline testing
+
+type MockPipelineOperation struct {
+	id            core.OperationID
+	opType        string
+	path          string
+	dependencies  []core.OperationID
+	conflicts     []core.OperationID
+	prerequisites []core.Prerequisite
+	validateError error
+}
+
+func NewMockPipelineOperation(id, opType, path string) *MockPipelineOperation {
+	return &MockPipelineOperation{
+		id:     core.OperationID(id),
+		opType: opType,
+		path:   path,
+	}
+}
+
+func (m *MockPipelineOperation) ID() core.OperationID { return m.id }
+func (m *MockPipelineOperation) Describe() core.OperationDesc {
+	return core.OperationDesc{
+		Type: m.opType,
+		Path: m.path,
+	}
+}
+func (m *MockPipelineOperation) Dependencies() []core.OperationID   { return m.dependencies }
+func (m *MockPipelineOperation) Conflicts() []core.OperationID      { return m.conflicts }
+func (m *MockPipelineOperation) Prerequisites() []core.Prerequisite { return m.prerequisites }
+func (m *MockPipelineOperation) AddDependency(depID core.OperationID) {
+	m.dependencies = append(m.dependencies, depID)
+}
+
+func (m *MockPipelineOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return nil
+}
+
+func (m *MockPipelineOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return m.validateError
+}
+
+func (m *MockPipelineOperation) ReverseOps(ctx context.Context, fsys interface{}, budget *core.BackupBudget) ([]interface{}, *core.BackupData, error) {
+	return nil, nil, nil
+}
+
+func (m *MockPipelineOperation) Rollback(ctx context.Context, fsys interface{}) error {
+	return nil
+}
+
+func (m *MockPipelineOperation) GetItem() interface{}                               { return nil }
+func (m *MockPipelineOperation) SetDescriptionDetail(key string, value interface{}) { /* no-op */ }
+
+func (m *MockPipelineOperation) SetDependencies(deps []core.OperationID)   { m.dependencies = deps }
+func (m *MockPipelineOperation) SetConflicts(conflicts []core.OperationID) { m.conflicts = conflicts }
+func (m *MockPipelineOperation) SetPrerequisites(prereqs []core.Prerequisite) {
+	m.prerequisites = prereqs
+}
+func (m *MockPipelineOperation) SetValidateError(err error) { m.validateError = err }
+
+type MockPrerequisite struct {
+	prereqType    string
+	path          string
+	validateError error
+}
+
+func NewMockPrerequisite(prereqType, path string, validateError error) *MockPrerequisite {
+	return &MockPrerequisite{
+		prereqType:    prereqType,
+		path:          path,
+		validateError: validateError,
+	}
+}
+
+func (m *MockPrerequisite) Type() string                    { return m.prereqType }
+func (m *MockPrerequisite) Path() string                    { return m.path }
+func (m *MockPrerequisite) Validate(fsys interface{}) error { return m.validateError }
+
+// Reuse mock types from executor_test.go to avoid duplicates
+
+// MockFileSystem is already defined in executor_test.go
