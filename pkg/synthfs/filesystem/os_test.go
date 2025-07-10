@@ -590,7 +590,11 @@ func TestOSFileSystem_RenameOperations(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to open destination after rename: %v", err)
 			}
-			defer file.Close()
+			defer func() {
+				if err := file.Close(); err != nil {
+					t.Logf("Warning: failed to close file: %v", err)
+				}
+			}()
 
 			content := make([]byte, 6)
 			n, err := file.Read(content)
@@ -737,7 +741,11 @@ func TestNewOSFileSystem(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create temp dir: %v", err)
 		}
-		defer os.RemoveAll(tempDir)
+		defer func() {
+			if err := os.RemoveAll(tempDir); err != nil {
+				t.Logf("Warning: failed to remove temp dir: %v", err)
+			}
+		}()
 
 		testFs := filesystem.NewOSFileSystem(tempDir)
 
