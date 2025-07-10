@@ -40,4 +40,5 @@ pkg/**/*.zip
 
 coverage.html
 report.json
-report.xml
+report.html
+.DS_Store
