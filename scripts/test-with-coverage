@@ -7,7 +7,8 @@ if [[ ! -f "go.mod" ]]; then
 fi
 
 # Default mode
-COVERAGE_MODE="function"
+COVERAGE_MODE="file"
+TEST_PATH="./..."
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -17,185 +18,229 @@ while [[ $# -gt 0 ]]; do
         COVERAGE_MODE="$2"
         shift 2
       else
-        echo "Error: --by requires a value (file or function)"
+        echo "Error: --by requires a value (file, function, or package)"
         exit 1
       fi
       ;;
+    --help|-h)
+      echo "Usage: $0 [path] [--by <mode>]"
+      echo "  path         Path to test (default: ./...)"
+      echo "               Examples: pkg, pkg/synthfs, ./pkg/synthfs/operations"
+      echo "  --by <mode>  Coverage report mode: file (default), function, or package"
+      echo "  -h, --help   Show this help message"
+      echo
+      echo "Examples:"
+      echo "  $0                           # Test everything with file coverage"
+      echo "  $0 pkg                       # Test only pkg/ directory"
+      echo "  $0 pkg/synthfs --by function # Test pkg/synthfs with function coverage"
+      echo "  $0 ./cmd --by package        # Test cmd/ with package coverage"
+      exit 0
+      ;;
     *)
-      # unknown option
-      shift
+      # Assume it's a path if it doesn't start with --
+      if [[ "$1" != --* ]]; then
+        TEST_PATH="$1"
+        shift
+      else
+        echo "Unknown option: $1"
+        exit 1
+      fi
       ;;
   esac
 done
 
-if [[ "$COVERAGE_MODE" != "function" && "$COVERAGE_MODE" != "file" ]]; then
-    echo "Error: Invalid value for --by. Must be 'file' or 'function'."
+if [[ "$COVERAGE_MODE" != "function" && "$COVERAGE_MODE" != "file" && "$COVERAGE_MODE" != "package" ]]; then
+    echo "Error: Invalid value for --by. Must be 'file', 'function', or 'package'."
     exit 1
 fi
 
-PACKAGES_TO_TEST=$(go list ./... | grep -v 'pkg/synthfs/testutil')
+# Normalize the test path
+if [[ "$TEST_PATH" != "./"* && "$TEST_PATH" != "." ]]; then
+    # Add ./ prefix if not present
+    TEST_PATH="./$TEST_PATH"
+fi
 
-gotestsum --format pkgname -- -coverprofile=coverage.out -tags=coverage $PACKAGES_TO_TEST
-if [[ $? -ne 0 ]]; then
-    echo "Tests failed."
+# If path doesn't end with /..., add it (unless it's exactly ./...)
+if [[ "$TEST_PATH" != "./..." && "$TEST_PATH" != *"/..." ]]; then
+    TEST_PATH="$TEST_PATH/..."
+fi
+
+# Colors
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+# Get packages to test, excluding testutil
+echo "Determining packages to test..."
+if [[ "$TEST_PATH" == "./..." ]]; then
+    # When testing everything, exclude testutil packages
+    PACKAGES=$(go list ./... | grep -v '/testutil')
+    echo "Testing all packages except testutil"
+else
+    # For specific paths, check if it contains testutil
+    PACKAGES=$(go list "$TEST_PATH" 2>/dev/null | grep -v '/testutil')
+    if [[ -z "$PACKAGES" ]]; then
+        echo "No packages found at path: $TEST_PATH (excluding testutil)"
+        exit 1
+    fi
+    echo "Testing packages: $(echo $PACKAGES | sed 's|github.com/arthur-debert/synthfs/||g')"
+fi
+
+# Create a temporary coverage profile
+TEMP_COVERAGE=$(mktemp)
+trap "rm -f $TEMP_COVERAGE" EXIT
+
+# Run tests with coverage, excluding testutil from coverage calculation
+echo "Running tests..."
+go test -race -coverprofile="$TEMP_COVERAGE" -covermode=atomic -coverpkg=$(echo $PACKAGES | tr ' ' ',') $PACKAGES > /dev/null 2>&1
+TEST_EXIT_CODE=$?
+
+if [[ $TEST_EXIT_CODE -ne 0 ]]; then
+    echo -e "${RED}Tests failed!${NC}"
+    echo "Run without coverage to see test failures:"
+    echo "  go test $PACKAGES"
     exit 1
 fi
 
-grep -v "testing\.go:" coverage.out | grep -v "testing_test\.go:" >coverage.filtered.out &&
-    mv coverage.filtered.out coverage.out
+echo -e "${GREEN}All tests passed!${NC}"
 
-if [[ "$COVERAGE_MODE" == "function" ]]; then
-    go tool cover -func=coverage.out | awk '
-function color_line(line, coverage_val) {
-    if (coverage_val >= 80) {
-        printf "\033[32m%s\033[0m\n", line;  # Green
-    } else if (coverage_val >= 60) {
-        printf "\033[33m%s\033[0m\n", line;  # Yellow
-    } else {
-        printf "\033[31m%s\033[0m\n", line;  # Red
+# Move temp coverage to final location
+mv "$TEMP_COVERAGE" coverage.out
+
+# Generate HTML report silently
+go tool cover -html=coverage.out -o coverage.html 2>/dev/null
+
+case "$COVERAGE_MODE" in
+  "package")
+    echo -e "\nPackage Coverage Report"
+    echo "======================="
+    echo
+    printf "%-60s %10s\n" "Package" "Coverage"
+    printf "%-60s %10s\n" "-------" "--------"
+    
+    # Re-run tests to get package-level coverage
+    go test -cover $PACKAGES 2>/dev/null | grep "coverage:" | grep -v "?" | while read line; do
+      pkg=$(echo "$line" | awk '{print $2}')
+      coverage=$(echo "$line" | grep -oE '[0-9.]+%' | head -1)
+      coverage_val=$(echo "$coverage" | sed 's/%//')
+      
+      # Strip module prefix for cleaner output
+      pkg=$(echo "$pkg" | sed 's|github.com/arthur-debert/synthfs/||')
+      
+      if (( $(echo "$coverage_val >= 80" | bc -l) )); then
+        printf "${GREEN}%-60s %10s${NC}\n" "$pkg" "$coverage"
+      elif (( $(echo "$coverage_val >= 60" | bc -l) )); then
+        printf "${YELLOW}%-60s %10s${NC}\n" "$pkg" "$coverage"
+      else
+        printf "${RED}%-60s %10s${NC}\n" "$pkg" "$coverage"
+      fi
+    done
+    ;;
+    
+  "function")
+    echo -e "\nFunction Coverage Report"
+    echo "========================"
+    echo
+    printf "%-80s %10s\n" "Function" "Coverage"
+    printf "%-80s %10s\n" "--------" "--------"
+    
+    go tool cover -func=coverage.out | grep -v "^total:" | tail -n +2 | while IFS=$'\t' read -r func coverage; do
+      # Strip module prefix
+      func=$(echo "$func" | sed 's|github.com/arthur-debert/synthfs/||')
+      coverage_val=$(echo "$coverage" | sed 's/%//' | awk '{print $NF}')
+      
+      if (( $(echo "$coverage_val >= 80" | bc -l) )); then
+        printf "${GREEN}%-80s %10s${NC}\n" "$func" "$coverage"
+      elif (( $(echo "$coverage_val >= 60" | bc -l) )); then
+        printf "${YELLOW}%-80s %10s${NC}\n" "$func" "$coverage"
+      else
+        printf "${RED}%-80s %10s${NC}\n" "$func" "$coverage"
+      fi
+    done | sort -k2 -nr
+    ;;
+    
+  "file")
+    echo -e "\nPer-File Coverage Report"
+    echo "========================"
+    echo
+    printf "%-80s %10s\n" "File" "Coverage"
+    printf "%-80s %10s\n" "----" "--------"
+    
+    # Process coverage data per file
+    go tool cover -func=coverage.out | grep -E '\.go:[0-9]+:' | while read line; do
+      file=$(echo "$line" | awk '{print $1}' | sed 's/:.*$//')
+      coverage=$(echo "$line" | awk '{print $3}')
+      echo "$file|$coverage"
+    done | awk -F'|' '
+    {
+      file = $1
+      cov = $2
+      gsub(/%/, "", cov)
+      
+      if (file in total) {
+        total[file] += cov
+        count[file]++
+      } else {
+        total[file] = cov
+        count[file] = 1
+      }
     }
-}
-BEGIN {
-    header = "";
-    total_line = "";
-    count = 0;
-}
-{
-    # Strip module prefix from file paths
-    gsub(/github\.com\/arthur-debert\/synthfs\//, "", $0);
-
-    if (NR == 1) {
-        header = $0;
-    } else if ($1 == "total:") {
-        total_line = $0;
-    } else {
-        lines[count] = $0;
-        coverage = $NF;
-        sub(/%/, "", coverage);
-        coverage_vals[count] = coverage + 0;  # Force numeric conversion
-        count++;
-    }
-}
-END {
-    # Print header
-    print header;
-
-    # Sort lines by coverage (bubble sort for simplicity)
-    for (i = 0; i < count-1; i++) {
-        for (j = 0; j < count-1-i; j++) {
-            if (coverage_vals[j] < coverage_vals[j+1]) {
-                # Swap lines
-                temp_line = lines[j];
-                lines[j] = lines[j+1];
-                lines[j+1] = temp_line;
-                # Swap coverage values
-                temp_cov = coverage_vals[j];
-                coverage_vals[j] = coverage_vals[j+1];
-                coverage_vals[j+1] = temp_cov;
-            }
+    END {
+      # Calculate and store averages
+      n = 0
+      for (f in total) {
+        avg = total[f] / count[f]
+        files[n] = f
+        avgs[n] = avg
+        n++
+      }
+      
+      # Sort by coverage (bubble sort)
+      for (i = 0; i < n-1; i++) {
+        for (j = 0; j < n-1-i; j++) {
+          if (avgs[j] < avgs[j+1]) {
+            # Swap files
+            temp_file = files[j]
+            files[j] = files[j+1]
+            files[j+1] = temp_file
+            # Swap averages
+            temp_avg = avgs[j]
+            avgs[j] = avgs[j+1]
+            avgs[j+1] = temp_avg
+          }
         }
-    }
-
-    # Print sorted function lines with colors
-    for (i = 0; i < count; i++) {
-        color_line(lines[i], coverage_vals[i]);
-    }
-
-    # Print total line with color
-    if (total_line != "") {
-        print "";  # Add blank line before total
-        split(total_line, fields);
-        total_coverage = fields[length(fields)];
-        sub(/%/, "", total_coverage);
-        total_coverage = total_coverage + 0;
-        # Replace "total:" with "TOTAL:" in the line
-        gsub(/^total:/, "TOTAL:", total_line);
-        color_line(total_line, total_coverage);
-    }
-}'
-else # file mode
-    awk '
-function color_line(line, coverage_val) {
-    if (coverage_val >= 80) {
-        printf "\033[32m%s\033[0m\n", line;  # Green
-    } else if (coverage_val >= 60) {
-        printf "\033[33m%s\033[0m\n", line;  # Yellow
-    } else {
-        printf "\033[31m%s\033[0m\n", line;  # Red
-    }
-}
-# Process coverage.out file: mode: set
-# github.com/user/repo/file.go:line.col,line.col #stmts #covered
-/^mode:/ { next }
-{
-    # Separate file from the rest of the line
-    i = index($0, ":");
-    file = substr($0, 1, i-1);
-    rest = substr($0, i+1);
-
-    # Get num_statements and count from the rest of the line
-    split(rest, a, " ");
-    num_statements = a[2];
-    count = a[3];
-
-    # Aggregate stats per file
-    total_stmts[file] += num_statements;
-    if (count > 0) {
-        covered_stmts[file] += num_statements;
-    }
-}
-END {
-    count = 0;
-    total_total_stmts = 0;
-    total_covered_stmts = 0;
-
-    for (file in total_stmts) {
+      }
+      
+      # Print sorted results
+      for (i = 0; i < n; i++) {
         # Strip module prefix
-        gsub(/github\.com\/arthur-debert\/synthfs\//, "", file);
+        gsub(/github\.com\/arthur-debert\/synthfs\//, "", files[i])
+        printf "%s|%.1f\n", files[i], avgs[i]
+      }
+    }' | while IFS='|' read -r file coverage; do
+      if (( $(echo "$coverage >= 80" | bc -l) )); then
+        printf "${GREEN}%-80s %9.1f%%${NC}\n" "$file" "$coverage"
+      elif (( $(echo "$coverage >= 60" | bc -l) )); then
+        printf "${YELLOW}%-80s %9.1f%%${NC}\n" "$file" "$coverage"
+      else
+        printf "${RED}%-80s %9.1f%%${NC}\n" "$file" "$coverage"
+      fi
+    done
+    ;;
+esac
 
-        coverage = 0;
-        if (total_stmts[file] > 0) {
-            coverage = (covered_stmts[file] / total_stmts[file]) * 100;
-        }
-        lines[count] = sprintf("%-60s %.1f%%", file, coverage);
-        coverage_vals[count] = coverage;
-        count++;
-
-        total_total_stmts += total_stmts[file];
-        total_covered_stmts += covered_stmts[file];
-    }
-
-    # Sort lines by coverage
-    for (i = 0; i < count-1; i++) {
-        for (j = 0; j < count-1-i; j++) {
-            if (coverage_vals[j] < coverage_vals[j+1]) {
-                # Swap lines
-                temp_line = lines[j];
-                lines[j] = lines[j+1];
-                lines[j+1] = temp_line;
-                # Swap coverage values
-                temp_cov = coverage_vals[j];
-                coverage_vals[j] = coverage_vals[j+1];
-                coverage_vals[j+1] = temp_cov;
-            }
-        }
-    }
-
-    # Print header
-    print "File                                                         Coverage";
-    print "------------------------------------------------------------ --------";
-
-    # Print sorted file lines with colors
-    for (i = 0; i < count; i++) {
-        color_line(lines[i], coverage_vals[i]);
-    }
-
-    # Print total
-    total_coverage = 0;
-    if (total_total_stmts > 0) {
-        total_coverage = (total_covered_stmts / total_total_stmts) * 100;
-    }
-    total_line = sprintf("\n%-60s %.1f%%", "TOTAL:", total_coverage);
-    color_line(total_line, total_coverage);
-}' < coverage.out
+# Show total coverage
+echo
+total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}')
+total_val=$(echo "$total" | sed 's/%//')
+if (( $(echo "$total_val >= 80" | bc -l) )); then
+  printf "${GREEN}Total Coverage: %s${NC}\n" "$total"
+elif (( $(echo "$total_val >= 60" | bc -l) )); then
+  printf "${YELLOW}Total Coverage: %s${NC}\n" "$total"
+else
+  printf "${RED}Total Coverage: %s${NC}\n" "$total"
 fi
+
+echo
+echo "HTML coverage report: coverage.html"
