@@ -24,19 +24,21 @@ Intro to Synthfs
 
         Operations can be though of as reverse receipt, you get a stub that you can convert for the real thing later. But operations are useless if you can't converting the stub, that is execute the changes.  
 
-        That's why operations in synthfs are used: they follow fs semantics and are validated at their creation too. For example an operation to create the file hello.txt in directory $HOME/data will fail if the directory doesn't exist. And operation that moves files will verify that source and target exist and you have the right permissions.
+        That's why operations in synthfs are used: they follow fs semantics and are validated at multiple stages. Operations are validated when created (does the source file exist?), when added to batches (are there conflicts with other operations?), and before execution (has the file been modified since we created the operation?). For example an operation to copy a file will verify the source exists, compute a checksum of its contents, and later verify that checksum hasn't changed before actually copying.
 
-        This means that you can validate data, and provide user feedback prior to the actual execution of the fs change, allowing you to program and tests for errors in the same side-effect free way while giving timely feedback.
+        This layered validation means you get early feedback about obvious problems, while also catching subtle issues like concurrent file modifications. You can validate data and provide user feedback prior to the actual execution of the fs change, allowing you to program and test for errors in the same side-effect free way while giving timely feedback.
 
 
-    1.3. Batches
+    1.3. Batches and Automatic Dependencies
 
 
         You can roll several operations into a batch. This has the obvious benefit of running and checking results for multiple ops at once, but they also allow for a nifty feature in synthfs: dependent operations. 
 
-        When adding operations to the batch, an operation can refer to a fs state that has been queued, but not on disk. Say that one operation creates a directory and the next is writing a file to said directory. With batches, fsynth can check that the directory to host the file exists as it will go over the operations, and since, another operation has created that directory, it can validate this one, since the file will be created on an existing directory.
+        When adding operations to the batch, synthfs automatically handles dependencies for you. Say you want to create a file deep/nested/file.txt - synthfs will automatically detect that the parent directories "deep" and "deep/nested" don't exist and create them first. You don't need to manually create directory operations; the system figures out what prerequisites each operation needs and resolves them automatically.
 
-        When you are ready, you can call batches.Run() and operations will be ran sequentially.
+        This means you can think in terms of what you want to accomplish, not the step-by-step requirements. Want to copy a file to a location that doesn't exist yet? Just tell synthfs to copy it there, and it will create the necessary directory structure first.
+
+        When you are ready, you can call batches.Run() and operations will be resolved for dependencies and executed in the correct order.
 
 
 2. Model and Guarantees
@@ -52,12 +54,15 @@ Intro to Synthfs
         This has clear implications: synthfs is a useful tool and abstraction for tightly  controlled environments, and should never be used under concurrency (not even low concurrency) and mission critical data.  But for software that runs on the user's machine, in locations that the application controls, it's usually safe enough. If the execution encounters an issue : either because an operation files, or we detect a change to the data we're dealing with we'll stop and, to the best extend possible revert the previous state.  synthfs does some good sanity checking for conflicts and checking that data has not changed between scheduling and running (with some limits, not a true deep validation but for the files at hand). These are here to make sure that simple bugs (in synthfs and your app) are safer,  and as a sanity check. But don't see these as strong guarantees of any sort, because they are not.
 
 	
-    2.2. Restore: Poor man's rollback
+    2.2. Restore: Budget-Controlled Backup System
 
         If a pipeline fails, that is, any of it's operations fail, the batch will halt. You can ask it to restore, that is, undo all previously successful steps in the pipeline, restoring your fs to it's initial condition (more caveats follow). 
 
-        This is helpful and will work most of the time, but, as we've already seen, these are optimistic best effort semantics. For an operation to fail, it's
-        quite likely that something is changed, say, the on disk fs doesn't quite match our exceptions (we we've seen, we assume a world of zero concurrency of operation targets), which means that the likelihood of us successfully restoring it is not 100%.  
+        synthfs now includes a budget-controlled backup system. When you run operations in "restorable" mode, synthfs will automatically backup data that would be lost (like files being deleted or overwritten) up to a memory budget you specify (default 10MB). This means you get reliable restore capabilities for typical config files and small data operations, while avoiding unbounded memory usage.
+
+        If a file is too large for the remaining backup budget, the operation will fail fast rather than proceeding without backup. This gives you predictable memory usage and clear feedback about what can be safely restored.
+
+        This is helpful and will work most of the time, but, as we've already seen, these are optimistic best effort semantics. For an operation to fail, it's quite likely that something is changed, say, the on disk fs doesn't quite match our exceptions (we we've seen, we assume a world of zero concurrency of operation targets), which means that the likelihood of us successfully restoring it is not 100%.  
 
         That's also the reason for calling it restore, and not rollback, as the latter is often used in the context of transactions, giving you guarantees that synthfs doesn't have.
 
@@ -96,20 +101,36 @@ Intro to Synthfs
 
 				The engine keeps tabs of new paths, and their contents, and can do this safely.
 	
-	3. Restore
+	3. Restore System
 
 		synthfs offers users the ability to restore changes in case a pipeline fails. Again, this is useful for the simple case, but it's critical that there is a clear understanding of what this actually entails. 
 
 		For starters, this is not a rollback, and that's why it's called restore, to distance itself from the expectation that this is a real transactional model that can be safely rollbacked.
 
-		When it all works well, restore will revert all operations until the failed one. This works in the following manner; every operation knows how to perform it's own opposite, that is it undo's it's actions. Move operations can move back to the previous path, create operations can delete the object created and so on. . 
+		When it all works well, restore will revert all operations until the failed one. This works in the following manner; every operation knows how to perform it's own opposite, that is it undo's it's actions. Move operations can move back to the previous path, create operations can delete the object created and so on.
 
 		When restoring the execution engine will work from the last successful execution backwards. running it's own reverse operation.
 
-		1. Limits
+		3.1. Budget-Controlled Backups
 
-			The hardest case is deletion. In order to revert it, we must back it up. 
+			The hardest case is deletion. In order to revert it, we must back it up.
 
-			
+			synthfs handles this through a budget system. When you enable "restorable" mode, you specify a backup budget (like 10MB). For operations that need to backup data (like deleting a file), synthfs will:
 
-   
+			1. Check if there's enough budget remaining for the backup
+			2. If yes, backup the data and proceed with the operation  
+			3. If no, fail the operation immediately with a clear error
+
+			This means you never run out of memory unexpectedly, and you know upfront what can be safely restored.
+
+		3.2. Recursive Directory Restoration  
+
+			When deleting directories, synthfs will recursively backup all contents within the budget limits. This means deleting a directory with 50 small config files will backup all of them for restoration, while deleting a directory with one huge video file might fail budget validation.
+
+			The restore operations use the same validation and execution pipeline as regular operations, so they benefit from the same dependency resolution and safety checks.
+
+		3.3. Practical Usage
+
+			For typical application scenarios (config files, small data files, directory restructuring), the default 10MB budget handles most real-world cases gracefully. For larger operations, you can increase the budget or run without restore capabilities if the performance cost isn't worth it.
+
+			Remember: this is still best-effort. The restore will work most of the time, but concurrent filesystem changes or other unexpected conditions can still cause restore failures. It's a safety net, not a guarantee.
