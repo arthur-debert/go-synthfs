@@ -37,3 +37,7 @@ local
 *.zip
 pkg/**/*.tar.gz
 pkg/**/*.zip
+
+coverage.html
+report.json
+report.xml
