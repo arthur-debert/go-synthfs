@@ -1,0 +1,217 @@
+SynthFS Batch Operations and Execution Model
+
+    This document describes how SynthFS organizes and executes filesystem operations through its three-layer architecture: batches for operation collection, pipelines for orchestration, and executors for actual filesystem changes. Understanding this division of responsibilities is key to effectively using SynthFS for complex filesystem workflows.
+
+
+1. Architectural Responsibility Split
+
+    SynthFS divides the work of managing filesystem operations into three distinct layers, each with a focused responsibility that builds on the previous layer's output.
+
+
+    1.1. Batch Layer: "What to Do"
+
+        The batch layer provides the user-facing API for declaring filesystem operations. When you work with SynthFS, you primarily interact with batches to specify what changes you want to make to the filesystem.
+
+        The batch's responsibility is purely declarative - it collects operations without concern for execution order, dependencies, or implementation details. You tell the batch "create this file," "copy that directory," or "delete these archives," and the batch records these intentions for later processing.
+
+        This separation allows you to focus on what you want to accomplish rather than how to accomplish it. The batch layer handles validation of individual operations (ensuring source files exist, checking permissions) but doesn't worry about how operations relate to each other or the order in which they should execute.
+
+        Batches provide immediate feedback about obvious problems - missing source files, invalid paths, or malformed operations - at the time you add operations, when your application context is available for meaningful error handling.
+
+
+    1.2. Pipeline Layer: "How to Do It Safely"
+
+        The pipeline layer transforms a collection of user intentions into an executable plan. It takes the operations collected by a batch and figures out how to execute them safely and correctly.
+
+        The pipeline's primary responsibilities include automatic dependency resolution, where it analyzes operations to determine what prerequisites each one needs. If you want to create a file at "project/src/main.go", the pipeline recognizes that directories "project" and "project/src" must exist first and automatically generates directory creation operations.
+
+        Beyond dependency resolution, pipelines handle operation ordering through sophisticated analysis of the relationships between operations. They use topological sorting algorithms to ensure that operations execute in the correct sequence - directories before files, source operations before targets that depend on them.
+
+        The pipeline also performs global validation, checking that the entire sequence of operations makes sense together. It detects conflicts like multiple operations trying to modify the same file, or operations that would create impossible filesystem states.
+
+        This layer acts as a safety net and intelligent coordinator, transforming potentially problematic operation sequences into safe, executable plans without requiring users to manually manage dependencies.
+
+
+    1.3. Executor Layer: "Actually Do It"
+
+        The executor layer performs the actual filesystem modifications according to the plan developed by the pipeline. It receives an ordered, validated sequence of operations and carries them out one by one against the real filesystem.
+
+        The executor's responsibilities include managing the execution environment, handling errors gracefully, and providing detailed feedback about operation results. It's also responsible for implementing the restoration system, creating backups of data that might be lost during operations and managing the rollback process if something goes wrong.
+
+        During execution, the executor monitors for unexpected conditions like files that have been modified since operations were created, filesystem permission changes, or disk space issues. When problems occur, it can halt execution and attempt to restore the filesystem to its original state using the backup system.
+
+        The executor operates with full awareness of the operation context, providing detailed logging and event notifications that allow applications to monitor progress and respond to issues appropriately.
+
+
+2. User-Facing Batch API
+
+    The batch API is designed to be intuitive and declarative, allowing you to specify filesystem changes in natural, high-level terms without worrying about implementation details.
+
+
+    2.1. Operation Creation Methods
+
+        Batches provide dedicated methods for each type of filesystem operation, with clear naming that reflects the operation's purpose.
+
+        File operations include CreateFile for generating new files with specified content and permissions, Copy for duplicating files while preserving metadata, Move for relocating files to new paths, and Delete for removing files from the filesystem.
+
+        Directory operations center around CreateDirectory for establishing new directory hierarchies, with automatic creation of parent directories as needed. Directory deletion uses the same Delete operation as files, with automatic detection of whether the target is a file or directory.
+
+        Symbolic link operations use CreateSymlink to establish links between filesystem paths, with flexible policies around target validation that accommodate workflows where targets are created by later operations in the same batch.
+
+        Archive operations provide CreateArchive for packaging multiple files into compressed archives, and Unarchive for extracting archive contents to specified locations. Both operations support multiple formats (tar.gz, zip) with automatic format detection and optional filtering.
+
+        Each operation creation method returns immediately after validation, allowing you to continue adding operations to the batch without waiting for execution. This immediate return with validation provides fast feedback about problems while maintaining the lazy evaluation model that makes SynthFS powerful.
+
+
+    2.2. Batch Configuration and Execution
+
+        Batches support various configuration options that control how operations are processed and executed.
+
+        Execution mode selection allows you to choose between standard execution (Run) and restorable execution (RunRestorable), where the latter enables automatic backup and rollback capabilities. Restorable execution includes budget controls that limit memory usage for backups, preventing unbounded resource consumption while providing predictable restoration capabilities.
+
+        Context management allows batches to operate with specific execution contexts, filesystem instances, and logging configurations. This flexibility supports testing scenarios, custom filesystem implementations, and specialized execution environments.
+
+        The batch execution methods (Run, RunRestorable) trigger the full pipeline and execution process, transforming your declared operations into actual filesystem changes. These methods return detailed results that include information about operation success, timing, backup data, and any issues encountered during execution.
+
+
+    2.3. Result Handling and Feedback
+
+        Batch execution returns comprehensive result objects that provide detailed information about what happened during operation processing.
+
+        Success indicators tell you whether the entire batch completed successfully or encountered problems. For failed batches, the results include information about which operations succeeded before the failure occurred and what restoration options are available.
+
+        Operation-level results provide details about each individual operation's execution, including timing information, any warnings or issues encountered, and specific error messages for failed operations.
+
+        Restoration information includes details about backup data created during execution and the specific operations needed to restore the filesystem to its pre-execution state. This information enables applications to provide users with clear options for recovery when things go wrong.
+
+
+3. Pipeline Orchestration Process
+
+    The pipeline orchestration process transforms user intentions into executable plans through a series of analysis and transformation steps.
+
+
+    3.1. Prerequisite Resolution
+
+        Prerequisite resolution is the process of analyzing operations to determine what conditions must be satisfied for them to succeed, then automatically generating additional operations to meet those conditions.
+
+        Parent directory resolution examines file and directory creation operations to ensure their parent directories exist. When operations target paths like "deep/nested/file.txt", the system automatically generates CreateDirectory operations for "deep" and "deep/nested" if they don't already exist.
+
+        Source existence validation ensures that operations requiring source files (copy, move, archive creation) have valid sources available. This validation occurs both when operations are added to batches and again during pipeline processing to catch any changes.
+
+        Conflict prevention analyzes the relationships between operations to prevent scenarios where multiple operations would interfere with each other. The system detects attempts to create multiple files at the same path, delete files that other operations depend on, or create impossible filesystem states.
+
+        The prerequisite resolution process is recursive - newly generated operations (like directory creation) may themselves have prerequisites that need resolution. The system continues this process until all requirements are satisfied or determines that a valid execution plan cannot be created.
+
+
+    3.2. Dependency Analysis and Ordering
+
+        Once prerequisites are resolved, the pipeline performs dependency analysis to determine the correct execution order for all operations.
+
+        Dependency identification examines each operation to understand what it requires from other operations. File creation operations depend on their parent directories existing, copy operations depend on their sources being available, and deletion operations create dependencies for any operations that might need the deleted items.
+
+        Topological sorting algorithms arrange operations in an execution order that respects all dependency relationships. This mathematical approach ensures that dependencies are satisfied while detecting circular dependencies that would make execution impossible.
+
+        The ordering process also considers efficiency opportunities, such as grouping related operations or arranging sequences that minimize filesystem overhead. However, correctness always takes precedence over performance optimizations.
+
+        Conflict detection during ordering identifies scenarios where operations would interfere with each other even if executed in the correct sequence. These conflicts indicate fundamental problems with the operation set that cannot be resolved through reordering.
+
+
+    3.3. Validation and Safety Checks
+
+        Before finalizing an execution plan, the pipeline performs comprehensive validation to ensure the planned sequence will execute safely and correctly.
+
+        Global consistency checks verify that the entire sequence of operations produces a coherent final filesystem state. This includes checking that all required files will exist when needed, that directory structures remain valid throughout execution, and that no operations assume filesystem states that won't exist.
+
+        Resource requirement analysis estimates the resources (memory, disk space, execution time) needed for the planned operations. This analysis helps identify operations that might fail due to resource constraints and provides early warnings about potentially problematic sequences.
+
+        Safety policy enforcement ensures that operations comply with configured safety policies, such as backup budget limits, path restrictions, or operation type constraints. These policies provide additional protection against operations that might be technically valid but violate application-specific safety requirements.
+
+        The validation process produces detailed reports about any issues discovered, including specific recommendations for resolving problems. When validation fails, the pipeline provides clear error messages that help identify the source of the problem and suggest corrective actions.
+
+
+4. Execution Process and Error Handling
+
+    The execution process carries out the planned operations while monitoring for problems and managing the restoration system.
+
+
+    4.1. Sequential Operation Execution
+
+        Operations execute sequentially in the order determined by the pipeline, with careful monitoring and state management throughout the process.
+
+        Pre-execution validation re-checks each operation immediately before execution to catch any changes that occurred since the pipeline was created. This includes verifying that source files haven't been modified (using stored checksums), that required directories still exist, and that filesystem permissions remain adequate.
+
+        Operation execution involves calling the operation's specific implementation while providing comprehensive logging and error capture. Each operation reports its progress and any issues encountered, allowing the executor to make informed decisions about how to proceed.
+
+        Post-execution verification confirms that each operation achieved its intended result and that the filesystem state matches expectations. This verification helps detect subtle problems that might not immediately cause operation failures but could lead to issues later.
+
+        The sequential approach ensures that each operation has a predictable environment and that any problems can be precisely attributed to specific operations. While this approach might be slower than parallel execution, it provides the reliability and predictability that SynthFS prioritizes.
+
+
+    4.2. Backup and Restoration Management
+
+        The backup system operates continuously during execution, creating restore capabilities for operations that modify or delete existing filesystem content.
+
+        Backup creation occurs before each potentially destructive operation, capturing the current state of files or directories that might be lost. The backup system operates within configured memory budgets, failing operations that would exceed available backup capacity rather than proceeding without restoration capability.
+
+        Backup storage uses efficient internal representations that minimize memory usage while preserving all information needed for accurate restoration. This includes file content, metadata like permissions and modification times, and directory structure information.
+
+        Restoration operation generation creates the specific operations needed to undo the effects of completed operations. These restoration operations use the same pipeline and execution system as forward operations, ensuring consistent behavior and validation.
+
+        Budget management provides predictable resource usage by enforcing memory limits on backup data. When operations would exceed the backup budget, they fail immediately with clear error messages indicating the resource constraint rather than proceeding with unpredictable memory usage.
+
+
+    4.3. Error Recovery and Rollback
+
+        When errors occur during execution, the recovery system attempts to restore the filesystem to its original state using the backup data and restoration operations created during execution.
+
+        Error detection identifies various types of problems including operation failures, filesystem permission changes, resource exhaustion, and unexpected external modifications. Different types of errors trigger different recovery strategies based on their severity and the availability of restoration options.
+
+        Rollback planning analyzes the backup data and completed operations to determine what restoration steps are needed. This planning process creates a sequence of restoration operations that will undo the effects of all successfully completed operations.
+
+        Restoration execution runs the restoration operations using the same pipeline and execution system as forward operations. This approach ensures that restoration follows the same safety and validation practices as normal operations, reducing the likelihood of restoration failures.
+
+        Partial recovery handling addresses scenarios where complete restoration isn't possible due to external changes, resource constraints, or other issues. In these cases, the system provides detailed information about what was restored successfully and what manual intervention might be needed.
+
+
+5. Integration Patterns and Best Practices
+
+    Understanding how to effectively use the batch/pipeline/execution model enables more sophisticated and reliable filesystem workflows.
+
+
+    5.1. Batch Composition Strategies
+
+        Effective batch composition involves understanding how operations interact and organizing them for optimal execution.
+
+        Operation grouping benefits from placing related operations in the same batch to take advantage of automatic dependency resolution and conflict detection. Operations that work on the same directory tree or related files often benefit from being processed together.
+
+        Granularity considerations involve balancing between small batches (easier to understand and debug) and large batches (more opportunities for optimization and automatic dependency resolution). The optimal granularity depends on the specific workflow and error handling requirements.
+
+        Error boundary planning considers what should happen when operations fail and organizes batches accordingly. Operations that must succeed together should be in the same batch, while operations that can proceed independently even if others fail should be in separate batches.
+
+        Resource planning ensures that batches fit within available memory budgets for backup operations and don't create resource contention with other system activities.
+
+
+    5.2. Error Handling Integration
+
+        Applications should integrate with the SynthFS error handling system to provide appropriate user feedback and recovery options.
+
+        Validation error handling should provide immediate feedback when operations cannot be created due to missing sources, invalid paths, or other obvious problems. This early feedback allows applications to correct issues before attempting execution.
+
+        Execution error handling should distinguish between different types of failures (temporary resource issues vs. permanent configuration problems) and provide appropriate recovery options. Some failures might be resolved by retrying, while others require user intervention.
+
+        Restoration decision making involves presenting users with clear information about what went wrong and what restoration options are available. Users should understand what operations succeeded, what failed, and what the restoration process will accomplish.
+
+        Logging integration allows applications to provide detailed progress monitoring and debugging information. The SynthFS event system provides comprehensive information about operation processing that can be integrated with application logging and monitoring systems.
+
+
+    5.3. Performance and Scalability Considerations
+
+        While SynthFS prioritizes correctness over performance, understanding its performance characteristics helps in designing efficient workflows.
+
+        Memory usage patterns are dominated by backup data storage and operation state management. Applications working with large files or many operations should monitor memory usage and adjust backup budgets accordingly.
+
+        Validation overhead includes checksum computation, dependency analysis, and safety checks. This overhead is typically negligible for development workflows but may be significant for large-scale data processing tasks.
+
+        Execution efficiency benefits from well-organized batches that minimize filesystem operations through effective dependency resolution and ordering. The automatic optimization provided by the pipeline system usually produces efficient execution plans without manual intervention.
+
+        Scalability limitations primarily relate to memory usage for backup data and the complexity of dependency analysis for very large operation sets. Most typical workflows operate well within these limitations, but applications with extreme requirements may need to split work across multiple batches.
