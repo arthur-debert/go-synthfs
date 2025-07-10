@@ -1,4 +1,4 @@
-package synthfs
+package synthfs_test
 
 import (
 	"context"
@@ -6,18 +6,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/arthur-debert/synthfs/pkg/synthfs"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
 func TestEventIntegration(t *testing.T) {
 	t.Run("Operations emit events during execution", func(t *testing.T) {
 		ctx := context.Background()
-		fs := NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 
 		// Create batch and executor
-		registry := GetDefaultRegistry()
-		batch := NewBatch(fs, registry).WithContext(ctx)
-		executor := NewExecutor()
+		registry := synthfs.GetDefaultRegistry()
+		batch := synthfs.NewBatch(fs, registry).WithContext(ctx)
+		executor := synthfs.NewExecutor()
 
 		// Track events
 		var events []core.Event
@@ -53,9 +55,9 @@ func TestEventIntegration(t *testing.T) {
 		}
 
 		// Execute the batch via the executor to capture events
-		pipeline := NewMemPipeline()
+		pipeline := synthfs.NewMemPipeline()
 		for _, op := range batch.Operations() {
-			if err := pipeline.Add(op.(Operation)); err != nil {
+			if err := pipeline.Add(op.(synthfs.Operation)); err != nil {
 				t.Fatalf("Failed to add operation to pipeline: %v", err)
 			}
 		}
@@ -133,11 +135,11 @@ func TestEventIntegration(t *testing.T) {
 
 	t.Run("Failed operations emit failure events", func(t *testing.T) {
 		ctx := context.Background()
-		fs := NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 
-		registry := GetDefaultRegistry()
-		batch := NewBatch(fs, registry).WithContext(ctx)
-		executor := NewExecutor()
+		registry := synthfs.GetDefaultRegistry()
+		batch := synthfs.NewBatch(fs, registry).WithContext(ctx)
+		executor := synthfs.NewExecutor()
 
 		// Track events
 		var failureEvents []*core.OperationFailedEvent
@@ -163,9 +165,9 @@ func TestEventIntegration(t *testing.T) {
 		}
 
 		// Execute the batch via the executor to capture events
-		pipeline := NewMemPipeline()
+		pipeline := synthfs.NewMemPipeline()
 		for _, op := range batch.Operations() {
-			if err := pipeline.Add(op.(Operation)); err != nil {
+			if err := pipeline.Add(op.(synthfs.Operation)); err != nil {
 				t.Fatalf("Failed to add operation to pipeline: %v", err)
 			}
 		}
@@ -197,7 +199,7 @@ func TestEventIntegration(t *testing.T) {
 	})
 
 	t.Run("Event bus subscription and unsubscription", func(t *testing.T) {
-		executor := NewExecutor()
+		executor := synthfs.NewExecutor()
 		eventBus := executor.EventBus()
 
 		var eventReceived bool

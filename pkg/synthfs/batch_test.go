@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
 func TestBatchBasicUsage(t *testing.T) {
 	// Use a test filesystem for controlled testing
-	testFS := synthfs.NewTestFileSystem()
+	testFS := testutil.NewTestFileSystem()
 	registry := synthfs.GetDefaultRegistry()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS).WithContext(context.Background())
 
 	// Pre-create files needed for valid operations in Phase II
@@ -127,7 +128,7 @@ func TestBatchBasicUsage(t *testing.T) {
 
 func TestBatchWithTestFileSystem(t *testing.T) {
 	// Use TestFileSystem for more controlled testing
-	testFS := synthfs.NewTestFileSystem()
+	testFS := testutil.NewTestFileSystem()
 
 	// Pre-populate with some files
 	if err := testFS.WriteFile("existing.txt", []byte("existing content"), 0644); err != nil {
@@ -138,7 +139,7 @@ func TestBatchWithTestFileSystem(t *testing.T) {
 	}
 
 	registry := synthfs.GetDefaultRegistry()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 	t.Run("CreateFile with parent directory auto-creation", func(t *testing.T) {
@@ -174,9 +175,9 @@ func TestBatchWithTestFileSystem(t *testing.T) {
 }
 
 func TestBatchIDGeneration(t *testing.T) {
-	testFS := synthfs.NewTestFileSystem()
+	testFS := testutil.NewTestFileSystem()
 	registry := synthfs.GetDefaultRegistry()
-	fs := synthfs.NewTestFileSystem()
+	fs := testutil.NewTestFileSystem()
 	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
 
 	// Create multiple operations and check ID uniqueness

@@ -1,0 +1,177 @@
+SynthFS Operations and Targets Reference
+
+    This document describes the filesystem operations supported by SynthFS and how they behave across different target types. Unlike API documentation, this provides a conceptual understanding of what SynthFS can do and how operations interact with various filesystem objects.
+
+
+1. Supported Operations
+
+    SynthFS provides eight core filesystem operations that cover the essential needs of most filesystem manipulation tasks. Each operation is designed to work declaratively - you specify what you want to accomplish, and SynthFS handles the implementation details including automatic prerequisite resolution and validation.
+
+
+    1.1. File Operations
+
+        File operations work with individual files, handling content creation, modification, and management with automatic checksum validation to detect concurrent changes.
+
+        CreateFile: Creates new files with specified content and permissions. The operation automatically ensures parent directories exist before creating the file. Content can be provided as byte arrays, and file permissions default to 0644 but can be customized. The operation validates that no conflicting file exists at the target path before execution.
+
+        Copy: Duplicates files from source to destination, preserving content and permissions. The copy operation computes checksums of source files when the operation is created, then verifies these checksums before execution to detect if files have been modified by external processes. Parent directories for the destination are created automatically if they don't exist.
+
+        Move: Relocates files from source to destination. Move operations first attempt to use the filesystem's native rename operation for efficiency, falling back to copy-then-delete if rename fails. Like copy operations, move operations use checksum validation to ensure source files haven't been modified between operation creation and execution.
+
+        Delete: Removes files from the filesystem. Delete operations support both individual files and can be used as part of larger cleanup workflows. The operation includes optional backup functionality when running in restorable mode, allowing deleted files to be restored if subsequent operations fail.
+
+
+    1.2. Directory Operations
+
+        Directory operations manage filesystem hierarchies, with automatic handling of nested directory structures and recursive operations.
+
+        CreateDirectory: Creates new directories with specified permissions, defaulting to 0755. The operation automatically creates any missing parent directories in the path, so creating "deep/nested/structure" will create all intermediate directories. The operation validates that no conflicting file exists at the target path.
+
+        Delete: When applied to directories, delete operations recursively remove the entire directory tree. In restorable mode, the system attempts to backup directory contents within the configured memory budget before deletion, allowing complete restoration of complex directory hierarchies if needed.
+
+
+    1.3. Symbolic Link Operations
+
+        Symbolic link operations create and manage filesystem links, with flexible target validation policies.
+
+        CreateSymlink: Creates symbolic links pointing to specified targets. The operation requires both a link path (where the symlink will be created) and a target path (what the symlink points to). SynthFS allows creation of "dangling" symlinks that point to non-existent targets, as the target might be created by a later operation in the same batch. Parent directories for the symlink are created automatically.
+
+        Delete: Removes symbolic links without affecting their targets. The deletion only removes the link itself, leaving the target file or directory untouched.
+
+
+    1.4. Archive Operations
+
+        Archive operations provide compression and extraction capabilities for packaging multiple files and directories into single archive files.
+
+        CreateArchive: Builds compressed archives from multiple source files and directories. Supports both tar.gz and zip formats, with format selection based on the archive file extension or explicit format specification. The operation validates that all source files exist and computes checksums to detect modifications before execution. Archive creation currently handles individual files; directory archiving support may vary by implementation.
+
+        Unarchive: Extracts contents from compressed archives to specified destinations. Supports the same formats as archive creation (tar.gz and zip), with automatic format detection based on file extensions. Extraction can be filtered using glob patterns to selectively extract only certain files. The operation creates destination directories as needed and can optionally overwrite existing files.
+
+
+    1.5. Dependency Resolution
+
+        All operations declare their prerequisites using a sophisticated dependency system that automatically resolves requirements:
+
+        Parent Directory Prerequisites: Operations that create files or directories automatically ensure their parent directories exist. If you create "project/src/main.go", SynthFS will automatically create "project/" and "project/src/" directories if they don't exist.
+
+        Source Existence Prerequisites: Operations that require source files (copy, move, archive creation) validate that sources exist when the operation is added to a batch, providing immediate feedback about missing dependencies.
+
+        No-Conflict Prerequisites: Operations validate that they won't conflict with other operations in the same batch or with existing filesystem state. This prevents issues like multiple operations trying to create the same file.
+
+
+2. Target Types and Behaviors
+
+    SynthFS operations work across four primary target types, each with specific characteristics and behavioral considerations.
+
+
+    2.1. Files
+
+        Files are the most fundamental target type, representing individual pieces of content with associated metadata like permissions and modification times.
+
+        Content Handling: File operations work with byte content stored in memory during operation creation. This allows validation and checksumming but limits the practical size of files that can be handled efficiently. The system is optimized for typical configuration files, source code, and small data files rather than large media files.
+
+        Permission Management: File permissions default to 0644 (readable by all, writable by owner) but can be specified explicitly. The permission model follows standard Unix filesystem semantics, though the underlying filesystem's capabilities may impose limitations.
+
+        Checksum Validation: Files benefit from MD5 checksum validation to detect concurrent modifications. When operations that read files (copy, move, archive creation) are created, checksums are computed and stored. Before execution, these checksums are verified to ensure file content hasn't changed.
+
+        Backup and Restoration: In restorable mode, file deletions and overwrites are backed up to enable rollback. The backup system operates within configurable memory budgets, defaulting to 10MB. Files exceeding the remaining budget cause operations to fail fast rather than proceeding without backup capability.
+
+
+    2.2. Directories
+
+        Directories organize the filesystem hierarchy and have special handling for recursive operations and automatic creation.
+
+        Automatic Creation: Directory creation is automatic and recursive. Creating a deeply nested path results in all intermediate directories being created with appropriate permissions. This eliminates the need for manual step-by-step directory creation.
+
+        Recursive Operations: Directory deletion removes entire subtrees. In restorable mode, the system attempts to backup all directory contents within the memory budget, allowing complete restoration of complex directory structures.
+
+        Permission Propagation: Directory permissions default to 0755 (readable and executable by all, writable by owner) to ensure proper access to contents. Explicitly specified permissions are respected while maintaining filesystem access semantics.
+
+        Content Tracking: The system tracks directory state changes throughout batch execution, ensuring that operations requiring specific directory states (like creating files in directories that other operations will create) work correctly.
+
+
+    2.3. Symbolic Links
+
+        Symbolic links provide filesystem-level indirection, with flexible policies around target validation and creation.
+
+        Target Flexibility: SynthFS allows creation of symlinks with non-existent targets, supporting workflows where targets are created by later operations in the same batch. This flexibility enables complex dependency relationships between operations.
+
+        Link vs Target Operations: Operations on symlinks typically affect the link itself rather than its target. Deleting a symlink removes the link but leaves the target unchanged. This behavior aligns with standard filesystem semantics.
+
+        Platform Considerations: Symbolic link support depends on the underlying filesystem and operating system capabilities. SynthFS provides consistent behavior across platforms where symbolic links are supported.
+
+        Validation Policies: Target existence validation is configurable, allowing applications to choose between strict validation (targets must exist) and permissive validation (allowing dangling links) based on their requirements.
+
+
+    2.4. Archives
+
+        Archives aggregate multiple filesystem objects into single compressed files, with support for standard formats and selective operations.
+
+        Format Support: SynthFS supports tar.gz (compressed tar) and zip archive formats. Format selection is typically automatic based on file extensions (.tar.gz, .tgz for tar.gz; .zip for zip) but can be specified explicitly.
+
+        Content Aggregation: Archive creation processes multiple source files and directories, validating each source exists and computing checksums for change detection. The aggregation process preserves file metadata like permissions and modification times within the archive format's capabilities.
+
+        Selective Extraction: Archive extraction supports pattern-based filtering, allowing selective extraction of specific files or directories from large archives. This capability is useful for workflows that need only specific components from complex archive structures.
+
+        Memory Considerations: Archive operations work through memory buffers, making them suitable for typical project archives but potentially unsuitable for very large archives that exceed available memory. The system is designed for practical development and deployment scenarios rather than large-scale data processing.
+
+
+3. Operation Interaction Patterns
+
+    SynthFS operations are designed to work together seamlessly, with automatic dependency resolution and conflict detection enabling complex workflows.
+
+
+    3.1. Batch Composition
+
+        Operations within a batch are analyzed for dependencies and conflicts, allowing the system to automatically reorder operations for correct execution or detect impossible combinations before execution begins.
+
+        Automatic Ordering: Operations that depend on each other (like creating a file in a directory that another operation creates) are automatically ordered correctly without explicit dependency specification.
+
+        Conflict Detection: Operations that would conflict (like multiple operations trying to delete the same file) are detected during batch composition, providing clear error messages about the specific conflict.
+
+        State Projection: The system maintains a projected view of filesystem state throughout batch execution, allowing validation of complex operation sequences against the expected final state.
+
+
+    3.2. Error Handling and Recovery
+
+        Operations include comprehensive error handling with multiple validation phases and optional recovery capabilities.
+
+        Multi-Phase Validation: Operations are validated when created (immediate feedback), when added to batches (conflict detection), and before execution (change detection). This layered approach provides errors at the most appropriate time for effective handling.
+
+        Restoration Capabilities: In restorable mode, failed batches can be rolled back using reverse operations that undo the effects of previously successful operations. The restoration system uses the same operation framework as forward operations, ensuring consistent behavior.
+
+        Budget-Controlled Backups: The restoration system operates within memory budgets to prevent unbounded resource consumption while providing predictable rollback capabilities for typical workflows.
+
+
+4. Operational Characteristics and Limitations
+
+    Understanding SynthFS's operational model helps in designing effective workflows and setting appropriate expectations.
+
+
+    4.1. Concurrency Model
+
+        SynthFS assumes exclusive control over target filesystem areas during operation execution. The system is designed for controlled environments rather than high-concurrency scenarios.
+
+        Change Detection: Checksum validation provides detection of concurrent modifications but cannot prevent them. Operations fail when external changes are detected rather than attempting to merge or resolve conflicts.
+
+        Best-Effort Semantics: The system provides strong validation and error detection but operates on "best effort" principles rather than strict transactional guarantees. This approach balances practicality with reliability for typical use cases.
+
+
+    4.2. Performance Characteristics
+
+        Operations are optimized for typical development and deployment workflows rather than high-performance bulk data processing.
+
+        Memory Usage: Archive operations and restoration capabilities use memory buffers with configurable limits. The default 10MB budget handles typical configuration and source code scenarios effectively.
+
+        Validation Overhead: Checksum computation and multi-phase validation provide safety at the cost of additional computation. This overhead is typically negligible for development workflows but may be significant for very large files.
+
+
+    4.3. Platform and Filesystem Considerations
+
+        SynthFS adapts to different platforms and filesystem capabilities while providing consistent operation semantics.
+
+        Feature Availability: Operations gracefully handle missing filesystem features (like symbolic link support) by providing clear error messages rather than silent failures or unexpected behavior.
+
+        Permission Models: The system works with varying permission models across platforms, providing sensible defaults while allowing explicit control where needed.
+
+        Path Handling: All path operations use the filepath package for cross-platform compatibility, ensuring consistent behavior across different operating systems and filesystem types.

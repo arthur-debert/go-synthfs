@@ -1,11 +1,12 @@
-package synthfs
+package testutil
 
 import (
 	"context"
 	"fmt"
 	"testing"
 	"testing/fstest"
-	
+
+	"github.com/arthur-debert/synthfs/pkg/synthfs"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
@@ -36,7 +37,7 @@ func NewTestHelperWithFiles(t *testing.T, files map[string]*fstest.MapFile) *Tes
 }
 
 // RunOperationTest runs a test for a single operation
-func RunOperationTest(t *testing.T, name string, test func(t *testing.T, fs FileSystem, ctx context.Context)) {
+func RunOperationTest(t *testing.T, name string, test func(t *testing.T, fs synthfs.FileSystem, ctx context.Context)) {
 	t.Run(name, func(t *testing.T) {
 		fs := NewTestFileSystem()
 		ctx := context.Background()
@@ -45,29 +46,29 @@ func RunOperationTest(t *testing.T, name string, test func(t *testing.T, fs File
 }
 
 // ValidateOperation validates an operation and returns any error
-func ValidateOperation(t *testing.T, op Operation, fs FileSystem) error {
+func ValidateOperation(t *testing.T, op synthfs.Operation, fs synthfs.FileSystem) error {
 	ctx := context.Background()
 	return op.Validate(ctx, fs)
 }
 
 // ExecuteOperation executes an operation and returns any error
-func ExecuteOperation(t *testing.T, op Operation, fs FileSystem) error {
+func ExecuteOperation(t *testing.T, op synthfs.Operation, fs synthfs.FileSystem) error {
 	ctx := context.Background()
 	return op.Execute(ctx, fs)
 }
 
 // RunPipelineTest runs a test for a pipeline of operations
-func RunPipelineTest(t *testing.T, name string, test func(t *testing.T, p Pipeline, fs FileSystem, ctx context.Context)) {
+func RunPipelineTest(t *testing.T, name string, test func(t *testing.T, p synthfs.Pipeline, fs synthfs.FileSystem, ctx context.Context)) {
 	t.Run(name, func(t *testing.T) {
 		fs := NewTestFileSystem()
 		ctx := context.Background()
-		p := NewMemPipeline()
+		p := synthfs.NewMemPipeline()
 		test(t, p, fs, ctx)
 	})
 }
 
 // AssertOperation is a helper to assert that an operation succeeds
-func AssertOperation(t *testing.T, op Operation, fs FileSystem, msg string) {
+func AssertOperation(t *testing.T, op synthfs.Operation, fs synthfs.FileSystem, msg string) {
 	ctx := context.Background()
 	if err := op.Validate(ctx, fs); err != nil {
 		t.Errorf("%s: validation failed: %v", msg, err)
@@ -79,7 +80,7 @@ func AssertOperation(t *testing.T, op Operation, fs FileSystem, msg string) {
 }
 
 // AssertOperationFails is a helper to assert that an operation fails
-func AssertOperationFails(t *testing.T, op Operation, fs FileSystem, stage string, msg string) {
+func AssertOperationFails(t *testing.T, op synthfs.Operation, fs synthfs.FileSystem, stage string, msg string) {
 	ctx := context.Background()
 	switch stage {
 	case "validate":
@@ -96,22 +97,22 @@ func AssertOperationFails(t *testing.T, op Operation, fs FileSystem, stage strin
 }
 
 // CreateTestFile is a helper to create a file with content
-func CreateTestFile(t *testing.T, fs FileSystem, path string, content []byte) {
+func CreateTestFile(t *testing.T, fs synthfs.FileSystem, path string, content []byte) {
 	if err := fs.WriteFile(path, content, 0644); err != nil {
 		t.Fatalf("Failed to create test file %s: %v", path, err)
 	}
 }
 
 // CreateTestDir is a helper to create a directory
-func CreateTestDir(t *testing.T, fs FileSystem, path string) {
+func CreateTestDir(t *testing.T, fs synthfs.FileSystem, path string) {
 	if err := fs.MkdirAll(path, 0755); err != nil {
 		t.Fatalf("Failed to create test directory %s: %v", path, err)
 	}
 }
 
 // FileExists checks if a file exists in the filesystem
-func FileExists(t *testing.T, fs FileSystem, path string) bool {
-	if statFS, ok := fs.(StatFS); ok {
+func FileExists(t *testing.T, fs synthfs.FileSystem, path string) bool {
+	if statFS, ok := fs.(synthfs.StatFS); ok {
 		_, err := statFS.Stat(path)
 		return err == nil
 	}
@@ -125,7 +126,7 @@ func FileExists(t *testing.T, fs FileSystem, path string) bool {
 }
 
 // AssertFileContent verifies that a file has the expected content
-func AssertFileContent(t *testing.T, fs FileSystem, path string, expected []byte) {
+func AssertFileContent(t *testing.T, fs synthfs.FileSystem, path string, expected []byte) {
 	file, err := fs.Open(path)
 	if err != nil {
 		t.Errorf("Failed to open file %s: %v", path, err)
@@ -154,28 +155,28 @@ func AssertFileContent(t *testing.T, fs FileSystem, path string, expected []byte
 }
 
 // SetupTestFiles creates multiple test files from a map
-func SetupTestFiles(t *testing.T, fs FileSystem, files map[string]string) {
+func SetupTestFiles(t *testing.T, fs synthfs.FileSystem, files map[string]string) {
 	for path, content := range files {
 		CreateTestFile(t, fs, path, []byte(content))
 	}
 }
 
 // SetupTestDirs creates multiple test directories from a slice
-func SetupTestDirs(t *testing.T, fs FileSystem, dirs []string) {
+func SetupTestDirs(t *testing.T, fs synthfs.FileSystem, dirs []string) {
 	for _, dir := range dirs {
 		CreateTestDir(t, fs, dir)
 	}
 }
 
 // AssertFileNotExists verifies that a file does not exist
-func AssertFileNotExists(t *testing.T, fs FileSystem, path string) {
+func AssertFileNotExists(t *testing.T, fs synthfs.FileSystem, path string) {
 	if FileExists(t, fs, path) {
 		t.Errorf("Expected file %s to not exist, but it does", path)
 	}
 }
 
 // LogOperationDetails logs details about an operation for debugging
-func LogOperationDetails(t *testing.T, op Operation) {
+func LogOperationDetails(t *testing.T, op synthfs.Operation) {
 	desc := op.Describe()
 	t.Logf("Operation: ID=%s, Type=%s, Path=%s", op.ID(), desc.Type, desc.Path)
 	if len(desc.Details) > 0 {
@@ -192,15 +193,15 @@ func LogOperationDetails(t *testing.T, op Operation) {
 // TestBatchHelper provides utilities for testing batch operations
 type TestBatchHelper struct {
 	t     *testing.T
-	batch *Batch
-	fs    FileSystem
+	batch *synthfs.Batch
+	fs    synthfs.FileSystem
 }
 
 // NewTestBatchHelper creates a new batch test helper
 func NewTestBatchHelper(t *testing.T) *TestBatchHelper {
 	fs := NewTestFileSystem()
-	registry := GetDefaultRegistry()
-	batch := NewBatch(fs, registry)
+	registry := synthfs.GetDefaultRegistry()
+	batch := synthfs.NewBatch(fs, registry)
 	return &TestBatchHelper{
 		t:     t,
 		batch: batch,
@@ -209,17 +210,17 @@ func NewTestBatchHelper(t *testing.T) *TestBatchHelper {
 }
 
 // Batch returns the test batch
-func (tbh *TestBatchHelper) Batch() *Batch {
+func (tbh *TestBatchHelper) Batch() *synthfs.Batch {
 	return tbh.batch
 }
 
 // FileSystem returns the test filesystem
-func (tbh *TestBatchHelper) FileSystem() FileSystem {
+func (tbh *TestBatchHelper) FileSystem() synthfs.FileSystem {
 	return tbh.fs
 }
 
 // Run executes the batch and returns the result
-func (tbh *TestBatchHelper) Run() (*Result, error) {
+func (tbh *TestBatchHelper) Run() (*synthfs.Result, error) {
 	result, err := tbh.batch.Run()
 	if err != nil {
 		tbh.t.Logf("Batch run failed: %v", err)
@@ -228,7 +229,7 @@ func (tbh *TestBatchHelper) Run() (*Result, error) {
 }
 
 // AssertSuccess asserts that the batch runs successfully
-func (tbh *TestBatchHelper) AssertSuccess() *Result {
+func (tbh *TestBatchHelper) AssertSuccess() *synthfs.Result {
 	result, err := tbh.Run()
 	if err != nil {
 		tbh.t.Fatalf("Expected batch to succeed, but got error: %v", err)
@@ -240,7 +241,7 @@ func (tbh *TestBatchHelper) AssertSuccess() *Result {
 }
 
 // AssertFailure asserts that the batch fails
-func (tbh *TestBatchHelper) AssertFailure() *Result {
+func (tbh *TestBatchHelper) AssertFailure() *synthfs.Result {
 	result, err := tbh.Run()
 	if err == nil && result.IsSuccess() {
 		tbh.t.Fatalf("Expected batch to fail, but it succeeded")
@@ -251,16 +252,16 @@ func (tbh *TestBatchHelper) AssertFailure() *Result {
 // TestPipelineHelper provides utilities for testing pipelines
 type TestPipelineHelper struct {
 	t        *testing.T
-	pipeline Pipeline
-	fs       FileSystem
-	executor *Executor
+	pipeline synthfs.Pipeline
+	fs       synthfs.FileSystem
+	executor *synthfs.Executor
 }
 
 // NewTestPipelineHelper creates a new pipeline test helper
 func NewTestPipelineHelper(t *testing.T) *TestPipelineHelper {
 	fs := NewTestFileSystem()
-	pipeline := NewMemPipeline()
-	executor := NewExecutor()
+	pipeline := synthfs.NewMemPipeline()
+	executor := synthfs.NewExecutor()
 	return &TestPipelineHelper{
 		t:        t,
 		pipeline: pipeline,
@@ -270,27 +271,27 @@ func NewTestPipelineHelper(t *testing.T) *TestPipelineHelper {
 }
 
 // Pipeline returns the test pipeline
-func (tph *TestPipelineHelper) Pipeline() Pipeline {
+func (tph *TestPipelineHelper) Pipeline() synthfs.Pipeline {
 	return tph.pipeline
 }
 
 // FileSystem returns the test filesystem
-func (tph *TestPipelineHelper) FileSystem() FileSystem {
+func (tph *TestPipelineHelper) FileSystem() synthfs.FileSystem {
 	return tph.fs
 }
 
 // Execute runs the pipeline and returns the result
-func (tph *TestPipelineHelper) Execute(ctx context.Context) *Result {
+func (tph *TestPipelineHelper) Execute(ctx context.Context) *synthfs.Result {
 	return tph.executor.Run(ctx, tph.pipeline, tph.fs)
 }
 
 // ExecuteWithOptions runs the pipeline with options and returns the result
-func (tph *TestPipelineHelper) ExecuteWithOptions(ctx context.Context, opts PipelineOptions) *Result {
+func (tph *TestPipelineHelper) ExecuteWithOptions(ctx context.Context, opts synthfs.PipelineOptions) *synthfs.Result {
 	return tph.executor.RunWithOptions(ctx, tph.pipeline, tph.fs, opts)
 }
 
 // AssertSuccess asserts that the pipeline executes successfully
-func (tph *TestPipelineHelper) AssertSuccess(ctx context.Context) *Result {
+func (tph *TestPipelineHelper) AssertSuccess(ctx context.Context) *synthfs.Result {
 	result := tph.Execute(ctx)
 	if !result.IsSuccess() {
 		tph.t.Fatalf("Expected pipeline to succeed, but Success=false. Error: %v", result.GetError())
@@ -299,7 +300,7 @@ func (tph *TestPipelineHelper) AssertSuccess(ctx context.Context) *Result {
 }
 
 // AssertFailure asserts that the pipeline fails
-func (tph *TestPipelineHelper) AssertFailure(ctx context.Context) *Result {
+func (tph *TestPipelineHelper) AssertFailure(ctx context.Context) *synthfs.Result {
 	result := tph.Execute(ctx)
 	if result.IsSuccess() {
 		tph.t.Fatalf("Expected pipeline to fail, but it succeeded")
@@ -316,7 +317,7 @@ func (tph *TestPipelineHelper) AssertOperationCount(expected int) {
 }
 
 // AddOperation adds an operation to the pipeline
-func (tph *TestPipelineHelper) AddOperation(op Operation) {
+func (tph *TestPipelineHelper) AddOperation(op synthfs.Operation) {
 	if err := tph.pipeline.Add(op); err != nil {
 		tph.t.Errorf("Failed to add operation to pipeline: %v", err)
 	}
@@ -333,56 +334,56 @@ func (tph *TestPipelineHelper) LogPipelineState() {
 }
 
 // CreateTestOperation creates a simple test operation
-func CreateTestOperation(id, opType, path string) Operation {
-	registry := GetDefaultRegistry()
-	op, err := registry.CreateOperation(OperationID(id), opType, path)
+func CreateTestOperation(id, opType, path string) synthfs.Operation {
+	registry := synthfs.GetDefaultRegistry()
+	op, err := registry.CreateOperation(synthfs.OperationID(id), opType, path)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create test operation: %v", err))
 	}
-	return op.(Operation)
+	return op.(synthfs.Operation)
 }
 
-// CreateTestFile creates a file operation with content
-func CreateTestFileOperation(id, path string, content []byte) Operation {
+// CreateTestFileOperation creates a file operation with content
+func CreateTestFileOperation(id, path string, content []byte) synthfs.Operation {
 	op := CreateTestOperation(id, "create_file", path)
-	item := NewFile(path).WithContent(content)
-	if err := GetDefaultRegistry().SetItemForOperation(op, item); err != nil {
+	item := synthfs.NewFile(path).WithContent(content)
+	if err := synthfs.GetDefaultRegistry().SetItemForOperation(op, item); err != nil {
 		panic(fmt.Sprintf("Failed to set item for operation: %v", err))
 	}
 	return op
 }
 
 // CreateTestDirectoryOperation creates a directory operation
-func CreateTestDirectoryOperation(id, path string) Operation {
+func CreateTestDirectoryOperation(id, path string) synthfs.Operation {
 	op := CreateTestOperation(id, "create_directory", path)
-	item := NewDirectory(path)
-	if err := GetDefaultRegistry().SetItemForOperation(op, item); err != nil {
+	item := synthfs.NewDirectory(path)
+	if err := synthfs.GetDefaultRegistry().SetItemForOperation(op, item); err != nil {
 		panic(fmt.Sprintf("Failed to set item for operation: %v", err))
 	}
 	return op
 }
 
 // CreateTestCopyOperation creates a copy operation
-func CreateTestCopyOperation(id, src, dst string) Operation {
+func CreateTestCopyOperation(id, src, dst string) synthfs.Operation {
 	op := CreateTestOperation(id, "copy", src)
 	op.SetDescriptionDetail("destination", dst)
-	if adapter, ok := op.(*OperationsPackageAdapter); ok {
-		adapter.opsOperation.SetPaths(src, dst)
+	if adapter, ok := op.(*synthfs.OperationsPackageAdapter); ok {
+		adapter.SetPaths(src, dst)
 	}
 	return op
 }
 
 // CreateTestMoveOperation creates a move operation
-func CreateTestMoveOperation(id, src, dst string) Operation {
+func CreateTestMoveOperation(id, src, dst string) synthfs.Operation {
 	op := CreateTestOperation(id, "move", src)
 	op.SetDescriptionDetail("destination", dst)
-	if adapter, ok := op.(*OperationsPackageAdapter); ok {
-		adapter.opsOperation.SetPaths(src, dst)
+	if adapter, ok := op.(*synthfs.OperationsPackageAdapter); ok {
+		adapter.SetPaths(src, dst)
 	}
 	return op
 }
 
 // CreateTestDeleteOperation creates a delete operation
-func CreateTestDeleteOperation(id, path string) Operation {
+func CreateTestDeleteOperation(id, path string) synthfs.Operation {
 	return CreateTestOperation(id, "delete", path)
 }

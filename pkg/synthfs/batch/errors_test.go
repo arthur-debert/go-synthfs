@@ -4,13 +4,14 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/batch"
 )
 
 // TestErrorHandling verifies error handling with prerequisite resolution
 func TestErrorHandling(t *testing.T) {
 	t.Run("Batch handles prerequisite validation errors", func(t *testing.T) {
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		registry := synthfs.GetDefaultRegistry()
 		b := batch.NewBatch(fs, registry)
 

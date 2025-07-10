@@ -6,13 +6,14 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
 func TestBatchCompleteAPI(t *testing.T) {
-	testFS := synthfs.NewTestFileSystem()
+	testFS := testutil.NewTestFileSystem()
 	registry := synthfs.GetDefaultRegistry()
-	fileSystem := synthfs.NewTestFileSystem()
+	fileSystem := testutil.NewTestFileSystem()
 	batch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)
 
 	t.Run("CreateSymlink operation", func(t *testing.T) {
@@ -64,9 +65,9 @@ func TestBatchCompleteAPI(t *testing.T) {
 			t.Skip("Archive creation may have path issues on Windows test environments")
 		}
 
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 		registry := synthfs.GetDefaultRegistry()
-		fileSystem := synthfs.NewTestFileSystem()
+		fileSystem := testutil.NewTestFileSystem()
 		setupBatch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)
 
 		// Create some files to archive
@@ -142,9 +143,9 @@ func TestBatchCompleteAPI(t *testing.T) {
 
 	t.Run("Complete workflow with all operations", func(t *testing.T) {
 		// Test dependency resolution between operations
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 		registry := synthfs.GetDefaultRegistry()
-		fileSystem := synthfs.NewTestFileSystem()
+		fileSystem := testutil.NewTestFileSystem()
 
 		// --- Setup Phase ---
 		// Create initial files and directories first.
@@ -234,9 +235,9 @@ func TestBatchCompleteAPI(t *testing.T) {
 	})
 
 	t.Run("Operation objects detailed inspection", func(t *testing.T) {
-		testFS := synthfs.NewTestFileSystem()
+		testFS := testutil.NewTestFileSystem()
 		registry := synthfs.GetDefaultRegistry()
-		fileSystem := synthfs.NewTestFileSystem()
+		fileSystem := testutil.NewTestFileSystem()
 
 		// --- Setup Phase ---
 		setupBatch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)

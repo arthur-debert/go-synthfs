@@ -7,13 +7,14 @@ import (
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/batch"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
 // TestBatchPrerequisiteResolution verifies that prerequisite resolution works correctly
 func TestBatchPrerequisiteResolution(t *testing.T) {
 	t.Run("Batch creates files with prerequisite resolution", func(t *testing.T) {
 		// Create a test filesystem
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		registry := synthfs.GetDefaultRegistry()
 
 		// Create a batch (prerequisite resolution is enabled by default)
@@ -37,23 +38,23 @@ func TestBatchPrerequisiteResolution(t *testing.T) {
 		}
 
 		// Verify the file was created
-		if !synthfs.FileExists(t, fs, "nested/dir/file.txt") {
+		if !testutil.FileExists(t, fs, "nested/dir/file.txt") {
 			t.Error("File was not created in nested directory")
 		}
 
 		// Verify parent directories were created
-		if !synthfs.FileExists(t, fs, "nested") {
+		if !testutil.FileExists(t, fs, "nested") {
 			t.Error("Parent directory 'nested' was not created")
 		}
 
-		if !synthfs.FileExists(t, fs, "nested/dir") {
+		if !testutil.FileExists(t, fs, "nested/dir") {
 			t.Error("Parent directory 'nested/dir' was not created")
 		}
 	})
 
 	t.Run("Complex operations with prerequisites", func(t *testing.T) {
 		// Create a test filesystem
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		registry := synthfs.GetDefaultRegistry()
 
 		// Create a batch
@@ -77,11 +78,11 @@ func TestBatchPrerequisiteResolution(t *testing.T) {
 		}
 
 		// Verify everything was created
-		if !synthfs.FileExists(t, fs, "deep/nested/path/file.txt") {
+		if !testutil.FileExists(t, fs, "deep/nested/path/file.txt") {
 			t.Error("File was not created")
 		}
 
-		if !synthfs.FileExists(t, fs, "deep/nested/path") {
+		if !testutil.FileExists(t, fs, "deep/nested/path") {
 			t.Error("Parent directories were not created")
 		}
 	})
@@ -90,12 +91,12 @@ func TestBatchPrerequisiteResolution(t *testing.T) {
 // TestBatchPrerequisiteResolutionForAllOperations verifies that prerequisite resolution works for all operation types
 func TestBatchPrerequisiteResolutionForAllOperations(t *testing.T) {
 	t.Run("Prerequisites are resolved for complex operations", func(t *testing.T) {
-		fs := synthfs.NewTestFileSystem()
+		fs := testutil.NewTestFileSystem()
 		registry := synthfs.GetDefaultRegistry()
 
 		// Create some source files
-		synthfs.CreateTestFile(t, fs, "source1.txt", []byte("content1"))
-		synthfs.CreateTestFile(t, fs, "source2.txt", []byte("content2"))
+		testutil.CreateTestFile(t, fs, "source1.txt", []byte("content1"))
+		testutil.CreateTestFile(t, fs, "source2.txt", []byte("content2"))
 
 		b := batch.NewBatch(fs, registry)
 
@@ -130,24 +131,24 @@ func TestBatchPrerequisiteResolutionForAllOperations(t *testing.T) {
 		}
 
 		// Verify all operations succeeded
-		if !synthfs.FileExists(t, fs, "dest/dir/copy1.txt") {
+		if !testutil.FileExists(t, fs, "dest/dir/copy1.txt") {
 			t.Error("Copy operation did not create destination file")
 		}
 
-		if !synthfs.FileExists(t, fs, "dest/dir/move2.txt") {
+		if !testutil.FileExists(t, fs, "dest/dir/move2.txt") {
 			t.Error("Move operation did not create destination file")
 		}
 
-		if !synthfs.FileExists(t, fs, "dest/dir/link.txt") {
+		if !testutil.FileExists(t, fs, "dest/dir/link.txt") {
 			t.Error("CreateSymlink operation did not create symlink")
 		}
 
 		// Verify parent directories were created
-		if !synthfs.FileExists(t, fs, "dest") {
+		if !testutil.FileExists(t, fs, "dest") {
 			t.Error("Parent directory 'dest' was not created")
 		}
 
-		if !synthfs.FileExists(t, fs, "dest/dir") {
+		if !testutil.FileExists(t, fs, "dest/dir") {
 			t.Error("Parent directory 'dest/dir' was not created")
 		}
 	})
