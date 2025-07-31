@@ -124,11 +124,19 @@ func Remove(ctx context.Context, fs filesystem.FileSystem, path string) error {
 
 // executeDirectOp executes a single operation directly
 func executeDirectOp(ctx context.Context, fs filesystem.FileSystem, op Operation) error {
+	// Get operation description for error context
+	desc := op.Describe()
+	action := getOperationAction(desc.Type)
+	
 	// Validate first
 	if err := op.Validate(ctx, fs); err != nil {
-		return err
+		return WrapOperationError(op, action, err)
 	}
 	
 	// Execute
-	return op.Execute(ctx, fs)
+	if err := op.Execute(ctx, fs); err != nil {
+		return WrapOperationError(op, action, err)
+	}
+	
+	return nil
 }
