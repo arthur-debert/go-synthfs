@@ -30,15 +30,15 @@ func NewCreateArchiveOperation(id core.OperationID, archivePath string) *CreateA
 // Prerequisites returns the prerequisites for creating an archive
 func (op *CreateArchiveOperation) Prerequisites() []core.Prerequisite {
 	var prereqs []core.Prerequisite
-	
+
 	// Need parent directory for archive to exist
 	if filepath.Dir(op.description.Path) != "." && filepath.Dir(op.description.Path) != "/" {
 		prereqs = append(prereqs, core.NewParentDirPrerequisite(op.description.Path))
 	}
-	
+
 	// Need no conflict with existing files
 	prereqs = append(prereqs, core.NewNoConflictPrerequisite(op.description.Path))
-	
+
 	// Check sources exist (from item or details)
 	var sources []string
 	if item := op.GetItem(); item != nil {
@@ -51,11 +51,11 @@ func (op *CreateArchiveOperation) Prerequisites() []core.Prerequisite {
 			sources = detailSources
 		}
 	}
-	
+
 	for _, source := range sources {
 		prereqs = append(prereqs, core.NewSourceExistsPrerequisite(source))
 	}
-	
+
 	return prereqs
 }
 
@@ -222,8 +222,8 @@ func (op *CreateArchiveOperation) createTarArchive(archivePath string, sources [
 		// Check if it's a directory
 		isDir := false
 		var mode os.FileMode = 0644
-		
-		if fi, ok := sourceInfo.(interface{ 
+
+		if fi, ok := sourceInfo.(interface {
 			IsDir() bool
 			Size() int64
 			Mode() os.FileMode
@@ -261,7 +261,7 @@ func (op *CreateArchiveOperation) createTarArchive(archivePath string, sources [
 			Mode: int64(mode.Perm()),
 			Size: int64(len(content)),
 		}
-		
+
 		if err := tarWriter.WriteHeader(header); err != nil {
 			return fmt.Errorf("failed to write header for %s: %w", source, err)
 		}
@@ -271,7 +271,7 @@ func (op *CreateArchiveOperation) createTarArchive(archivePath string, sources [
 		}
 	}
 
-	// Close the tar writer  
+	// Close the tar writer
 	if err := tarWriter.Close(); err != nil {
 		return fmt.Errorf("failed to close tar writer: %w", err)
 	}
@@ -375,10 +375,10 @@ func NewUnarchiveOperation(id core.OperationID, archivePath string) *UnarchiveOp
 // Prerequisites returns the prerequisites for unarchiving
 func (op *UnarchiveOperation) Prerequisites() []core.Prerequisite {
 	var prereqs []core.Prerequisite
-	
+
 	// Need archive to exist
 	prereqs = append(prereqs, core.NewSourceExistsPrerequisite(op.description.Path))
-	
+
 	// Need extract path parent directory to exist
 	if item := op.GetItem(); item != nil {
 		if extractor, ok := item.(interface{ ExtractPath() string }); ok {
@@ -390,7 +390,7 @@ func (op *UnarchiveOperation) Prerequisites() []core.Prerequisite {
 			}
 		}
 	}
-	
+
 	return prereqs
 }
 
@@ -403,14 +403,14 @@ func (op *UnarchiveOperation) Execute(ctx context.Context, fsys interface{}) err
 			extractPath = extractor.ExtractPath()
 		}
 	}
-	
+
 	// If not found in item, check details
 	if extractPath == "" {
 		if path, ok := op.description.Details["extract_path"].(string); ok {
 			extractPath = path
 		}
 	}
-	
+
 	// Default to current directory if still empty
 	if extractPath == "" {
 		extractPath = "."
@@ -423,7 +423,7 @@ func (op *UnarchiveOperation) Execute(ctx context.Context, fsys interface{}) err
 			patterns = patterned.Patterns()
 		}
 	}
-	
+
 	// If not found in item, check details
 	if len(patterns) == 0 {
 		if p, ok := op.description.Details["patterns"].([]string); ok {
@@ -662,7 +662,7 @@ func (op *UnarchiveOperation) Validate(ctx context.Context, fsys interface{}) er
 	// Check if item implements the expected interfaces
 	archiver, hasArchivePath := op.item.(interface{ ArchivePath() string })
 	extractor, hasExtractPath := op.item.(interface{ ExtractPath() string })
-	
+
 	if !hasArchivePath || !hasExtractPath {
 		return &core.ValidationError{
 			OperationID:   op.ID(),

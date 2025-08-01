@@ -13,7 +13,7 @@ func TestCreateFileOperation(t *testing.T) {
 
 	t.Run("create file with content", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		op := operations.NewCreateFileOperation(core.OperationID("test-create"), "test.txt")
 		fileItem := &TestFileItem{
 			path:    "test.txt",
@@ -37,7 +37,7 @@ func TestCreateFileOperation(t *testing.T) {
 
 	t.Run("create file requires item", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		op := operations.NewCreateFileOperation(core.OperationID("test-create"), "test.txt")
 		// Don't set item
 
@@ -49,7 +49,7 @@ func TestCreateFileOperation(t *testing.T) {
 
 	t.Run("create file in subdirectory", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		op := operations.NewCreateFileOperation(core.OperationID("test-create"), "subdir/test.txt")
 		fileItem := &TestFileItem{
 			path:    "subdir/test.txt",
@@ -76,7 +76,7 @@ func TestCreateFileOperation(t *testing.T) {
 
 	t.Run("validate file creation", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		op := operations.NewCreateFileOperation(core.OperationID("test-create"), "test.txt")
 		fileItem := &TestFileItem{
 			path:    "test.txt",
@@ -93,7 +93,7 @@ func TestCreateFileOperation(t *testing.T) {
 
 	t.Run("reverse ops for create file", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		op := operations.NewCreateFileOperation(core.OperationID("test-create"), "test.txt")
 		fileItem := &TestFileItem{
 			path:    "test.txt",
@@ -131,7 +131,7 @@ func TestCreateDirectoryOperation(t *testing.T) {
 
 	t.Run("create directory", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		op := operations.NewCreateDirectoryOperation(core.OperationID("test-create-dir"), "testdir")
 		dirItem := &TestDirItem{
 			path: "testdir",
@@ -152,7 +152,7 @@ func TestCreateDirectoryOperation(t *testing.T) {
 
 	t.Run("create nested directory", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		op := operations.NewCreateDirectoryOperation(core.OperationID("test-create-dir"), "parent/child/grandchild")
 		dirItem := &TestDirItem{
 			path: "parent/child/grandchild",
@@ -173,7 +173,7 @@ func TestCreateDirectoryOperation(t *testing.T) {
 
 	t.Run("create directory requires item", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		op := operations.NewCreateDirectoryOperation(core.OperationID("test-create-dir"), "testdir")
 		// Don't set item
 
@@ -185,7 +185,7 @@ func TestCreateDirectoryOperation(t *testing.T) {
 
 	t.Run("reverse ops for create directory", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		op := operations.NewCreateDirectoryOperation(core.OperationID("test-create-dir"), "testdir")
 		dirItem := &TestDirItem{
 			path: "testdir",

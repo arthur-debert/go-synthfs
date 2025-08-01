@@ -210,7 +210,7 @@ func (mp *memPipeline) ResolvePrerequisites(resolver core.PrerequisiteResolver, 
 		// Process each prerequisite
 		for _, prereq := range prereqs {
 			prereqKey := fmt.Sprintf("%s:%s", prereq.Type(), prereq.Path())
-			
+
 			// Skip if already resolved
 			if resolvedPrereqs[prereqKey] {
 				mp.logger.Debug().
@@ -251,12 +251,12 @@ func (mp *memPipeline) ResolvePrerequisites(resolver core.PrerequisiteResolver, 
 				for _, resolvedOp := range resolvedOps {
 					if resolvedOpInterface, ok := resolvedOp.(OperationInterface); ok {
 						newOps = append(newOps, resolvedOpInterface)
-						
+
 						// Add dependency from original operation to resolved operation
 						if depAdder, ok := op.(interface{ AddDependency(core.OperationID) }); ok {
 							depAdder.AddDependency(resolvedOpInterface.ID())
 						}
-						
+
 						mp.logger.Debug().
 							Str("resolved_op_id", string(resolvedOpInterface.ID())).
 							Str("dependent_op_id", string(op.ID())).
@@ -479,11 +479,11 @@ func (l *noOpLogger) Error() core.LogEvent { return &noOpLogEvent{} }
 // noOpLogEvent implements core.LogEvent with no-op methods
 type noOpLogEvent struct{}
 
-func (e *noOpLogEvent) Str(key, val string) core.LogEvent             { return e }
-func (e *noOpLogEvent) Int(key string, val int) core.LogEvent         { return e }
-func (e *noOpLogEvent) Bool(key string, val bool) core.LogEvent       { return e }
-func (e *noOpLogEvent) Dur(key string, val interface{}) core.LogEvent { return e }
+func (e *noOpLogEvent) Str(key, val string) core.LogEvent                   { return e }
+func (e *noOpLogEvent) Int(key string, val int) core.LogEvent               { return e }
+func (e *noOpLogEvent) Bool(key string, val bool) core.LogEvent             { return e }
+func (e *noOpLogEvent) Dur(key string, val interface{}) core.LogEvent       { return e }
 func (e *noOpLogEvent) Interface(key string, val interface{}) core.LogEvent { return e }
-func (e *noOpLogEvent) Err(err error) core.LogEvent                   { return e }
-func (e *noOpLogEvent) Float64(key string, val float64) core.LogEvent { return e }
-func (e *noOpLogEvent) Msg(msg string)                                {}
+func (e *noOpLogEvent) Err(err error) core.LogEvent                         { return e }
+func (e *noOpLogEvent) Float64(key string, val float64) core.LogEvent       { return e }
+func (e *noOpLogEvent) Msg(msg string)                                      {}

@@ -26,13 +26,13 @@ func NewCreateFileOperation(id core.OperationID, path string) *CreateFileOperati
 // Prerequisites returns the prerequisites for creating a file.
 func (op *CreateFileOperation) Prerequisites() []core.Prerequisite {
 	var prereqs []core.Prerequisite
-	
+
 	// Always need parent directory to exist (even if it's current directory)
 	prereqs = append(prereqs, core.NewParentDirPrerequisite(op.description.Path))
-	
+
 	// Need no conflict with existing files
 	prereqs = append(prereqs, core.NewNoConflictPrerequisite(op.description.Path))
-	
+
 	return prereqs
 }
 
@@ -233,7 +233,7 @@ func (op *CreateFileOperation) Rollback(ctx context.Context, fsys interface{}) e
 	if !ok {
 		return fmt.Errorf("filesystem does not support Remove")
 	}
-	
+
 	// Remove the created file
 	return remove(op.description.Path)
 }
@@ -311,6 +311,6 @@ func (op *CreateDirectoryOperation) ReverseOps(ctx context.Context, fsys interfa
 		core.OperationID(fmt.Sprintf("reverse_%s", op.ID())),
 		op.description.Path,
 	)
-	
+
 	return []interface{}{reverseOp}, nil, nil
 }

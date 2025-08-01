@@ -200,8 +200,7 @@ type TestBatchHelper struct {
 // NewTestBatchHelper creates a new batch test helper
 func NewTestBatchHelper(t *testing.T) *TestBatchHelper {
 	fs := NewTestFileSystem()
-	registry := synthfs.GetDefaultRegistry()
-	batch := synthfs.NewBatch(fs, registry)
+	batch := synthfs.NewBatch(fs)
 	return &TestBatchHelper{
 		t:     t,
 		batch: batch,
@@ -335,7 +334,7 @@ func (tph *TestPipelineHelper) LogPipelineState() {
 
 // CreateTestOperation creates a simple test operation
 func CreateTestOperation(id, opType, path string) synthfs.Operation {
-	registry := synthfs.GetDefaultRegistry()
+	registry := synthfs.NewOperationRegistry()
 	op, err := registry.CreateOperation(synthfs.OperationID(id), opType, path)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create test operation: %v", err))
@@ -347,7 +346,7 @@ func CreateTestOperation(id, opType, path string) synthfs.Operation {
 func CreateTestFileOperation(id, path string, content []byte) synthfs.Operation {
 	op := CreateTestOperation(id, "create_file", path)
 	item := synthfs.NewFile(path).WithContent(content)
-	if err := synthfs.GetDefaultRegistry().SetItemForOperation(op, item); err != nil {
+	if err := synthfs.NewOperationRegistry().SetItemForOperation(op, item); err != nil {
 		panic(fmt.Sprintf("Failed to set item for operation: %v", err))
 	}
 	return op
@@ -357,7 +356,7 @@ func CreateTestFileOperation(id, path string, content []byte) synthfs.Operation 
 func CreateTestDirectoryOperation(id, path string) synthfs.Operation {
 	op := CreateTestOperation(id, "create_directory", path)
 	item := synthfs.NewDirectory(path)
-	if err := synthfs.GetDefaultRegistry().SetItemForOperation(op, item); err != nil {
+	if err := synthfs.NewOperationRegistry().SetItemForOperation(op, item); err != nil {
 		panic(fmt.Sprintf("Failed to set item for operation: %v", err))
 	}
 	return op

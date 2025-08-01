@@ -14,9 +14,9 @@ type Batch struct {
 }
 
 // NewBatch creates a new batch with the clean implementation that has prerequisite resolution enabled by default
-func NewBatch(fs interface{}, registry core.OperationFactory) *Batch {
+func NewBatch(fs interface{}) *Batch {
 	return &Batch{
-		impl: batch.NewBatch(fs, registry),
+		impl: batch.NewBatch(fs, NewOperationRegistry()),
 	}
 }
 
@@ -150,16 +150,16 @@ func ConvertBatchResult(batchResult interface{}) *Result {
 		GetRollback() interface{}
 	}); ok {
 		return &Result{
-			success:     r.IsSuccess(),
-			operations:  r.GetOperations(),
-			restoreOps:  r.GetRestoreOps(),
-			duration:    r.GetDuration(),
-			err:         r.GetError(),
-			budget:      r.GetBudget(),
-			rollback:    r.GetRollback(),
+			success:    r.IsSuccess(),
+			operations: r.GetOperations(),
+			restoreOps: r.GetRestoreOps(),
+			duration:   r.GetDuration(),
+			err:        r.GetError(),
+			budget:     r.GetBudget(),
+			rollback:   r.GetRollback(),
 		}
 	}
-	
+
 	// Fallback for basic result structure
 	return &Result{
 		success:    true,
@@ -174,13 +174,13 @@ func ConvertBatchResult(batchResult interface{}) *Result {
 
 // Result represents the outcome of executing a batch of operations
 type Result struct {
-	success     bool
-	operations  []interface{}
-	restoreOps  []interface{}
-	duration    interface{}
-	err         error
-	budget      interface{}
-	rollback    interface{}
+	success    bool
+	operations []interface{}
+	restoreOps []interface{}
+	duration   interface{}
+	err        error
+	budget     interface{}
+	rollback   interface{}
 }
 
 // IsSuccess returns whether the batch execution was successful

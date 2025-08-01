@@ -419,10 +419,18 @@ func TestOSFileSystem_SymlinkOperations(t *testing.T) {
 		}
 	})
 
-	t.Run("Symlink to absolute path outside root", func(t *testing.T) {
-		// Skip this test since we can't create symlinks with absolute paths
-		// through the OSFileSystem due to path validation
-		t.Skip("Cannot test absolute symlinks due to path validation in OSFileSystem")
+	t.Run("Symlink to absolute path outside root is rejected", func(t *testing.T) {
+		// OSFileSystem should reject attempts to create symlinks with absolute paths
+		// outside its root directory for security reasons
+		err := osfs.Symlink("/etc/passwd", "dangerous-link.txt")
+		if err == nil {
+			t.Fatal("Expected Symlink with absolute path outside root to fail")
+		}
+
+		// The error should indicate the path is invalid
+		if !strings.Contains(err.Error(), "invalid") && !strings.Contains(err.Error(), "outside") {
+			t.Errorf("Expected error about invalid/outside path, got: %v", err)
+		}
 	})
 
 	t.Run("Readlink on non-existent file", func(t *testing.T) {

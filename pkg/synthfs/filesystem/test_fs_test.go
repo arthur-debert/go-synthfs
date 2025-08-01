@@ -91,10 +91,10 @@ func TestTestFileSystemExtended(t *testing.T) {
 	})
 
 	t.Run("Error cases", func(t *testing.T) {
-		// Symlink with non-existent target
+		// Symlink with non-existent target (dangling symlinks are allowed)
 		err := testFS.Symlink("non-existent.txt", "broken-link.txt")
-		if err == nil {
-			t.Error("Expected Symlink to non-existent target to fail in TestFileSystem")
+		if err != nil {
+			t.Errorf("Symlink to non-existent target should be allowed (dangling symlink): %v", err)
 		}
 
 		// Readlink on non-symlink

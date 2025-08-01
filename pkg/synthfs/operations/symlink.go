@@ -23,15 +23,15 @@ func NewCreateSymlinkOperation(id core.OperationID, linkPath string) *CreateSyml
 // Prerequisites returns the prerequisites for creating a symlink.
 func (op *CreateSymlinkOperation) Prerequisites() []core.Prerequisite {
 	var prereqs []core.Prerequisite
-	
+
 	// Need parent directory to exist
 	if filepath.Dir(op.description.Path) != "." && filepath.Dir(op.description.Path) != "/" {
 		prereqs = append(prereqs, core.NewParentDirPrerequisite(op.description.Path))
 	}
-	
+
 	// Need no conflict with existing files
 	prereqs = append(prereqs, core.NewNoConflictPrerequisite(op.description.Path))
-	
+
 	return prereqs
 }
 

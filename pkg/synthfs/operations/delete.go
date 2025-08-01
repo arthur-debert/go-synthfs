@@ -26,11 +26,11 @@ func NewDeleteOperation(id core.OperationID, path string) *DeleteOperation {
 // Prerequisites returns the prerequisites for deleting a file/directory
 func (op *DeleteOperation) Prerequisites() []core.Prerequisite {
 	var prereqs []core.Prerequisite
-	
+
 	// For delete operations, we need the source to exist
 	// Note: This is optional for idempotent delete operations
 	prereqs = append(prereqs, core.NewSourceExistsPrerequisite(op.description.Path))
-	
+
 	return prereqs
 }
 
@@ -121,7 +121,7 @@ func (op *DeleteOperation) Rollback(ctx context.Context, fsys interface{}) error
 // ReverseOps generates operations to restore deleted files (requires backup).
 func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, budget interface{}) ([]interface{}, interface{}, error) {
 	path := op.description.Path
-	
+
 	// Check if we have a budget
 	var backupBudget *core.BackupBudget
 	if budget != nil {
@@ -129,35 +129,35 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 			backupBudget = bb
 		}
 	}
-	
+
 	// Check if file still exists (to create backup)
 	stat, hasStat := getStatMethod(fsys)
 	if !hasStat {
 		return nil, nil, fmt.Errorf("filesystem does not support Stat operation needed for backup")
 	}
-	
+
 	info, err := stat(path)
 	if err != nil {
 		// File doesn't exist anymore - can't create backup
 		return nil, nil, fmt.Errorf("cannot reverse delete operation: path %s no longer exists and no backup available", path)
 	}
-	
+
 	// Check if it's a directory
 	isDir := false
 	if dirChecker, ok := info.(interface{ IsDir() bool }); ok {
 		isDir = dirChecker.IsDir()
 	}
-	
+
 	// Estimate backup size
 	estimatedSizeMB := float64(0.001) // Default 1KB for empty files
-	
+
 	// Try to get actual size
 	if sizer, ok := info.(interface{ Size() int64 }); ok {
 		estimatedSizeMB = float64(sizer.Size()) / (1024 * 1024) // Convert bytes to MB
 	} else if isDir {
 		estimatedSizeMB = float64(5.0) // Default 5MB for directories
 	}
-	
+
 	// Check budget if available
 	if backupBudget != nil {
 		if err := backupBudget.ConsumeBackup(estimatedSizeMB); err != nil {
@@ -165,7 +165,7 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 			return nil, nil, fmt.Errorf("budget exceeded: cannot backup file '%s' (%.2fMB): %w", path, estimatedSizeMB, err)
 		}
 	}
-	
+
 	// Create proper backup data structure first
 	backupData := &core.BackupData{
 		OperationID:  op.ID(),
@@ -175,26 +175,26 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 		SizeMB:       estimatedSizeMB,
 		Metadata:     make(map[string]interface{}),
 	}
-	
+
 	// For directories, walk the tree and backup all items
 	if isDir {
 		backupData.BackupType = "directory_tree"
-		
+
 		// Get ReadDir method
 		type readDirFS interface {
 			ReadDir(name string) ([]fs.DirEntry, error)
 		}
-		
+
 		rdFS, hasReadDir := fsys.(readDirFS)
 		if !hasReadDir {
 			return nil, nil, fmt.Errorf("filesystem does not support ReadDir for directory backup")
 		}
-		
+
 		// Walk directory tree to backup all items
 		items := []interface{}{}
 		totalBackedUpSize := int64(0)
 		skippedFiles := 0
-		
+
 		// Recursive function to walk and backup directory tree
 		var walkAndBackup func(absPath, relPath string) error
 		walkAndBackup = func(absPath, relPath string) error {
@@ -203,17 +203,17 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 			if err != nil {
 				return fmt.Errorf("cannot stat directory %s: %w", absPath, err)
 			}
-			
+
 			dirMode := fs.FileMode(0755) // default
 			if modeGetter, ok := dirInfo.(interface{ Mode() fs.FileMode }); ok {
 				dirMode = modeGetter.Mode()
 			}
-			
+
 			modTime := time.Now()
 			if timeGetter, ok := dirInfo.(interface{ ModTime() time.Time }); ok {
 				modTime = timeGetter.ModTime()
 			}
-			
+
 			// Create directory item
 			dirItem := map[string]interface{}{
 				"RelativePath": relPath,
@@ -224,18 +224,18 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 				"ModTime":      modTime,
 			}
 			items = append(items, dirItem)
-			
+
 			// Read directory entries
 			entries, err := rdFS.ReadDir(absPath)
 			if err != nil {
 				return fmt.Errorf("cannot read directory %s: %w", absPath, err)
 			}
-			
+
 			// Process all entries
 			for _, entry := range entries {
 				entryPath := filepath.Join(absPath, entry.Name())
 				entryRelPath := filepath.Join(relPath, entry.Name())
-				
+
 				if entry.IsDir() {
 					// Recurse into subdirectory
 					if err := walkAndBackup(entryPath, entryRelPath); err != nil {
@@ -247,10 +247,10 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 					if err != nil {
 						continue // Skip files we can't stat
 					}
-					
+
 					fileSizeBytes := entryInfo.Size()
 					fileSizeMB := float64(fileSizeBytes) / (1024 * 1024)
-					
+
 					// Check budget before reading file
 					if backupBudget != nil {
 						if err := backupBudget.ConsumeBackup(fileSizeMB); err != nil {
@@ -259,7 +259,7 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 							continue
 						}
 					}
-					
+
 					// Read file content
 					var content []byte
 					if open, hasOpen := getOpenMethod(fsys); hasOpen {
@@ -272,14 +272,14 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 							}
 						}
 					}
-					
+
 					if content == nil && backupBudget != nil {
 						// Restore budget if we couldn't read the file
 						backupBudget.RestoreBackup(fileSizeMB)
 						skippedFiles++
 						continue
 					}
-					
+
 					fileItem := map[string]interface{}{
 						"RelativePath": entryRelPath,
 						"ItemType":     "file",
@@ -294,10 +294,10 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 			}
 			return nil
 		}
-		
+
 		// Start the walk
 		_ = walkAndBackup(path, ".")
-		
+
 		// Update backup data
 		backupData.SizeMB = float64(totalBackedUpSize) / (1024 * 1024)
 		backupData.Metadata["items"] = items
@@ -319,10 +319,10 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 			}
 		}
 	}
-	
+
 	// Create reverse operations based on backed up data
 	var reverseOps []interface{}
-	
+
 	if isDir {
 		// For directories, create operations to restore the entire tree
 		if items, ok := backupData.Metadata["items"].([]interface{}); ok {
@@ -331,14 +331,14 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 				if itemMap, ok := item.(map[string]interface{}); ok {
 					itemType, _ := itemMap["ItemType"].(string)
 					relPath, _ := itemMap["RelativePath"].(string)
-					
+
 					if itemType == "directory" {
 						// Create directory operation
 						itemPath := path
 						if relPath != "." {
 							itemPath = filepath.Join(path, relPath)
 						}
-						
+
 						dirOp := NewCreateDirectoryOperation(
 							core.OperationID(fmt.Sprintf("reverse_%s_item_%d", op.ID(), i)),
 							itemPath,
@@ -353,17 +353,17 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 					}
 				}
 			}
-			
+
 			// Then create file operations
 			for i, item := range items {
 				if itemMap, ok := item.(map[string]interface{}); ok {
 					itemType, _ := itemMap["ItemType"].(string)
 					relPath, _ := itemMap["RelativePath"].(string)
-					
+
 					if itemType == "file" {
 						itemPath := filepath.Join(path, relPath)
 						content, _ := itemMap["Content"].([]byte)
-						
+
 						fileOp := NewCreateFileOperation(
 							core.OperationID(fmt.Sprintf("reverse_%s_item_%d", op.ID(), i)),
 							itemPath,
@@ -394,12 +394,12 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 		})
 		reverseOps = append(reverseOps, fileOp)
 	}
-	
+
 	// Check if we skipped files due to budget
 	if skippedFiles, ok := backupData.Metadata["skipped_files"].(int); ok && skippedFiles > 0 {
 		return reverseOps, backupData, fmt.Errorf("budget exceeded: skipped %d files", skippedFiles)
 	}
-	
+
 	return reverseOps, backupData, nil
 }
 

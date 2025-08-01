@@ -11,9 +11,8 @@ import (
 func TestBatchBasicUsage(t *testing.T) {
 	// Use a test filesystem for controlled testing
 	testFS := testutil.NewTestFileSystem()
-	registry := synthfs.GetDefaultRegistry()
 	fs := testutil.NewTestFileSystem()
-	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS).WithContext(context.Background())
+	batch := synthfs.NewBatch(fs).WithFileSystem(testFS).WithContext(context.Background())
 
 	// Pre-create files needed for valid operations in Phase II
 	if err := testFS.WriteFile("source.txt", []byte("s"), 0644); err != nil {
@@ -138,9 +137,8 @@ func TestBatchWithTestFileSystem(t *testing.T) {
 		t.Fatalf("Failed to setup test directory: %v", err)
 	}
 
-	registry := synthfs.GetDefaultRegistry()
 	fs := testutil.NewTestFileSystem()
-	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
+	batch := synthfs.NewBatch(fs).WithFileSystem(testFS)
 
 	t.Run("CreateFile with parent directory auto-creation", func(t *testing.T) {
 		// This should auto-create the "auto-dir" directory
@@ -176,9 +174,8 @@ func TestBatchWithTestFileSystem(t *testing.T) {
 
 func TestBatchIDGeneration(t *testing.T) {
 	testFS := testutil.NewTestFileSystem()
-	registry := synthfs.GetDefaultRegistry()
 	fs := testutil.NewTestFileSystem()
-	batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
+	batch := synthfs.NewBatch(fs).WithFileSystem(testFS)
 
 	// Create multiple operations and check ID uniqueness
 	op1, err := batch.CreateDir("dir1")

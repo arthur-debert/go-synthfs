@@ -319,11 +319,8 @@ func (mfs *MockFS) Symlink(oldname, newname string) error {
 		return &fs.PathError{Op: "symlink", Path: newname, Err: fs.ErrInvalid}
 	}
 
-	// Check if target exists
-	if _, exists := mfs.files[oldname]; !exists {
-		// For MockFS, we'll require the target to exist (stricter than OS)
-		return &fs.PathError{Op: "symlink", Path: oldname, Err: fs.ErrNotExist}
-	}
+	// Note: Real filesystems allow creating symlinks to non-existent targets (dangling symlinks)
+	// We'll allow this in MockFS to match real filesystem behavior
 
 	// Check if newname already exists
 	if _, exists := mfs.files[newname]; exists {

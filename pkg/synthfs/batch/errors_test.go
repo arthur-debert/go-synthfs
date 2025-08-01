@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/batch"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
 // TestErrorHandling verifies error handling with prerequisite resolution

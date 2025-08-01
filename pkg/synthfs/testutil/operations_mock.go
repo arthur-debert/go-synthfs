@@ -69,7 +69,7 @@ func (m *OperationsMockFS) RemoveAll(path string) error {
 	// Remove the path and all its children
 	delete(m.dirs, path)
 	delete(m.files, path)
-	
+
 	// Remove all children
 	prefix := path + "/"
 	for p := range m.files {
@@ -117,29 +117,29 @@ func (m *OperationsMockFS) Rename(oldpath, newpath string) error {
 		// It's a directory
 		m.dirs[newpath] = true
 		delete(m.dirs, oldpath)
-		
+
 		// Move all children
 		oldPrefix := oldpath + "/"
 		newPrefix := newpath + "/"
-		
+
 		// Collect paths to rename (can't modify map while iterating)
 		var filesToRename []struct{ old, new string }
 		var dirsToRename []struct{ old, new string }
-		
+
 		for path := range m.files {
 			if strings.HasPrefix(path, oldPrefix) {
 				newPath := newPrefix + strings.TrimPrefix(path, oldPrefix)
 				filesToRename = append(filesToRename, struct{ old, new string }{path, newPath})
 			}
 		}
-		
+
 		for path := range m.dirs {
 			if strings.HasPrefix(path, oldPrefix) {
 				newPath := newPrefix + strings.TrimPrefix(path, oldPrefix)
 				dirsToRename = append(dirsToRename, struct{ old, new string }{path, newPath})
 			}
 		}
-		
+
 		// Apply renames
 		for _, r := range filesToRename {
 			m.files[r.new] = m.files[r.old]
@@ -149,7 +149,7 @@ func (m *OperationsMockFS) Rename(oldpath, newpath string) error {
 			m.dirs[r.new] = true
 			delete(m.dirs, r.old)
 		}
-		
+
 		return nil
 	}
 	return fs.ErrNotExist
@@ -199,7 +199,7 @@ func NewOperationsMockFSWithReadDir() *OperationsMockFSWithReadDir {
 // ReadDir reads a directory's contents
 func (m *OperationsMockFSWithReadDir) ReadDir(name string) ([]fs.DirEntry, error) {
 	var entries []fs.DirEntry
-	
+
 	// Check if the directory exists
 	if _, ok := m.dirs[name]; !ok {
 		// Check if it's the parent of any files
@@ -220,10 +220,10 @@ func (m *OperationsMockFSWithReadDir) ReadDir(name string) ([]fs.DirEntry, error
 			return nil, fs.ErrNotExist
 		}
 	}
-	
+
 	// Collect direct children
 	children := make(map[string]bool)
-	
+
 	// Add files
 	for path := range m.files {
 		if dir := filepath.Dir(path); dir == name {
@@ -238,7 +238,7 @@ func (m *OperationsMockFSWithReadDir) ReadDir(name string) ([]fs.DirEntry, error
 			}
 		}
 	}
-	
+
 	// Add subdirectories
 	for path := range m.dirs {
 		if dir := filepath.Dir(path); dir == name {
@@ -253,7 +253,7 @@ func (m *OperationsMockFSWithReadDir) ReadDir(name string) ([]fs.DirEntry, error
 			}
 		}
 	}
-	
+
 	return entries, nil
 }
 
@@ -264,9 +264,9 @@ type opsMockFileInfo struct {
 	isDir bool
 }
 
-func (m *opsMockFileInfo) Name() string       { return m.name }
-func (m *opsMockFileInfo) Size() int64        { return m.size }
-func (m *opsMockFileInfo) Mode() fs.FileMode  { 
+func (m *opsMockFileInfo) Name() string { return m.name }
+func (m *opsMockFileInfo) Size() int64  { return m.size }
+func (m *opsMockFileInfo) Mode() fs.FileMode {
 	if m.isDir {
 		return fs.ModeDir | 0755
 	}
@@ -282,8 +282,8 @@ type opsMockFile struct {
 }
 
 func (m *opsMockFile) Close() error { return nil }
-func (m *opsMockFile) Stat() (fs.FileInfo, error) { 
-	return &opsMockFileInfo{name: "mock", size: int64(m.Len())}, nil 
+func (m *opsMockFile) Stat() (fs.FileInfo, error) {
+	return &opsMockFileInfo{name: "mock", size: int64(m.Len())}, nil
 }
 
 // opsMockDirEntry implements fs.DirEntry

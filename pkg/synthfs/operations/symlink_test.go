@@ -40,7 +40,7 @@ func TestSymlinkOperations(t *testing.T) {
 			mode:   0755,
 		}
 		op.SetItem(symlinkItem)
-		
+
 		// Also set target in description
 		op.SetDescriptionDetail("target", "../target")
 
@@ -61,7 +61,7 @@ func TestSymlinkOperations(t *testing.T) {
 			mode:   0755,
 		}
 		op.SetItem(symlinkItem)
-		
+
 		// Also set target in description
 		op.SetDescriptionDetail("target", "../target")
 
@@ -88,7 +88,7 @@ func TestSymlinkOperations(t *testing.T) {
 			mode:   0755,
 		}
 		op.SetItem(symlinkItem)
-		
+
 		// Also set target in description
 		op.SetDescriptionDetail("target", "../target")
 

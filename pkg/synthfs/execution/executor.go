@@ -129,7 +129,7 @@ func (e *Executor) RunWithOptionsAndResolver(ctx context.Context, pipeline inter
 	// Resolve prerequisites if enabled
 	if opts.ResolvePrerequisites {
 		e.logger.Info().Msg("resolving operation prerequisites")
-		
+
 		// Use provided resolver or create default one
 		prereqResolver := resolver
 		if prereqResolver == nil {
@@ -148,7 +148,7 @@ func (e *Executor) RunWithOptionsAndResolver(ctx context.Context, pipeline inter
 		}
 	}
 
-	// Resolve dependencies 
+	// Resolve dependencies
 	e.logger.Info().Msg("resolving operation dependencies")
 	if err := pipelineInterface.Resolve(); err != nil {
 		e.logger.Info().Err(err).Msg("dependency resolution failed")

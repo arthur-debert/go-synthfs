@@ -27,9 +27,9 @@ func TestArchiveOperations(t *testing.T) {
 	})
 
 	t.Run("create zip archive with files", func(t *testing.T) {
-		
+
 		fs := NewExtendedMockFilesystem()
-		
+
 		// Create test files
 		if err := fs.WriteFile("file1.txt", []byte("content1"), 0644); err != nil {
 			t.Fatalf("Failed to write file1.txt: %v", err)
@@ -99,13 +99,13 @@ func TestArchiveOperations(t *testing.T) {
 	})
 
 	t.Run("unarchive zip file", func(t *testing.T) {
-		
+
 		fs := NewExtendedMockFilesystem()
-		
+
 		// Create a zip archive
 		var buf bytes.Buffer
 		w := zip.NewWriter(&buf)
-		
+
 		f1, err := w.Create("extracted/file1.txt")
 		if err != nil {
 			t.Fatalf("Failed to create file1 in zip: %v", err)
@@ -113,7 +113,7 @@ func TestArchiveOperations(t *testing.T) {
 		if _, err := f1.Write([]byte("content1")); err != nil {
 			t.Fatalf("Failed to write content1: %v", err)
 		}
-		
+
 		f2, err := w.Create("extracted/file2.txt")
 		if err != nil {
 			t.Fatalf("Failed to create file2 in zip: %v", err)
@@ -121,11 +121,11 @@ func TestArchiveOperations(t *testing.T) {
 		if _, err := f2.Write([]byte("content2")); err != nil {
 			t.Fatalf("Failed to write content2: %v", err)
 		}
-		
+
 		if err := w.Close(); err != nil {
 			t.Fatalf("Failed to close zip writer: %v", err)
 		}
-		
+
 		// Write archive to filesystem
 		if err := fs.WriteFile("archive.zip", buf.Bytes(), 0644); err != nil {
 			t.Fatalf("Failed to write archive.zip: %v", err)

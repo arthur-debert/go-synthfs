@@ -81,19 +81,19 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 			if itemMap, ok := item.(map[string]interface{}); ok {
 				relPath := itemMap["RelativePath"].(string)
 				itemType := itemMap["ItemType"].(string)
-				
+
 				expected, found := expectedItems[relPath]
 				if !found {
 					t.Errorf("Unexpected item in backup: %+v", itemMap)
 					continue
 				}
-				
+
 				foundItems[relPath] = true
-				
+
 				if itemType != expected.ItemType {
 					t.Errorf("ItemType mismatch for %s. Expected %s, Got %s", relPath, expected.ItemType, itemType)
 				}
-				
+
 				if expected.ItemType == "file" {
 					content := itemMap["Content"].([]byte)
 					if string(content) != expected.Content {
@@ -121,7 +121,7 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 			filepath.Join("dir1", "subdir", "file2.txt"): "create_file",
 			filepath.Join("dir1", "file3.txt"):           "create_file",
 		}
-		
+
 		foundRevOps := make(map[string]bool)
 		for _, ro := range reverseOps {
 			// Cast to operations.Operation interface
@@ -130,21 +130,21 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 				t.Errorf("Reverse operation is not an Operation interface")
 				continue
 			}
-			
+
 			path := op.Describe().Path
 			expectedType, found := expectedRevOps[path]
 			if !found {
 				t.Errorf("Unexpected reverse operation path: %s", path)
 				continue
 			}
-			
+
 			foundRevOps[path] = true
-			
+
 			if op.Describe().Type != expectedType {
 				t.Errorf("Reverse op type mismatch for %s. Expected %s, Got %s", path, expectedType, op.Describe().Type)
 			}
 		}
-		
+
 		for path := range expectedRevOps {
 			if !foundRevOps[path] {
 				t.Errorf("Expected reverse operation not found for path: %s", path)
@@ -173,12 +173,12 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 		if backupData == nil {
 			t.Fatal("Expected partial BackupData even on budget error")
 		}
-		
+
 		bd, ok := backupData.(*core.BackupData)
 		if !ok || bd == nil {
 			t.Fatal("Expected BackupData to be *core.BackupData")
 		}
-		
+
 		if bd.BackupType != "directory_tree" {
 			t.Errorf("Expected BackupType 'directory_tree', got '%s'", bd.BackupType)
 		}
@@ -187,7 +187,7 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 		if !ok {
 			t.Fatal("Expected items to be []interface{}")
 		}
-		
+
 		// Should have backed up at least one file before hitting budget limit
 		var fileBackedUp bool
 		for _, item := range items {
@@ -198,7 +198,7 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 				}
 			}
 		}
-		
+
 		if !fileBackedUp {
 			t.Errorf("Expected at least one file to be backed up before budget exhaustion. Items: %+v", items)
 		}
@@ -225,21 +225,21 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 		if !strings.Contains(err.Error(), "budget exceeded") {
 			t.Fatalf("Expected budget exceeded error, got: %v", err)
 		}
-		
+
 		bd, ok := backupData.(*core.BackupData)
 		if !ok || bd == nil {
 			t.Fatal("Expected BackupData to be *core.BackupData")
 		}
-		
+
 		if bd.SizeMB != 0 {
 			t.Errorf("Expected SizeMB 0 when no files could be backed up, got %f", bd.SizeMB)
 		}
-		
+
 		items, ok := bd.Metadata["items"].([]interface{})
 		if !ok {
 			t.Fatal("Expected items to be []interface{}")
 		}
-		
+
 		// Directory structure should be preserved even when no files can be backed up
 		dirCount := 0
 		fileCount := 0
@@ -253,7 +253,7 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 				}
 			}
 		}
-		
+
 		if dirCount != 2 {
 			t.Errorf("Expected 2 directories in backup (root and subdir), got %d. Items: %+v", dirCount, items)
 		}
@@ -269,7 +269,7 @@ func TestReverseOperations_Files(t *testing.T) {
 
 	t.Run("create file reverse operation", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		op := operations.NewCreateFileOperation(core.OperationID("test-create"), "test.txt")
 		fileItem := &TestFileItem{
 			path:    "test.txt",
@@ -345,7 +345,7 @@ func TestReverseOperations_Files(t *testing.T) {
 
 	t.Run("copy file reverse operation", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		op := operations.NewCopyOperation(core.OperationID("test-copy"), "source.txt")
 		op.SetPaths("source.txt", "dest.txt")
 		// Also set destination in description for consistency
@@ -376,7 +376,7 @@ func TestReverseOperations_Files(t *testing.T) {
 
 	t.Run("move file reverse operation", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		op := operations.NewMoveOperation(core.OperationID("test-move"), "source.txt")
 		op.SetPaths("source.txt", "dest.txt")
 		// Also set destination in description for consistency

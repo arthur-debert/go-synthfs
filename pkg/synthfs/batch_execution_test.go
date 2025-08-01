@@ -5,17 +5,16 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
 func TestBatchExecution(t *testing.T) {
 	// Use TestFileSystem for controlled testing
 	testFS := testutil.NewTestFileSystem()
 
-	registry := synthfs.GetDefaultRegistry()
 	fs := testutil.NewTestFileSystem()
-	batch := synthfs.NewBatch(fs, registry).
+	batch := synthfs.NewBatch(fs).
 		WithFileSystem(testFS).
 		WithContext(context.Background())
 
@@ -58,7 +57,7 @@ func TestBatchExecution(t *testing.T) {
 			// Handle both synthfs.OperationResult and core.OperationResult
 			var opType, opPath string
 			var status core.OperationStatus
-			
+
 			switch v := opResult.(type) {
 			case synthfs.OperationResult:
 				if op, ok := v.Operation.(interface{ Describe() core.OperationDesc }); ok {
@@ -85,15 +84,14 @@ func TestBatchExecution(t *testing.T) {
 				t.Logf("Operation %d: Unknown operation result type %T", i+1, opResult)
 				continue
 			}
-			
+
 			t.Logf("Operation %d: %s %s -> %s", i+1, opType, opPath, status)
 		}
 	})
 
 	t.Run("Execute with auto-generated dependencies", func(t *testing.T) {
-		registry := synthfs.GetDefaultRegistry()
 		fs := testutil.NewTestFileSystem()
-		newBatch := synthfs.NewBatch(fs, registry).WithFileSystem(testutil.NewTestFileSystem())
+		newBatch := synthfs.NewBatch(fs).WithFileSystem(testutil.NewTestFileSystem())
 
 		// This should auto-create multiple parent directories
 		_, err := newBatch.CreateFile("deep/nested/path/file.txt", []byte("nested content"))
@@ -120,7 +118,7 @@ func TestBatchExecution(t *testing.T) {
 			// Handle both synthfs.OperationResult and core.OperationResult
 			var opType, opPath string
 			var status core.OperationStatus
-			
+
 			switch v := opResult.(type) {
 			case synthfs.OperationResult:
 				if op, ok := v.Operation.(interface{ Describe() core.OperationDesc }); ok {
@@ -147,15 +145,14 @@ func TestBatchExecution(t *testing.T) {
 				t.Logf("Operation %d: Unknown operation result type %T", i+1, opResult)
 				continue
 			}
-			
+
 			t.Logf("Operation %d: %s %s -> %s", i+1, opType, opPath, status)
 		}
 	})
 
 	t.Run("Empty batch execution", func(t *testing.T) {
-		registry := synthfs.GetDefaultRegistry()
 		fs := testutil.NewTestFileSystem()
-		emptyBatch := synthfs.NewBatch(fs, registry).WithFileSystem(testutil.NewTestFileSystem())
+		emptyBatch := synthfs.NewBatch(fs).WithFileSystem(testutil.NewTestFileSystem())
 
 		result, err := emptyBatch.Run()
 		if err != nil {

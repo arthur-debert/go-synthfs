@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/batch"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
 func TestPhase3_CompleteWorkflow(t *testing.T) {
@@ -377,7 +377,7 @@ func TestPhase3_OperationFailure_BudgetRestore(t *testing.T) {
 	}
 
 	opResultInterface := result.GetOperations()[0]
-		if opResult, ok := opResultInterface.(synthfs.OperationResult); ok {
+	if opResult, ok := opResultInterface.(synthfs.OperationResult); ok {
 		if opResult.Status != core.StatusSuccess {
 			t.Errorf("Expected operation status success (idempotent), got %s", opResult.Status)
 		}

@@ -41,7 +41,7 @@ func TestCreateFileValidation(t *testing.T) {
 	t.Run("ValidateCreateFile with wrong item type", func(t *testing.T) {
 		fs := NewMockFilesystem()
 		op := operations.NewCreateFileOperation(core.OperationID("test-op"), "test/file.txt")
-		
+
 		// Set wrong item type (directory instead of file)
 		dirItem := &TestDirItem{
 			path: "test/dir",
@@ -75,31 +75,6 @@ func TestCreateFileValidation(t *testing.T) {
 		}
 	})
 
-	t.Run("ValidateCreateFile with existing file", func(t *testing.T) {
-		t.Skip("Skipping test due to conflicting validation logic with restorable runs")
-		fs := NewMockFilesystem()
-		// Create existing file
-		if err := fs.WriteFile("test/existing.txt", []byte("existing"), 0644); err != nil {
-			t.Fatalf("Failed to write existing file: %v", err)
-		}
-
-		op := operations.NewCreateFileOperation(core.OperationID("test-op"), "test/existing.txt")
-		fileItem := &TestFileItem{
-			path:    "test/existing.txt",
-			content: []byte("new content"),
-			mode:    0644,
-		}
-		op.SetItem(fileItem)
-
-		err := op.Validate(ctx, fs)
-		if err == nil {
-			t.Error("Expected validation error for existing file")
-		}
-
-		if !strings.Contains(err.Error(), "already exists") {
-			t.Errorf("Expected 'already exists' error, got: %s", err.Error())
-		}
-	})
 }
 
 func TestCreateDirectoryValidation(t *testing.T) {
@@ -108,7 +83,7 @@ func TestCreateDirectoryValidation(t *testing.T) {
 	t.Run("ValidateCreateDirectory with wrong item type", func(t *testing.T) {
 		fs := NewMockFilesystem()
 		op := operations.NewCreateDirectoryOperation(core.OperationID("test-op"), "test/dir")
-		
+
 		// Set wrong item type (file instead of directory)
 		fileItem := &TestFileItem{
 			path:    "test/file.txt",

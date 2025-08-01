@@ -25,24 +25,24 @@ func NewCopyOperation(id core.OperationID, srcPath string) *CopyOperation {
 // Prerequisites returns the prerequisites for copying a file/directory
 func (op *CopyOperation) Prerequisites() []core.Prerequisite {
 	var prereqs []core.Prerequisite
-	
+
 	// Need source to exist
 	src, _ := op.GetPaths()
 	if src != "" {
 		prereqs = append(prereqs, core.NewSourceExistsPrerequisite(src))
 	}
-	
+
 	// Need destination parent directory to exist
 	_, dst := op.GetPaths()
 	if dst != "" {
 		if filepath.Dir(dst) != "." && filepath.Dir(dst) != "/" {
 			prereqs = append(prereqs, core.NewParentDirPrerequisite(dst))
 		}
-		
+
 		// Need no conflict with existing files at destination
 		prereqs = append(prereqs, core.NewNoConflictPrerequisite(dst))
 	}
-	
+
 	return prereqs
 }
 
@@ -216,24 +216,24 @@ func NewMoveOperation(id core.OperationID, srcPath string) *MoveOperation {
 // Prerequisites returns the prerequisites for moving a file/directory
 func (op *MoveOperation) Prerequisites() []core.Prerequisite {
 	var prereqs []core.Prerequisite
-	
+
 	// Need source to exist
 	src, _ := op.GetPaths()
 	if src != "" {
 		prereqs = append(prereqs, core.NewSourceExistsPrerequisite(src))
 	}
-	
+
 	// Need destination parent directory to exist
 	_, dst := op.GetPaths()
 	if dst != "" {
 		if filepath.Dir(dst) != "." && filepath.Dir(dst) != "/" {
 			prereqs = append(prereqs, core.NewParentDirPrerequisite(dst))
 		}
-		
+
 		// Need no conflict with existing files at destination
 		prereqs = append(prereqs, core.NewNoConflictPrerequisite(dst))
 	}
-	
+
 	return prereqs
 }
 
@@ -370,13 +370,13 @@ func (op *CopyOperation) ReverseOps(ctx context.Context, fsys interface{}, budge
 	if dst == "" {
 		return nil, nil, fmt.Errorf("copy operation has no destination path")
 	}
-	
+
 	// Create a delete operation to remove the copied file
 	reverseOp := NewDeleteOperation(
 		core.OperationID(fmt.Sprintf("reverse_%s", op.ID())),
 		dst,
 	)
-	
+
 	return []interface{}{reverseOp}, nil, nil
 }
 
@@ -386,13 +386,13 @@ func (op *MoveOperation) ReverseOps(ctx context.Context, fsys interface{}, budge
 	if src == "" || dst == "" {
 		return nil, nil, fmt.Errorf("move operation missing source or destination path")
 	}
-	
+
 	// Create a move operation to restore the file to its original location
 	reverseOp := NewMoveOperation(
 		core.OperationID(fmt.Sprintf("reverse_%s", op.ID())),
 		dst, // Move from current location
 	)
 	reverseOp.SetPaths(dst, src) // Back to original location
-	
+
 	return []interface{}{reverseOp}, nil, nil
 }
