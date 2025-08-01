@@ -70,12 +70,12 @@ func (pfs *PathAwareFileSystem) Stat(name string) (fs.FileInfo, error) {
 	if err != nil {
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
 	}
-	
+
 	// Check if the underlying FS implements StatFS
 	if statFS, ok := pfs.fs.(filesystem.StatFS); ok {
 		return statFS.Stat(resolved)
 	}
-	
+
 	// Fallback to Open + Stat
 	f, err := pfs.fs.Open(resolved)
 	if err != nil {
@@ -91,13 +91,13 @@ func (pfs *PathAwareFileSystem) ReadFile(name string) ([]byte, error) {
 	if err != nil {
 		return nil, &fs.PathError{Op: "readfile", Path: name, Err: err}
 	}
-	
+
 	f, err := pfs.fs.Open(resolved)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = f.Close() }()
-	
+
 	// Use fs.ReadFile if available
 	return fs.ReadFile(pfs.fs, resolved)
 }
@@ -108,11 +108,11 @@ func (pfs *PathAwareFileSystem) WriteFile(name string, data []byte, perm fs.File
 	if err != nil {
 		return &fs.PathError{Op: "writefile", Path: name, Err: err}
 	}
-	
+
 	if writeFS, ok := pfs.fs.(filesystem.WriteFS); ok {
 		return writeFS.WriteFile(resolved, data, perm)
 	}
-	
+
 	return &fs.PathError{Op: "writefile", Path: name, Err: fs.ErrInvalid}
 }
 
@@ -122,11 +122,11 @@ func (pfs *PathAwareFileSystem) MkdirAll(path string, perm fs.FileMode) error {
 	if err != nil {
 		return &fs.PathError{Op: "mkdirall", Path: path, Err: err}
 	}
-	
+
 	if writeFS, ok := pfs.fs.(filesystem.WriteFS); ok {
 		return writeFS.MkdirAll(resolved, perm)
 	}
-	
+
 	return &fs.PathError{Op: "mkdirall", Path: path, Err: fs.ErrInvalid}
 }
 
@@ -136,11 +136,11 @@ func (pfs *PathAwareFileSystem) Remove(name string) error {
 	if err != nil {
 		return &fs.PathError{Op: "remove", Path: name, Err: err}
 	}
-	
+
 	if writeFS, ok := pfs.fs.(filesystem.WriteFS); ok {
 		return writeFS.Remove(resolved)
 	}
-	
+
 	return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrInvalid}
 }
 
@@ -150,11 +150,11 @@ func (pfs *PathAwareFileSystem) RemoveAll(name string) error {
 	if err != nil {
 		return &fs.PathError{Op: "removeall", Path: name, Err: err}
 	}
-	
+
 	if writeFS, ok := pfs.fs.(filesystem.WriteFS); ok {
 		return writeFS.RemoveAll(resolved)
 	}
-	
+
 	return &fs.PathError{Op: "removeall", Path: name, Err: fs.ErrInvalid}
 }
 
@@ -164,16 +164,16 @@ func (pfs *PathAwareFileSystem) Rename(oldpath, newpath string) error {
 	if err != nil {
 		return &fs.PathError{Op: "rename", Path: oldpath, Err: err}
 	}
-	
+
 	resolvedNew, err := pfs.resolvePath(newpath)
 	if err != nil {
 		return &fs.PathError{Op: "rename", Path: newpath, Err: err}
 	}
-	
+
 	if fullFS, ok := pfs.fs.(filesystem.FullFileSystem); ok {
 		return fullFS.Rename(resolvedOld, resolvedNew)
 	}
-	
+
 	return &fs.PathError{Op: "rename", Path: oldpath, Err: fs.ErrInvalid}
 }
 
@@ -185,7 +185,7 @@ func (pfs *PathAwareFileSystem) Symlink(oldname, newname string) error {
 	if err != nil {
 		return &fs.PathError{Op: "symlink", Path: newname, Err: err}
 	}
-	
+
 	// The target can be absolute or relative
 	// If it's relative, it's relative to the link's directory
 	targetPath := oldname
@@ -196,11 +196,11 @@ func (pfs *PathAwareFileSystem) Symlink(oldname, newname string) error {
 			return &fs.PathError{Op: "symlink", Path: oldname, Err: err}
 		}
 	}
-	
+
 	if fullFS, ok := pfs.fs.(filesystem.FullFileSystem); ok {
 		return fullFS.Symlink(targetPath, resolvedNew)
 	}
-	
+
 	return &fs.PathError{Op: "symlink", Path: newname, Err: fs.ErrInvalid}
 }
 
@@ -210,11 +210,11 @@ func (pfs *PathAwareFileSystem) Readlink(name string) (string, error) {
 	if err != nil {
 		return "", &fs.PathError{Op: "readlink", Path: name, Err: err}
 	}
-	
+
 	if fullFS, ok := pfs.fs.(filesystem.FullFileSystem); ok {
 		return fullFS.Readlink(resolved)
 	}
-	
+
 	return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrInvalid}
 }
 
@@ -225,7 +225,7 @@ func (pfs *PathAwareFileSystem) resolvePath(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	
+
 	// Now make it relative for the underlying filesystem
 	// The underlying FS expects relative paths from its root
 	rel, err := pfs.handler.MakeRelative(resolved)
@@ -238,7 +238,7 @@ func (pfs *PathAwareFileSystem) resolvePath(path string) (string, error) {
 			return "", err
 		}
 	}
-	
+
 	return rel, nil
 }
 

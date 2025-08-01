@@ -426,7 +426,7 @@ func TestOSFileSystem_SymlinkOperations(t *testing.T) {
 		if err == nil {
 			t.Fatal("Expected Symlink with absolute path outside root to fail")
 		}
-		
+
 		// The error should indicate the path is invalid
 		if !strings.Contains(err.Error(), "invalid") && !strings.Contains(err.Error(), "outside") {
 			t.Errorf("Expected error about invalid/outside path, got: %v", err)

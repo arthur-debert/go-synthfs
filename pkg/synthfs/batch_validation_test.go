@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
 func TestBatchCopyValidation(t *testing.T) {

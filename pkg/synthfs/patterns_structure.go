@@ -6,7 +6,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
-	
+
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
@@ -24,21 +24,21 @@ type StructureEntry struct {
 func ParseStructure(structure string) ([]StructureEntry, error) {
 	var entries []StructureEntry
 	lines := strings.Split(structure, "\n")
-	
+
 	// Track directory stack for path construction
 	dirStack := []string{}
 	lastDepth := -1
-	
+
 	for _, line := range lines {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		
+
 		// Count leading spaces/tabs to determine depth
 		// For tree-style format, we need to handle tree characters specially
 		depth := 0
 		hasTreeChars := strings.ContainsAny(line, "│├└")
-		
+
 		if hasTreeChars {
 			// For tree format, count the │ prefixes first
 			tempLine := line
@@ -64,7 +64,7 @@ func ParseStructure(structure string) ([]StructureEntry, error) {
 			// Normalize depth (4 spaces = 1 level)
 			depth = depth / 4
 		}
-		
+
 		// Adjust directory stack based on depth
 		if depth <= lastDepth {
 			// Pop directories to match depth
@@ -77,10 +77,10 @@ func ParseStructure(structure string) ([]StructureEntry, error) {
 			}
 		}
 		lastDepth = depth
-		
+
 		// Parse the line
 		trimmed := strings.TrimSpace(line)
-		
+
 		// Skip tree drawing characters (and their variations)
 		trimmed = strings.TrimPrefix(trimmed, "├── ")
 		trimmed = strings.TrimPrefix(trimmed, "└── ")
@@ -89,11 +89,11 @@ func ParseStructure(structure string) ([]StructureEntry, error) {
 		trimmed = strings.TrimPrefix(trimmed, "└──")
 		trimmed = strings.TrimPrefix(trimmed, "│")
 		trimmed = strings.TrimSpace(trimmed)
-		
+
 		if trimmed == "" {
 			continue
 		}
-		
+
 		// Check for symlink syntax: name -> target
 		isSymlink := false
 		target := ""
@@ -102,19 +102,19 @@ func ParseStructure(structure string) ([]StructureEntry, error) {
 			target = parts[1]
 			isSymlink = true
 		}
-		
+
 		// Check if it's a directory (ends with /)
 		isDir := strings.HasSuffix(trimmed, "/")
 		if isDir {
 			trimmed = strings.TrimSuffix(trimmed, "/")
 		}
-		
+
 		// Build full path
 		fullPath := trimmed
 		if len(dirStack) > 0 {
 			fullPath = filepath.Join(append(dirStack, trimmed)...)
 		}
-		
+
 		// Create entry
 		entry := StructureEntry{
 			Path:      fullPath,
@@ -123,19 +123,19 @@ func ParseStructure(structure string) ([]StructureEntry, error) {
 			IsSymlink: isSymlink,
 			Target:    target,
 		}
-		
+
 		if isDir {
 			entry.Mode = 0755
 		}
-		
+
 		entries = append(entries, entry)
-		
+
 		// Update directory stack AFTER creating the entry
 		if isDir {
 			dirStack = append(dirStack, trimmed)
 		}
 	}
-	
+
 	return entries, nil
 }
 
@@ -155,7 +155,7 @@ func (s *SynthFS) NewCreateStructureOperation(structure string, baseDir string) 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	id := s.idGen("create_structure", baseDir)
 	return &CreateStructureOperation{
 		id: id,
@@ -203,12 +203,12 @@ func (op *CreateStructureOperation) Conflicts() []OperationID {
 // Prerequisites returns prerequisites for the operation
 func (op *CreateStructureOperation) Prerequisites() []core.Prerequisite {
 	var prereqs []core.Prerequisite
-	
+
 	// Need base directory parent to exist
 	if op.baseDir != "" && op.baseDir != "." {
 		prereqs = append(prereqs, core.NewParentDirPrerequisite(op.baseDir))
 	}
-	
+
 	return prereqs
 }
 
@@ -274,12 +274,12 @@ func (op *CreateStructureOperation) Execute(ctx context.Context, fsys FileSystem
 	if !ok {
 		return fmt.Errorf("filesystem does not support write operations")
 	}
-	
+
 	// Sort entries: directories first, then files, then symlinks
 	// This ensures targets exist before symlinks are created
 	sortedEntries := make([]StructureEntry, len(op.entries))
 	copy(sortedEntries, op.entries)
-	
+
 	// Custom sort
 	for i := 0; i < len(sortedEntries)-1; i++ {
 		for j := i + 1; j < len(sortedEntries); j++ {
@@ -293,14 +293,14 @@ func (op *CreateStructureOperation) Execute(ctx context.Context, fsys FileSystem
 			}
 		}
 	}
-	
+
 	// Create entries
 	for _, entry := range sortedEntries {
 		fullPath := entry.Path
 		if op.baseDir != "" && op.baseDir != "." {
 			fullPath = filepath.Join(op.baseDir, entry.Path)
 		}
-		
+
 		if entry.IsSymlink {
 			// Create symlink
 			if fullFS, ok := fsys.(FullFileSystem); ok {
@@ -309,7 +309,7 @@ func (op *CreateStructureOperation) Execute(ctx context.Context, fsys FileSystem
 				if parent != "." && parent != "/" {
 					_ = writeFS.MkdirAll(parent, 0755)
 				}
-				
+
 				if err := fullFS.Symlink(entry.Target, fullPath); err != nil {
 					return fmt.Errorf("failed to create symlink %s -> %s: %w", fullPath, entry.Target, err)
 				}
@@ -328,7 +328,7 @@ func (op *CreateStructureOperation) Execute(ctx context.Context, fsys FileSystem
 			if parent != "." && parent != "/" {
 				_ = writeFS.MkdirAll(parent, 0755)
 			}
-			
+
 			// Get content if provided
 			content := entry.Content
 			// Try to find content by various path formats
@@ -346,13 +346,13 @@ func (op *CreateStructureOperation) Execute(ctx context.Context, fsys FileSystem
 					}
 				}
 			}
-			
+
 			if err := writeFS.WriteFile(fullPath, content, entry.Mode); err != nil {
 				return fmt.Errorf("failed to create file %s: %w", fullPath, err)
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -362,7 +362,7 @@ func (op *CreateStructureOperation) Validate(ctx context.Context, fsys FileSyste
 	if _, ok := fsys.(WriteFS); !ok {
 		return fmt.Errorf("filesystem does not support write operations")
 	}
-	
+
 	// Check for symlinks if needed
 	hasSymlinks := false
 	for _, entry := range op.entries {
@@ -371,13 +371,13 @@ func (op *CreateStructureOperation) Validate(ctx context.Context, fsys FileSyste
 			break
 		}
 	}
-	
+
 	if hasSymlinks {
 		if _, ok := fsys.(FullFileSystem); !ok {
 			return fmt.Errorf("filesystem does not support symlinks")
 		}
 	}
-	
+
 	return nil
 }
 
@@ -434,12 +434,12 @@ func (sb *StructureBuilder) Build() (Operation, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Add file content
 	for path, content := range sb.fileContent {
 		op.WithFileContent(path, content)
 	}
-	
+
 	return op, nil
 }
 

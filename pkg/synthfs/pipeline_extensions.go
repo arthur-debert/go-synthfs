@@ -27,7 +27,7 @@ func NewExecutablePipeline() ExecutablePipeline {
 func (ep *executablePipeline) Execute(ctx context.Context, fs FileSystem) (*Result, error) {
 	executor := NewExecutor()
 	result := executor.Run(ctx, ep, fs)
-	
+
 	// Enhanced error handling
 	ops := ep.Operations()
 	for i, opResult := range result.GetOperations() {
@@ -38,7 +38,7 @@ func (ep *executablePipeline) Execute(ctx context.Context, fs FileSystem) (*Resu
 					successfulOps = append(successfulOps, prevRes.OperationID)
 				}
 			}
-			
+
 			if i < len(ops) {
 				return result, &PipelineError{
 					FailedOp:      ops[i],
@@ -51,14 +51,14 @@ func (ep *executablePipeline) Execute(ctx context.Context, fs FileSystem) (*Resu
 			return result, opRes.Error
 		}
 	}
-	
+
 	return result, nil
 }
 
 // ExecuteWith runs the pipeline with a custom executor
 func (ep *executablePipeline) ExecuteWith(ctx context.Context, fs FileSystem, executor *Executor) (*Result, error) {
 	result := executor.Run(ctx, ep, fs)
-	
+
 	// Same error handling as Execute
 	ops := ep.Operations()
 	for i, opResult := range result.GetOperations() {
@@ -69,7 +69,7 @@ func (ep *executablePipeline) ExecuteWith(ctx context.Context, fs FileSystem, ex
 					successfulOps = append(successfulOps, prevRes.OperationID)
 				}
 			}
-			
+
 			if i < len(ops) {
 				return result, &PipelineError{
 					FailedOp:      ops[i],
@@ -82,6 +82,6 @@ func (ep *executablePipeline) ExecuteWith(ctx context.Context, fs FileSystem, ex
 			return result, opRes.Error
 		}
 	}
-	
+
 	return result, nil
 }

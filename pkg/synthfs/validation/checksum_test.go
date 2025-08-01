@@ -272,4 +272,3 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 	})
 }
-

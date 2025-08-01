@@ -182,12 +182,12 @@ func TestCopyMoveOperations_EdgeCases(t *testing.T) {
 
 	t.Run("Copy file to directory", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		// Create source file
 		if err := fs.WriteFile("source.txt", []byte("content"), 0644); err != nil {
 			t.Fatalf("Failed to write source.txt: %v", err)
 		}
-		
+
 		// Create target directory
 		if err := fs.MkdirAll("targetdir", 0755); err != nil {
 			t.Fatalf("Failed to create targetdir: %v", err)
@@ -216,7 +216,7 @@ func TestCopyMoveOperations_EdgeCases(t *testing.T) {
 
 	t.Run("Move file across directories", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		// Create source file in one directory
 		if err := fs.MkdirAll("dir1", 0755); err != nil {
 			t.Fatalf("Failed to create dir1: %v", err)
@@ -224,7 +224,7 @@ func TestCopyMoveOperations_EdgeCases(t *testing.T) {
 		if err := fs.WriteFile("dir1/file.txt", []byte("content"), 0644); err != nil {
 			t.Fatalf("Failed to write file: %v", err)
 		}
-		
+
 		// Create target directory
 		if err := fs.MkdirAll("dir2", 0755); err != nil {
 			t.Fatalf("Failed to create dir2: %v", err)
@@ -253,7 +253,7 @@ func TestCopyMoveOperations_EdgeCases(t *testing.T) {
 
 	t.Run("Copy directory validation", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		// Create source directory
 		if err := fs.MkdirAll("sourcedir", 0755); err != nil {
 			t.Fatalf("Failed to create sourcedir: %v", err)

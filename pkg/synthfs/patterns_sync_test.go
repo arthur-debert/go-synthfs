@@ -211,7 +211,7 @@ func TestSyncPatterns(t *testing.T) {
 		if err := filesys.MkdirAll("dst", 0755); err != nil {
 			t.Fatal(err)
 		}
-		
+
 		// Create older source file
 		if err := filesys.WriteFile("src/old.txt", []byte("old content"), 0644); err != nil {
 			t.Fatal(err)

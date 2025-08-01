@@ -7,8 +7,38 @@ import (
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
-// SimpleBatch provides a fluent API for building and executing multiple operations
-// This is a convenience wrapper that doesn't require a registry
+// SimpleBatch provides a fluent API for building and executing multiple operations.
+//
+// This is a convenience wrapper that doesn't require a registry and provides method
+// chaining for readable operation sequences. Operations are executed in the order
+// they were added, with automatic dependency resolution.
+//
+// Example usage:
+//
+//	fs := synthfs.NewOSFileSystem("/tmp")
+//	batch := synthfs.NewSimpleBatch(fs)
+//	
+//	err := batch.
+//		CreateDir("project", 0755).
+//		CreateDir("project/src", 0755).
+//		WriteFile("project/README.md", []byte("# My Project"), 0644).
+//		WriteFile("project/src/main.go", []byte("package main"), 0644).
+//		Copy("template.conf", "project/config.conf").
+//		Execute(ctx)
+//	
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//
+// For operations requiring rollback capability:
+//
+//	result, err := batch.ExecuteWithRollback(ctx)
+//	if err != nil && result.Rollback != nil {
+//		rollbackErr := result.Rollback(ctx)
+//		if rollbackErr != nil {
+//			log.Printf("Rollback failed: %v", rollbackErr)
+//		}
+//	}
 type SimpleBatch struct {
 	fs         filesystem.FileSystem
 	operations []Operation
@@ -84,7 +114,7 @@ func (sb *SimpleBatch) ExecuteWithRollback() error {
 	if err == nil {
 		return nil
 	}
-	
+
 	// Determine which operations succeeded
 	var successfulOps []Operation
 	if result != nil {
@@ -96,10 +126,10 @@ func (sb *SimpleBatch) ExecuteWithRollback() error {
 			}
 		}
 	}
-	
+
 	// Attempt rollback of successful operations only
 	rollbackErrs := make(map[OperationID]error)
-	
+
 	// Roll back successful operations in reverse order
 	for i := len(successfulOps) - 1; i >= 0; i-- {
 		op := successfulOps[i]
@@ -108,14 +138,14 @@ func (sb *SimpleBatch) ExecuteWithRollback() error {
 			rollbackErrs[op.ID()] = rollbackErr
 		}
 	}
-	
+
 	if len(rollbackErrs) > 0 {
 		return &RollbackError{
 			OriginalErr:  err,
 			RollbackErrs: rollbackErrs,
 		}
 	}
-	
+
 	return err
 }
 

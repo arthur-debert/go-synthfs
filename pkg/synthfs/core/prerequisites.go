@@ -8,9 +8,9 @@ import (
 
 // Prerequisite represents a condition that must be met before an operation executes
 type Prerequisite interface {
-	Type() string                         // "parent_dir", "no_conflict", "source_exists"
-	Path() string                         // Path this prerequisite relates to
-	Validate(fsys interface{}) error      // Check if prerequisite is satisfied
+	Type() string                    // "parent_dir", "no_conflict", "source_exists"
+	Path() string                    // Path this prerequisite relates to
+	Validate(fsys interface{}) error // Check if prerequisite is satisfied
 }
 
 // PrerequisiteResolver can create operations to satisfy prerequisites
@@ -51,7 +51,9 @@ func (p *ParentDirPrerequisite) Validate(fsys interface{}) error {
 	}
 
 	// Try different filesystem interfaces
-	if stat, ok := fsys.(interface{ Stat(string) (interface{}, error) }); ok {
+	if stat, ok := fsys.(interface {
+		Stat(string) (interface{}, error)
+	}); ok {
 		if info, err := stat.Stat(parentPath); err != nil {
 			return fmt.Errorf("parent directory %s does not exist", parentPath)
 		} else {
@@ -90,7 +92,9 @@ func (p *NoConflictPrerequisite) Path() string {
 
 func (p *NoConflictPrerequisite) Validate(fsys interface{}) error {
 	// Try different filesystem interfaces
-	if stat, ok := fsys.(interface{ Stat(string) (interface{}, error) }); ok {
+	if stat, ok := fsys.(interface {
+		Stat(string) (interface{}, error)
+	}); ok {
 		if _, err := stat.Stat(p.path); err == nil {
 			return fmt.Errorf("path %s already exists", p.path)
 		}
@@ -123,7 +127,9 @@ func (p *SourceExistsPrerequisite) Path() string {
 
 func (p *SourceExistsPrerequisite) Validate(fsys interface{}) error {
 	// Try different filesystem interfaces
-	if stat, ok := fsys.(interface{ Stat(string) (interface{}, error) }); ok {
+	if stat, ok := fsys.(interface {
+		Stat(string) (interface{}, error)
+	}); ok {
 		if _, err := stat.Stat(p.path); err != nil {
 			return fmt.Errorf("source path %s does not exist", p.path)
 		}

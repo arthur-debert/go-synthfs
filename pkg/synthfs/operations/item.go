@@ -24,4 +24,4 @@ func (m *MinimalItem) Content() []byte {
 
 func (m *MinimalItem) Mode() fs.FileMode {
 	return m.mode
-} 
+}

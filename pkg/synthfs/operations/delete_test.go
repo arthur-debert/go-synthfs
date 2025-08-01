@@ -67,7 +67,7 @@ func TestDeleteOperation_ReverseOps(t *testing.T) {
 
 	t.Run("delete directory with content, sufficient budget", func(t *testing.T) {
 		fs := NewExtendedMockFilesystem()
-		
+
 		// Setup directory structure
 		if err := fs.MkdirAll("dir1", 0755); err != nil {
 			t.Fatalf("Failed to create dir1: %v", err)
@@ -225,7 +225,7 @@ func TestDeleteOperation_ReverseOps_WithReadDir(t *testing.T) {
 
 	t.Run("delete directory with content", func(t *testing.T) {
 		fs := NewExtendedMockFilesystem()
-		
+
 		// Setup directory structure
 		if err := fs.MkdirAll("dir1", 0755); err != nil {
 			t.Fatalf("Failed to create dir1: %v", err)
@@ -265,7 +265,7 @@ func TestDeleteOperation_ReverseOps_WithReadDir(t *testing.T) {
 		if !ok {
 			t.Fatal("Expected items to be []interface{}")
 		}
-		
+
 		// Should have: dir1 (.), file1.txt, subdir, subdir/file2.txt, file3.txt
 		if len(items) != 5 {
 			t.Errorf("Expected 5 items, got %d", len(items))

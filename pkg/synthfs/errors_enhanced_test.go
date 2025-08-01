@@ -17,13 +17,13 @@ func TestOperationError(t *testing.T) {
 			Action: "create file",
 			Err:    errors.New("permission denied"),
 		}
-		
+
 		expected := "failed to create file '/tmp/test.txt': permission denied (operation: create_file-abc123)"
 		if err.Error() != expected {
 			t.Errorf("Expected error message:\n%s\nGot:\n%s", expected, err.Error())
 		}
 	})
-	
+
 	t.Run("Error with context", func(t *testing.T) {
 		err := &OperationError{
 			Op:     "create_dir",
@@ -33,7 +33,7 @@ func TestOperationError(t *testing.T) {
 			Err:    errors.New("disk full"),
 		}
 		err = err.WithContext("mode", "0755").WithContext("parent", "/tmp")
-		
+
 		msg := err.Error()
 		if !strings.Contains(msg, "disk full") {
 			t.Error("Error message should contain underlying error")
@@ -46,7 +46,7 @@ func TestOperationError(t *testing.T) {
 			t.Error("Error message should contain context")
 		}
 	})
-	
+
 	t.Run("Unwrap", func(t *testing.T) {
 		baseErr := errors.New("base error")
 		err := &OperationError{
@@ -56,7 +56,7 @@ func TestOperationError(t *testing.T) {
 			Action: "delete",
 			Err:    baseErr,
 		}
-		
+
 		if errors.Unwrap(err) != baseErr {
 			t.Error("Unwrap should return the base error")
 		}
@@ -72,7 +72,7 @@ func TestPipelineError(t *testing.T) {
 			Action: "create file",
 			Err:    errors.New("permission denied"),
 		}
-		
+
 		pipelineErr := &PipelineError{
 			FailedOp:      nil, // Would be the actual operation in real use
 			FailedIndex:   3,
@@ -80,19 +80,19 @@ func TestPipelineError(t *testing.T) {
 			Err:           baseErr,
 			SuccessfulOps: []core.OperationID{"create_dir-1", "create_file-2"},
 		}
-		
+
 		msg := pipelineErr.Error()
-		
+
 		// Check main error message
 		if !strings.Contains(msg, "Pipeline execution failed at operation 3 of 5") {
 			t.Error("Error should indicate which operation failed")
 		}
-		
+
 		// Check it includes the underlying error
 		if !strings.Contains(msg, "permission denied") {
 			t.Error("Error should include underlying error message")
 		}
-		
+
 		// Check successful operations are listed
 		if !strings.Contains(msg, "Previous successful operations:") {
 			t.Error("Error should list successful operations")
@@ -104,7 +104,7 @@ func TestPipelineError(t *testing.T) {
 			t.Error("Error should list second successful operation")
 		}
 	})
-	
+
 	t.Run("Pipeline error without successful ops", func(t *testing.T) {
 		pipelineErr := &PipelineError{
 			FailedOp:      nil,
@@ -113,7 +113,7 @@ func TestPipelineError(t *testing.T) {
 			Err:           errors.New("failed immediately"),
 			SuccessfulOps: nil,
 		}
-		
+
 		msg := pipelineErr.Error()
 		if strings.Contains(msg, "Previous successful operations:") {
 			t.Error("Should not mention successful operations when there are none")
@@ -127,18 +127,18 @@ func TestRollbackError(t *testing.T) {
 		rollbackErr := &RollbackError{
 			OriginalErr: originalErr,
 			RollbackErrs: map[core.OperationID]error{
-				"remove-dir-xyz": errors.New("directory not empty"),
+				"remove-dir-xyz":  errors.New("directory not empty"),
 				"remove-file-abc": errors.New("file locked"),
 			},
 		}
-		
+
 		msg := rollbackErr.Error()
-		
+
 		// Check original error is included
 		if !strings.Contains(msg, "Operation failed: disk full") {
 			t.Error("Should include original error")
 		}
-		
+
 		// Check rollback failures are listed
 		if !strings.Contains(msg, "Rollback also failed:") {
 			t.Error("Should indicate rollback failed")
@@ -150,14 +150,14 @@ func TestRollbackError(t *testing.T) {
 			t.Error("Should list second rollback error")
 		}
 	})
-	
+
 	t.Run("Rollback error unwrap", func(t *testing.T) {
 		originalErr := errors.New("original error")
 		rollbackErr := &RollbackError{
 			OriginalErr:  originalErr,
 			RollbackErrs: make(map[core.OperationID]error),
 		}
-		
+
 		if errors.Unwrap(rollbackErr) != originalErr {
 			t.Error("Unwrap should return the original error")
 		}
@@ -232,12 +232,12 @@ func TestGetOperationAction(t *testing.T) {
 		{"mkdir", "create directory"},
 		{"unknown_op", "unknown_op"},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.opType, func(t *testing.T) {
 			action := getOperationAction(tt.opType)
 			if action != tt.expected {
-				t.Errorf("Expected action '%s' for op type '%s', got: %s", 
+				t.Errorf("Expected action '%s' for op type '%s', got: %s",
 					tt.expected, tt.opType, action)
 			}
 		})

@@ -41,7 +41,7 @@ func TestCreateFileValidation(t *testing.T) {
 	t.Run("ValidateCreateFile with wrong item type", func(t *testing.T) {
 		fs := NewMockFilesystem()
 		op := operations.NewCreateFileOperation(core.OperationID("test-op"), "test/file.txt")
-		
+
 		// Set wrong item type (directory instead of file)
 		dirItem := &TestDirItem{
 			path: "test/dir",
@@ -83,7 +83,7 @@ func TestCreateDirectoryValidation(t *testing.T) {
 	t.Run("ValidateCreateDirectory with wrong item type", func(t *testing.T) {
 		fs := NewMockFilesystem()
 		op := operations.NewCreateDirectoryOperation(core.OperationID("test-op"), "test/dir")
-		
+
 		// Set wrong item type (file instead of directory)
 		fileItem := &TestFileItem{
 			path:    "test/file.txt",

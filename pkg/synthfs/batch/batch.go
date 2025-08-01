@@ -440,14 +440,14 @@ func (b *BatchImpl) Run() (interface{}, error) {
 // RunWithOptions runs all operations in the batch with specified options.
 func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 	startTime := time.Now()
-	
+
 	// Extract options and convert to core.PipelineOptions
 	pipelineOpts := core.PipelineOptions{
 		Restorable:           false,
 		MaxBackupSizeMB:      10,
 		ResolvePrerequisites: true, // Always enabled
 	}
-	
+
 	if optsMap, ok := opts.(map[string]interface{}); ok {
 		if r, ok := optsMap["restorable"].(bool); ok {
 			pipelineOpts.Restorable = r
@@ -456,7 +456,7 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 			pipelineOpts.MaxBackupSizeMB = mb
 		}
 	}
-	
+
 	// Log the start of execution
 	if b.logger != nil {
 		b.logger.Info().
@@ -466,7 +466,7 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 			Bool("resolve_prerequisites", pipelineOpts.ResolvePrerequisites).
 			Msg("executing batch")
 	}
-	
+
 	// If no operations, return successful empty result
 	if len(b.operations) == 0 {
 		duration := time.Since(startTime)
@@ -477,11 +477,11 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 				Int("operations_executed", 0).
 				Msg("batch execution completed")
 		}
-		
+
 		batchResult := NewResult(true, b.operations, []interface{}{}, duration, nil)
 		return batchResult, nil
 	}
-	
+
 	// Create executor and pipeline using execution package
 	loggerToUse := b.logger
 	if loggerToUse == nil {
@@ -489,33 +489,33 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 		loggerToUse = &noOpLogger{}
 	}
 	executor := execution.NewExecutor(loggerToUse)
-	
+
 	// Create pipeline adapter
 	pipeline := &pipelineAdapter{operations: b.operations, logger: loggerToUse}
-	
+
 	// Create prerequisite resolver (always enabled)
 	prereqResolver := execution.NewPrerequisiteResolver(b.registry, loggerToUse)
 	if b.logger != nil {
 		b.logger.Info().Msg("created prerequisite resolver with operation factory")
 	}
-	
+
 	// Execute using the execution package with prerequisite resolver
 	coreResult := executor.RunWithOptionsAndResolver(b.ctx, pipeline, b.fs, pipelineOpts, prereqResolver)
-	
+
 	duration := time.Since(startTime)
-	
+
 	// Convert core.Result back to our interface{} result
 	var executionError error
 	if !coreResult.Success && len(coreResult.Errors) > 0 {
 		executionError = coreResult.Errors[0] // Take first error
 	}
-	
-	// Extract restore operations 
+
+	// Extract restore operations
 	var restoreOps []interface{}
 	if coreResult.RestoreOps != nil {
 		restoreOps = coreResult.RestoreOps
 	}
-	
+
 	if b.logger != nil {
 		b.logger.Info().
 			Bool("success", coreResult.Success).
@@ -524,13 +524,13 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 			Int("restore_operations", len(restoreOps)).
 			Msg("batch execution completed")
 	}
-	
+
 	// Convert execution package results to interface{} slice
 	var operationResults []interface{}
 	for _, opResult := range coreResult.Operations {
 		operationResults = append(operationResults, opResult)
 	}
-	
+
 	// Convert to batch result interface
 	batchResult := NewResultWithBudgetAndRollback(
 		coreResult.Success,
@@ -541,7 +541,7 @@ func (b *BatchImpl) RunWithOptions(opts interface{}) (interface{}, error) {
 		coreResult.Budget,
 		coreResult.Rollback,
 	)
-	
+
 	return batchResult, nil
 }
 
@@ -637,10 +637,10 @@ func (pa *pipelineAdapter) Resolve() error {
 			logger = &noOpLogger{}
 		}
 		pa.pipeline = execution.NewMemPipeline(logger)
-		
+
 		// Add all operations to the pipeline, wrapping them if needed
 		for _, op := range pa.operations {
-			
+
 			// Check if operation already implements OperationInterface
 			if _, ok := op.(execution.OperationInterface); ok {
 				if err := pa.pipeline.Add(op); err != nil {
@@ -666,10 +666,10 @@ func (pa *pipelineAdapter) ResolvePrerequisites(resolver core.PrerequisiteResolv
 			logger = &noOpLogger{}
 		}
 		pa.pipeline = execution.NewMemPipeline(logger)
-		
+
 		// Add all operations to the pipeline, wrapping them if needed
 		for _, op := range pa.operations {
-			
+
 			// Check if operation already implements OperationInterface
 			if _, ok := op.(execution.OperationInterface); ok {
 				if err := pa.pipeline.Add(op); err != nil {
@@ -695,10 +695,10 @@ func (pa *pipelineAdapter) Validate(ctx context.Context, fs interface{}) error {
 			logger = &noOpLogger{}
 		}
 		pa.pipeline = execution.NewMemPipeline(logger)
-		
+
 		// Add all operations to the pipeline, wrapping them if needed
 		for _, op := range pa.operations {
-			
+
 			// Check if operation already implements OperationInterface
 			if _, ok := op.(execution.OperationInterface); ok {
 				if err := pa.pipeline.Add(op); err != nil {
@@ -769,33 +769,41 @@ func (oa *operationAdapter) AddDependency(dep core.OperationID) {
 
 func (oa *operationAdapter) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	// Try ExecuteV2 first
-	if op, ok := oa.op.(interface{ ExecuteV2(interface{}, *core.ExecutionContext, interface{}) error }); ok {
+	if op, ok := oa.op.(interface {
+		ExecuteV2(interface{}, *core.ExecutionContext, interface{}) error
+	}); ok {
 		return op.ExecuteV2(ctx, execCtx, fsys)
 	}
-	
+
 	// Fallback to Execute if available
-	if op, ok := oa.op.(interface{ Execute(context.Context, interface{}) error }); ok {
+	if op, ok := oa.op.(interface {
+		Execute(context.Context, interface{}) error
+	}); ok {
 		if ctxTyped, ok := ctx.(context.Context); ok {
 			return op.Execute(ctxTyped, fsys)
 		}
 	}
-	
+
 	return fmt.Errorf("operation does not implement ExecuteV2 or Execute methods")
 }
 
 func (oa *operationAdapter) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	// Try ValidateV2 first
-	if op, ok := oa.op.(interface{ ValidateV2(interface{}, *core.ExecutionContext, interface{}) error }); ok {
+	if op, ok := oa.op.(interface {
+		ValidateV2(interface{}, *core.ExecutionContext, interface{}) error
+	}); ok {
 		return op.ValidateV2(ctx, execCtx, fsys)
 	}
-	
+
 	// Fallback to Validate if available
-	if op, ok := oa.op.(interface{ Validate(context.Context, interface{}) error }); ok {
+	if op, ok := oa.op.(interface {
+		Validate(context.Context, interface{}) error
+	}); ok {
 		if ctxTyped, ok := ctx.(context.Context); ok {
 			return op.Validate(ctxTyped, fsys)
 		}
 	}
-	
+
 	return nil // No validation available
 }
 
@@ -803,7 +811,7 @@ func (oa *operationAdapter) ReverseOps(ctx context.Context, fsys interface{}, bu
 	// Use reflection to call ReverseOps dynamically
 	opValue := reflect.ValueOf(oa.op)
 	method := opValue.MethodByName("ReverseOps")
-	
+
 	if method.IsValid() {
 		// Call the method with appropriate arguments
 		args := []reflect.Value{
@@ -811,7 +819,7 @@ func (oa *operationAdapter) ReverseOps(ctx context.Context, fsys interface{}, bu
 			reflect.ValueOf(fsys),
 			reflect.ValueOf(budget),
 		}
-		
+
 		results := method.Call(args)
 		if len(results) == 3 {
 			// Extract the results
@@ -823,27 +831,29 @@ func (oa *operationAdapter) ReverseOps(ctx context.Context, fsys interface{}, bu
 					reverseOps = append(reverseOps, slice.Index(i).Interface())
 				}
 			}
-			
+
 			var backupData *core.BackupData
 			if !results[1].IsNil() {
 				if bd, ok := results[1].Interface().(*core.BackupData); ok {
 					backupData = bd
 				}
 			}
-			
+
 			var err error
 			if !results[2].IsNil() {
 				if e, ok := results[2].Interface().(error); ok {
 					err = e
 				}
 			}
-			
+
 			return reverseOps, backupData, err
 		}
 	}
-	
+
 	// Fallback: Try the interface{} budget signature (used by operations package)
-	if op, ok := oa.op.(interface{ ReverseOps(context.Context, interface{}, interface{}) ([]interface{}, interface{}, error) }); ok {
+	if op, ok := oa.op.(interface {
+		ReverseOps(context.Context, interface{}, interface{}) ([]interface{}, interface{}, error)
+	}); ok {
 		reverseOps, backupData, err := op.ReverseOps(ctx, fsys, budget)
 		// Convert backupData from interface{} to *core.BackupData
 		if backupData != nil {
@@ -853,12 +863,14 @@ func (oa *operationAdapter) ReverseOps(ctx context.Context, fsys interface{}, bu
 		}
 		return reverseOps, nil, err
 	}
-	
+
 	return nil, nil, nil
 }
 
 func (oa *operationAdapter) Rollback(ctx context.Context, fsys interface{}) error {
-	if op, ok := oa.op.(interface{ Rollback(context.Context, interface{}) error }); ok {
+	if op, ok := oa.op.(interface {
+		Rollback(context.Context, interface{}) error
+	}); ok {
 		return op.Rollback(ctx, fsys)
 	}
 	return nil
@@ -888,12 +900,11 @@ func (l *noOpLogger) Error() core.LogEvent { return &noOpLogEvent{} }
 
 type noOpLogEvent struct{}
 
-func (e *noOpLogEvent) Str(key, val string) core.LogEvent             { return e }
-func (e *noOpLogEvent) Int(key string, val int) core.LogEvent         { return e }
-func (e *noOpLogEvent) Bool(key string, val bool) core.LogEvent       { return e }
-func (e *noOpLogEvent) Dur(key string, val interface{}) core.LogEvent { return e }
+func (e *noOpLogEvent) Str(key, val string) core.LogEvent                   { return e }
+func (e *noOpLogEvent) Int(key string, val int) core.LogEvent               { return e }
+func (e *noOpLogEvent) Bool(key string, val bool) core.LogEvent             { return e }
+func (e *noOpLogEvent) Dur(key string, val interface{}) core.LogEvent       { return e }
 func (e *noOpLogEvent) Interface(key string, val interface{}) core.LogEvent { return e }
-func (e *noOpLogEvent) Err(err error) core.LogEvent                   { return e }
-func (e *noOpLogEvent) Float64(key string, val float64) core.LogEvent { return e }
-func (e *noOpLogEvent) Msg(msg string)                                {}
-
+func (e *noOpLogEvent) Err(err error) core.LogEvent                         { return e }
+func (e *noOpLogEvent) Float64(key string, val float64) core.LogEvent       { return e }
+func (e *noOpLogEvent) Msg(msg string)                                      {}

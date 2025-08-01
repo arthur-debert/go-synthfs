@@ -52,32 +52,32 @@ func (r *DefaultPrerequisiteResolver) Resolve(prereq core.Prerequisite) ([]inter
 // resolveParentDir creates a directory creation operation for parent directory prerequisite
 func (r *DefaultPrerequisiteResolver) resolveParentDir(prereq core.Prerequisite) ([]interface{}, error) {
 	path := prereq.Path()
-	
+
 	// Skip if it's root or current directory
 	if path == "" || path == "." || path == "/" {
 		return nil, nil
 	}
-	
+
 	// Create a unique operation ID for the parent directory creation
 	opID := core.OperationID(fmt.Sprintf("auto_mkdir_%s", generatePathID(path)))
-	
+
 	// Create directory operation using the factory
 	op, err := r.opFactory.CreateOperation(opID, "create_directory", path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create directory operation for %s: %w", path, err)
 	}
-	
+
 	// Create directory item using the same approach as batch
 	dirItem := &DirectoryItem{
 		path: path,
 		mode: fs.FileMode(0755), // Default directory permissions
 	}
-	
+
 	// Set the item on the operation
 	if err := r.opFactory.SetItemForOperation(op, dirItem); err != nil {
 		return nil, fmt.Errorf("failed to set item for directory operation: %w", err)
 	}
-	
+
 	return []interface{}{op}, nil
 }
 

@@ -1,0 +1,364 @@
+Simple API Migration Guide
+
+	The Simple API provides convenient, high-level functions for common filesystem operations, reducing boilerplate while maintaining the power of SynthFS's lazy evaluation and validation.
+
+
+1. Overview of API Layers
+
+	SynthFS now offers multiple abstraction levels to match your use case:
+
+	1.1. Direct Functions - Single operations without ceremony
+		WriteFile(), MkdirAll(), Remove() - Execute immediately
+
+	1.2. Sequential Execution - Multiple operations in order  
+		Run() - Execute operations with automatic dependency resolution
+
+	1.3. Fluent Batch API - Method chaining for readable workflows
+		SimpleBatch - Chain operations with .CreateDir().WriteFile().Execute()
+
+	1.4. Smart Pipeline Builder - Auto-dependency detection
+		BuildPipeline() - Automatically resolves operation dependencies
+
+	1.5. Low-level Operations API - Full control for complex scenarios
+		Original Operations + Pipeline + Executor pattern (unchanged)
+
+
+2. Migration Examples
+
+	2.1. Single File Creation
+
+		Before (Low-level):
+			target := &targets.FileItem{
+				Path: "/tmp/test.txt",
+				Content: []byte("hello world"),
+				Mode: 0644,
+			}
+			op := operations.NewCreateFileOperation("create-file-1", target)
+			pipeline := synthfs.NewPipeline()
+			pipeline.Add(op)
+			executor := synthfs.NewExecutor()
+			result, err := executor.Execute(ctx, pipeline, fs)
+
+		After (Direct function):
+			err := synthfs.WriteFile(ctx, fs, "/tmp/test.txt", []byte("hello world"), 0644)
+
+	2.2. Multiple Related Operations
+
+		Before (Low-level):
+			dirOp := operations.NewCreateDirectoryOperation("create-dir-1", &targets.DirectoryItem{
+				Path: "/tmp/project",
+				Mode: 0755,
+			})
+			fileOp := operations.NewCreateFileOperation("create-file-1", &targets.FileItem{
+				Path: "/tmp/project/config.json",
+				Content: []byte("{}"),
+				Mode: 0644,
+			})
+			pipeline := synthfs.NewPipeline()
+			pipeline.Add(dirOp)
+			pipeline.Add(fileOp)
+			pipeline.AddDependency(fileOp.ID(), dirOp.ID())
+			executor := synthfs.NewExecutor()
+			result, err := executor.Execute(ctx, pipeline, fs)
+
+		After (Sequential execution):
+			sfs := synthfs.New()
+			result, err := synthfs.Run(ctx, fs,
+				sfs.CreateDir("/tmp/project", 0755),
+				sfs.CreateFile("/tmp/project/config.json", []byte("{}"), 0644),
+			)
+
+		Or (Fluent batch):
+			batch := synthfs.NewSimpleBatch(fs)
+			err := batch.
+				CreateDir("/tmp/project", 0755).
+				WriteFile("/tmp/project/config.json", []byte("{}"), 0644).
+				Execute(ctx)
+
+	2.3. Complex Directory Operations
+
+		Before (Manual implementation):
+			// Complex custom code to walk directory tree
+			// Create individual operations for each file/directory
+			// Manage dependencies manually
+			// 50+ lines of boilerplate
+
+		After (Common patterns):
+			err := synthfs.CopyTree(ctx, fs, "/source/dir", "/dest/dir")
+
+			// Or with options:
+			result, err := synthfs.CopyTree("/source", "/dest").
+				WithFilter(func(path string, info os.FileInfo) bool {
+					return !strings.HasPrefix(info.Name(), ".")
+				}).
+				PreservePermissions().
+				Execute(ctx, fs)
+
+
+3. API Decision Guide
+
+	Choose the right abstraction level for your needs:
+
+	3.1. Use Direct Functions When:
+		- Single, standalone operations
+		- Simple error handling is sufficient
+		- You want minimal code overhead
+
+		Examples: WriteFile(), MkdirAll(), Remove()
+
+	3.2. Use Sequential Execution When:
+		- Multiple operations that depend on each other
+		- Operations need to run in a specific order
+		- You want automatic dependency resolution
+
+		Examples: Run(ctx, fs, op1, op2, op3)
+
+	3.3. Use Fluent Batch API When:
+		- Building workflows programmatically
+		- You prefer method chaining syntax
+		- Operations are primarily creates/writes
+
+		Examples: SimpleBatch with chained calls
+
+	3.4. Use Pipeline Builder When:
+		- Complex dependency relationships
+		- Need fine control over execution order
+		- Want automatic dependency detection
+
+		Examples: BuildPipeline(ops...).Execute(ctx, fs)
+
+	3.5. Use Low-level API When:
+		- Custom operation types needed
+		- Advanced execution control required
+		- Integration with existing complex workflows
+
+		Examples: Custom Operation implementations
+
+
+4. Common Migration Patterns
+
+	4.1. Directory Structure Creation
+
+		Before:
+			ops := []synthfs.Operation{}
+			for _, path := range paths {
+				op := operations.NewCreateDirectoryOperation(
+					generateID(), 
+					&targets.DirectoryItem{Path: path, Mode: 0755},
+				)
+				ops = append(ops, op)
+			}
+			// Add to pipeline, manage dependencies...
+
+		After:
+			batch := synthfs.NewSimpleBatch(fs)
+			for _, path := range paths {
+				batch.CreateDir(path, 0755)
+			}
+			err := batch.Execute(ctx)
+
+	4.2. File Template Processing
+
+		Before:
+			// Custom template processing code
+			// Manual file creation operations
+			// Template parsing and rendering
+
+		After:
+			data := map[string]interface{}{"name": "project"}
+			err := synthfs.WriteTemplate(ctx, fs, "config.json.tmpl", "config.json", data)
+
+	4.3. Directory Synchronization
+
+		Before:
+			// Complex custom sync logic
+			// File comparison algorithms
+			// Manual delete/update operations
+
+		After:
+			result, err := synthfs.Sync("/source", "/dest").
+				DeleteExtra().
+				UpdateNewer().
+				Execute(ctx, fs)
+
+
+5. Path Handling Improvements
+
+	5.1. Automatic Path Resolution
+
+		The new API automatically handles both absolute and relative paths:
+
+		fs := synthfs.NewOSFileSystem("/base/path")
+		
+		// All of these work intuitively:
+		synthfs.WriteFile(ctx, fs, "/absolute/path/file.txt", data, 0644)
+		synthfs.WriteFile(ctx, fs, "relative/path/file.txt", data, 0644)
+		synthfs.WriteFile(ctx, fs, "./relative/file.txt", data, 0644)
+
+	5.2. Path Mode Control
+
+		For explicit control over path handling:
+
+		// Force absolute paths only
+		fs := synthfs.NewOSFileSystem("/").WithAbsolutePaths()
+
+		// Force relative paths with base
+		fs := synthfs.NewOSFileSystem("/base").WithRelativePaths()
+
+		// Default: smart auto-detection
+		fs := synthfs.NewOSFileSystem("/base").WithAutoDetectPaths()
+
+
+6. Error Handling Improvements
+
+	6.1. Enhanced Error Context
+
+		The new API provides richer error information:
+
+		Before:
+			mkdir /path: permission denied
+
+		After:
+			failed to create directory '/path': permission denied (operation: create-dir-abc123)
+
+	6.2. Pipeline Error Reporting
+
+		When operations fail in batches or pipelines:
+
+		Pipeline execution failed at operation 3 of 5:
+		  failed to create file '/tmp/test.txt': disk full (operation: create-file-xyz789)
+		
+		Previous successful operations:
+		  1. create-dir-abc123: /tmp
+		  2. create-file-def456: /tmp/config.json
+
+
+7. ID Generation
+
+	7.1. Automatic ID Generation
+
+		Operations now generate IDs automatically:
+
+		// Auto-generated ID (default)
+		op := sfs.CreateFile(path, content, 0644)
+		fmt.Println(op.ID()) // "create-file-a1b2c3d4"
+
+	7.2. Explicit ID Control
+
+		When you need specific IDs:
+
+		op := sfs.CreateFileWithID("my-custom-id", path, content, 0644)
+
+	7.3. ID Generation Strategies
+
+		Configure ID generation globally:
+
+		// Use sequence-based IDs (good for testing)
+		sfs := synthfs.New().WithIDGenerator(synthfs.SequenceIDGenerator)
+
+		// Use timestamp-based IDs
+		sfs := synthfs.New().WithIDGenerator(synthfs.TimestampIDGenerator)
+
+
+8. Performance Considerations
+
+	8.1. Direct Functions
+		- Minimal overhead
+		- Immediate execution
+		- No dependency resolution
+
+	8.2. Batch Operations
+		- Slight overhead for batch management
+		- Automatic dependency resolution
+		- Optimized execution order
+
+	8.3. Pipeline Operations
+		- Full dependency analysis overhead
+		- Maximum flexibility and control
+		- Best for complex workflows
+
+	8.4. Common Patterns
+		- Optimized implementations
+		- Built-in best practices
+		- May have higher initial overhead but better performance for complex operations
+
+
+9. Testing Considerations
+
+	9.1. Deterministic IDs for Testing
+
+		Use sequence-based ID generation for predictable tests:
+
+		sfs := synthfs.New().WithIDGenerator(synthfs.SequenceIDGenerator)
+		op := sfs.CreateFile(path, content, 0644)
+		assert.Equal(t, "create-file-1", op.ID())
+
+	9.2. Mock Filesystem Integration
+
+		All API levels work with mock filesystems:
+
+		mockFS := testutil.NewMockFS()
+		err := synthfs.WriteFile(ctx, mockFS, "/test", data, 0644)
+		assert.NoError(t, err)
+		assert.True(t, mockFS.Exists("/test"))
+
+	9.3. Error Testing
+
+		Enhanced errors make testing more specific:
+
+		err := synthfs.WriteFile(ctx, fs, "/readonly/file", data, 0644)
+		var opErr *synthfs.OperationError
+		if errors.As(err, &opErr) {
+			assert.Equal(t, "create_file", opErr.Op)
+			assert.Equal(t, "/readonly/file", opErr.Path)
+		}
+
+
+10. Troubleshooting Guide
+
+	10.1. Common Issues and Solutions
+
+		Issue: "Operation ID cannot be empty"
+		Solution: Use auto-generated IDs or provide valid explicit IDs
+
+		Issue: "Path escapes filesystem root"
+		Solution: Check path mode settings and ensure paths are within bounds
+
+		Issue: "Pipeline execution failed at operation X of Y"
+		Solution: Review the listed successful operations to understand failure context
+
+	10.2. Migration Pitfalls
+
+		Pitfall: Trying to mix old and new APIs in the same workflow
+		Solution: Choose one abstraction level and stick with it
+
+		Pitfall: Not handling enhanced error types
+		Solution: Update error handling to use error wrapping and type assertions
+
+		Pitfall: Assuming direct functions have rollback capability
+		Solution: Use batch operations or pipelines when rollback is needed
+
+
+11. Best Practices
+
+	11.1. API Selection
+		- Start with the simplest API that meets your needs
+		- Use direct functions for single operations
+		- Use batches for related operations
+		- Use low-level API only when necessary
+
+	11.2. Error Handling
+		- Always check for enhanced error types when debugging
+		- Use structured logging to capture operation context
+		- Provide user-friendly error messages based on operation details
+
+	11.3. Path Handling
+		- Use auto-detection mode for most applications
+		- Be explicit about path modes in security-sensitive contexts
+		- Always validate user-provided paths
+
+	11.4. Testing
+		- Use deterministic ID generators in tests
+		- Test with mock filesystems for unit tests
+		- Test with real filesystems for integration tests
+		- Verify error conditions and messages

@@ -139,7 +139,6 @@ func TestUnarchiveValidation(t *testing.T) {
 	})
 }
 
-
 func TestUnarchiveIntegration(t *testing.T) {
 	// Create temporary directory for test
 	tempDir := t.TempDir()

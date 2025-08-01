@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
 func TestBatchExecution(t *testing.T) {
@@ -57,7 +57,7 @@ func TestBatchExecution(t *testing.T) {
 			// Handle both synthfs.OperationResult and core.OperationResult
 			var opType, opPath string
 			var status core.OperationStatus
-			
+
 			switch v := opResult.(type) {
 			case synthfs.OperationResult:
 				if op, ok := v.Operation.(interface{ Describe() core.OperationDesc }); ok {
@@ -84,7 +84,7 @@ func TestBatchExecution(t *testing.T) {
 				t.Logf("Operation %d: Unknown operation result type %T", i+1, opResult)
 				continue
 			}
-			
+
 			t.Logf("Operation %d: %s %s -> %s", i+1, opType, opPath, status)
 		}
 	})
@@ -118,7 +118,7 @@ func TestBatchExecution(t *testing.T) {
 			// Handle both synthfs.OperationResult and core.OperationResult
 			var opType, opPath string
 			var status core.OperationStatus
-			
+
 			switch v := opResult.(type) {
 			case synthfs.OperationResult:
 				if op, ok := v.Operation.(interface{ Describe() core.OperationDesc }); ok {
@@ -145,7 +145,7 @@ func TestBatchExecution(t *testing.T) {
 				t.Logf("Operation %d: Unknown operation result type %T", i+1, opResult)
 				continue
 			}
-			
+
 			t.Logf("Operation %d: %s %s -> %s", i+1, opType, opPath, status)
 		}
 	})

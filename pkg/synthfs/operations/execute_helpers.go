@@ -86,7 +86,7 @@ func validateV2Helper(op Operation, ctx interface{}, execCtx *core.ExecutionCont
 	if !ok {
 		return fmt.Errorf("invalid context type")
 	}
-	
+
 	// Call the operation's Validate method
 	return op.Validate(context, fsys)
 }

@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
 func TestBatchCompleteAPI(t *testing.T) {
@@ -129,7 +129,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 			default:
 				t.Fatalf("Unexpected operation result type: %T", opResult)
 			}
-			
+
 			// Get operation description
 			var desc core.OperationDesc
 			if op, ok := operationResult.Operation.(interface{ Describe() core.OperationDesc }); ok {
@@ -305,13 +305,13 @@ func TestBatchCompleteAPI(t *testing.T) {
 			default:
 				t.Fatalf("Unexpected operation result type: %T", opResult)
 			}
-			
+
 			// Get operation ID
 			var opID string
 			if op, ok := operationResult.Operation.(interface{ ID() core.OperationID }); ok {
 				opID = string(op.ID())
 			}
-			
+
 			t.Logf("  Operation %d: %s -> %s (Duration: %v)",
 				i+1,
 				opID,

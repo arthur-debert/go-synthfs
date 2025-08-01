@@ -56,7 +56,7 @@ func TestPathHandlingIntegration(t *testing.T) {
 
 		// Mix of path styles in batch
 		batch.
-			CreateDir("src", 0755).                                    // relative
+			CreateDir("src", 0755).                                      // relative
 			WriteFile("/app/src/main.go", []byte("package main"), 0644). // absolute
 			WriteFile("./src/utils.go", []byte("package main"), 0644).   // ./ prefix
 			Copy("src/main.go", "/app/src/main.go.bak")                  // mixed

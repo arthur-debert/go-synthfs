@@ -17,39 +17,39 @@ func BuildPipeline(ops ...Operation) *PipelineBuilder {
 		pipeline:     NewMemPipeline(),
 		dependencies: make(map[OperationID][]OperationID),
 	}
-	
+
 	// Track operations that create paths
 	pathCreators := make(map[string]Operation)
-	
+
 	for _, op := range ops {
 		// Auto-detect dependencies based on paths
 		if adapter, ok := op.(*OperationsPackageAdapter); ok {
 			srcPath, dstPath := adapter.opsOperation.GetPaths()
 			desc := adapter.opsOperation.Describe()
 			opType := desc.Type
-			
+
 			// For operations that read from a source, check if source was created by a previous op
 			if srcPath != "" && (opType == "copy" || opType == "move") {
 				if creator, exists := pathCreators[srcPath]; exists {
 					op.AddDependency(creator.ID())
 				}
 			}
-			
+
 			// Track paths this operation creates
 			if dstPath != "" {
 				pathCreators[dstPath] = op
-			} else if srcPath != "" && (opType == "create_file" || 
-			                            opType == "create_directory" ||
-			                            opType == "create_symlink") {
+			} else if srcPath != "" && (opType == "create_file" ||
+				opType == "create_directory" ||
+				opType == "create_symlink") {
 				pathCreators[srcPath] = op
 			}
 		}
-		
+
 		if err := pb.pipeline.Add(op); err == nil {
 			pb.lastOp = op
 		}
 	}
-	
+
 	return pb
 }
 
@@ -102,7 +102,7 @@ func (pb *PipelineBuilder) Execute(ctx context.Context, fs FileSystem) (*Result,
 // ExecuteWith runs the pipeline with a custom executor
 func (pb *PipelineBuilder) ExecuteWith(ctx context.Context, fs FileSystem, executor *Executor) (*Result, error) {
 	result := executor.Run(ctx, pb.pipeline, fs)
-	
+
 	// Check for errors (same as Execute)
 	for i, opResult := range result.GetOperations() {
 		if opRes, ok := opResult.(OperationResult); ok && opRes.Error != nil {
@@ -112,7 +112,7 @@ func (pb *PipelineBuilder) ExecuteWith(ctx context.Context, fs FileSystem, execu
 					successfulOps = append(successfulOps, prevRes.OperationID)
 				}
 			}
-			
+
 			ops := pb.pipeline.Operations()
 			if i < len(ops) {
 				return result, &PipelineError{
@@ -126,7 +126,7 @@ func (pb *PipelineBuilder) ExecuteWith(ctx context.Context, fs FileSystem, execu
 			return result, opRes.Error
 		}
 	}
-	
+
 	return result, nil
 }
 
@@ -148,7 +148,7 @@ type PipelineExecutor struct {
 func (pe *PipelineExecutor) Execute(ctx context.Context, fs FileSystem) (*Result, error) {
 	executor := NewExecutor()
 	result := executor.RunWithOptions(ctx, pe.pipeline, fs, pe.options)
-	
+
 	// Check for errors
 	for i, opResult := range result.GetOperations() {
 		if opRes, ok := opResult.(OperationResult); ok && opRes.Error != nil {
@@ -158,7 +158,7 @@ func (pe *PipelineExecutor) Execute(ctx context.Context, fs FileSystem) (*Result
 					successfulOps = append(successfulOps, prevRes.OperationID)
 				}
 			}
-			
+
 			ops := pe.pipeline.Operations()
 			if i < len(ops) {
 				return result, &PipelineError{
@@ -172,6 +172,6 @@ func (pe *PipelineExecutor) Execute(ctx context.Context, fs FileSystem) (*Result
 			return result, opRes.Error
 		}
 	}
-	
+
 	return result, nil
 }

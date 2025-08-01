@@ -6,7 +6,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
-	
+
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
@@ -22,11 +22,11 @@ type MirrorOptions struct {
 
 // MirrorWithSymlinksOperation creates a directory structure with symlinks to original files
 type MirrorWithSymlinksOperation struct {
-	id       OperationID
-	desc     OperationDesc
-	srcDir   string
-	dstDir   string
-	options  MirrorOptions
+	id      OperationID
+	desc    OperationDesc
+	srcDir  string
+	dstDir  string
+	options MirrorOptions
 }
 
 // NewMirrorWithSymlinksOperation creates a new mirror operation
@@ -35,12 +35,12 @@ func (s *SynthFS) NewMirrorWithSymlinksOperation(srcDir, dstDir string, opts ...
 	if len(opts) > 0 {
 		options = opts[0]
 	}
-	
+
 	// Default filter accepts everything
 	if options.Filter == nil {
 		options.Filter = func(path string, info fs.FileInfo) bool { return true }
 	}
-	
+
 	id := s.idGen("mirror_symlinks", srcDir)
 	return &MirrorWithSymlinksOperation{
 		id: id,
@@ -150,7 +150,7 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 	if !ok {
 		return fmt.Errorf("filesystem does not support full operations (symlinks)")
 	}
-	
+
 	// Recursive walk function
 	var walk func(string) error
 	walk = func(dir string) error {
@@ -160,34 +160,36 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 			return err
 		}
 		defer func() { _ = f.Close() }()
-		
+
 		// Read directory entries
-		if dirReader, ok := f.(interface{ ReadDir(int) ([]fs.DirEntry, error) }); ok {
+		if dirReader, ok := f.(interface {
+			ReadDir(int) ([]fs.DirEntry, error)
+		}); ok {
 			entries, err := dirReader.ReadDir(-1)
 			if err != nil {
 				return err
 			}
-			
+
 			for _, entry := range entries {
 				srcPath := filepath.Join(dir, entry.Name())
 				info, err := entry.Info()
 				if err != nil {
 					continue
 				}
-				
+
 				// Apply filter
 				if !op.options.Filter(srcPath, info) {
 					continue
 				}
-				
+
 				// Calculate relative and destination paths
 				relPath, err := filepath.Rel(op.srcDir, srcPath)
 				if err != nil {
 					continue
 				}
-				
+
 				dstPath := filepath.Join(op.dstDir, relPath)
-				
+
 				if entry.IsDir() {
 					if op.options.IncludeDirectories {
 						// Create real directory
@@ -195,7 +197,7 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 						if err != nil && !strings.Contains(err.Error(), "exists") {
 							return err
 						}
-						
+
 						// Recurse into directory
 						if err := walk(srcPath); err != nil {
 							return err
@@ -209,19 +211,19 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 								return err
 							}
 						}
-						
+
 						// Symlink the directory with relative path
 						relTarget, err := filepath.Rel(filepath.Dir(dstPath), srcPath)
 						if err != nil {
 							// Fallback to absolute within the filesystem
 							relTarget = srcPath
 						}
-						
+
 						// Remove existing if overwrite is enabled
 						if op.options.Overwrite {
 							_ = fullFS.Remove(dstPath)
 						}
-						
+
 						err = fullFS.Symlink(relTarget, dstPath)
 						if err != nil && !strings.Contains(err.Error(), "exists") {
 							return fmt.Errorf("failed to create symlink %s -> %s: %w", dstPath, relTarget, err)
@@ -236,19 +238,19 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 							return err
 						}
 					}
-					
+
 					// Create symlink to file with relative path
 					relTarget, err := filepath.Rel(filepath.Dir(dstPath), srcPath)
 					if err != nil {
 						// Fallback to absolute within the filesystem
 						relTarget = srcPath
 					}
-					
+
 					// Remove existing if overwrite is enabled
 					if op.options.Overwrite {
 						_ = fullFS.Remove(dstPath)
 					}
-					
+
 					err = fullFS.Symlink(relTarget, dstPath)
 					if err != nil && !strings.Contains(err.Error(), "exists") {
 						return fmt.Errorf("failed to create symlink %s -> %s: %w", dstPath, relTarget, err)
@@ -256,15 +258,15 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 				}
 			}
 		}
-		
+
 		return nil
 	}
-	
+
 	// Create destination directory
 	if err := fullFS.MkdirAll(op.dstDir, 0755); err != nil {
 		return err
 	}
-	
+
 	// Start walking from source
 	return walk(op.srcDir)
 }
@@ -276,27 +278,27 @@ func (op *MirrorWithSymlinksOperation) Validate(ctx context.Context, fsys FileSy
 	if !ok {
 		return fmt.Errorf("filesystem does not support Stat")
 	}
-	
+
 	// Check if filesystem supports symlinks
 	if _, ok := fsys.(FullFileSystem); !ok {
 		return fmt.Errorf("filesystem does not support symlinks")
 	}
-	
+
 	// Check source exists
 	info, err := statFS.Stat(op.srcDir)
 	if err != nil {
 		return fmt.Errorf("source directory does not exist: %w", err)
 	}
-	
+
 	if !info.IsDir() {
 		return fmt.Errorf("source is not a directory: %s", op.srcDir)
 	}
-	
+
 	// Check if destination exists
 	if _, err := statFS.Stat(op.dstDir); err == nil && !op.options.Overwrite {
 		return fmt.Errorf("destination already exists: %s", op.dstDir)
 	}
-	
+
 	return nil
 }
 

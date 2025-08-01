@@ -6,7 +6,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
-	
+
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
@@ -30,28 +30,28 @@ func (s *SynthFS) CopyTree(srcDir, dstDir string, opts ...CopyTreeOptions) ([]Op
 	if len(opts) > 0 {
 		options = opts[0]
 	}
-	
+
 	// Default filter accepts everything
 	if options.Filter == nil {
 		options.Filter = func(path string, info fs.FileInfo) bool { return true }
 	}
-	
+
 	var ops []Operation
-	
+
 	// Walk the source directory and create copy operations
 	_ = func(srcPath string, dstPath string, info fs.FileInfo) error {
 		// Apply filter
 		if !options.Filter(srcPath, info) {
 			return nil
 		}
-		
+
 		relPath, err := filepath.Rel(srcDir, srcPath)
 		if err != nil {
 			return err
 		}
-		
+
 		targetPath := filepath.Join(dstDir, relPath)
-		
+
 		if info.IsDir() {
 			// Create directory
 			op := s.CreateDir(targetPath, info.Mode())
@@ -71,10 +71,10 @@ func (s *SynthFS) CopyTree(srcDir, dstDir string, opts ...CopyTreeOptions) ([]Op
 			}
 			ops = append(ops, op)
 		}
-		
+
 		return nil
 	}
-	
+
 	// Since we can't actually walk the filesystem here (no fs parameter),
 	// we'll return a function that creates the operations when executed
 	// For now, we'll create a custom operation that handles this
@@ -83,11 +83,11 @@ func (s *SynthFS) CopyTree(srcDir, dstDir string, opts ...CopyTreeOptions) ([]Op
 
 // CopyTreeOperation is a special operation that copies an entire directory tree
 type CopyTreeOperation struct {
-	id       OperationID
-	desc     OperationDesc
-	srcDir   string
-	dstDir   string
-	options  CopyTreeOptions
+	id      OperationID
+	desc    OperationDesc
+	srcDir  string
+	dstDir  string
+	options CopyTreeOptions
 }
 
 // NewCopyTreeOperation creates a new copy tree operation
@@ -96,12 +96,12 @@ func (s *SynthFS) NewCopyTreeOperation(srcDir, dstDir string, opts ...CopyTreeOp
 	if len(opts) > 0 {
 		options = opts[0]
 	}
-	
+
 	// Default filter accepts everything
 	if options.Filter == nil {
 		options.Filter = func(path string, info fs.FileInfo) bool { return true }
 	}
-	
+
 	id := s.idGen("copy_tree", srcDir)
 	return &CopyTreeOperation{
 		id: id,
@@ -213,7 +213,7 @@ func (op *CopyTreeOperation) Execute(ctx context.Context, fsys FileSystem) error
 	if !ok {
 		return fmt.Errorf("filesystem does not support full operations")
 	}
-	
+
 	// We need a way to walk the filesystem
 	// For now, we'll use a simple recursive approach
 	var walk func(string) error
@@ -224,40 +224,42 @@ func (op *CopyTreeOperation) Execute(ctx context.Context, fsys FileSystem) error
 			return err
 		}
 		defer func() { _ = f.Close() }()
-		
+
 		// Read directory entries
-		if dirReader, ok := f.(interface{ ReadDir(int) ([]fs.DirEntry, error) }); ok {
+		if dirReader, ok := f.(interface {
+			ReadDir(int) ([]fs.DirEntry, error)
+		}); ok {
 			entries, err := dirReader.ReadDir(-1)
 			if err != nil {
 				return err
 			}
-			
+
 			for _, entry := range entries {
 				srcPath := filepath.Join(dir, entry.Name())
 				info, err := entry.Info()
 				if err != nil {
 					continue
 				}
-				
+
 				// Apply filter
 				if !op.options.Filter(srcPath, info) {
 					continue
 				}
-				
+
 				relPath, err := filepath.Rel(op.srcDir, srcPath)
 				if err != nil {
 					continue
 				}
-				
+
 				dstPath := filepath.Join(op.dstDir, relPath)
-				
+
 				if entry.IsDir() {
 					// Create directory
 					err = fullFS.MkdirAll(dstPath, info.Mode())
 					if err != nil && !strings.Contains(err.Error(), "exists") {
 						return err
 					}
-					
+
 					// Recurse
 					if err := walk(srcPath); err != nil {
 						return err
@@ -268,7 +270,7 @@ func (op *CopyTreeOperation) Execute(ctx context.Context, fsys FileSystem) error
 					if err != nil {
 						continue
 					}
-					
+
 					// Create symlink
 					_ = fullFS.Symlink(target, dstPath)
 				} else {
@@ -277,12 +279,12 @@ func (op *CopyTreeOperation) Execute(ctx context.Context, fsys FileSystem) error
 					if err != nil {
 						continue
 					}
-					
+
 					mode := fs.FileMode(0644)
 					if op.options.PreservePermissions {
 						mode = info.Mode()
 					}
-					
+
 					err = fullFS.WriteFile(dstPath, content, mode)
 					if err != nil && !op.options.Overwrite {
 						return err
@@ -290,15 +292,15 @@ func (op *CopyTreeOperation) Execute(ctx context.Context, fsys FileSystem) error
 				}
 			}
 		}
-		
+
 		return nil
 	}
-	
+
 	// Create destination directory
 	if err := fullFS.MkdirAll(op.dstDir, 0755); err != nil {
 		return err
 	}
-	
+
 	// Start walking from source
 	return walk(op.srcDir)
 }
@@ -310,22 +312,22 @@ func (op *CopyTreeOperation) Validate(ctx context.Context, fsys FileSystem) erro
 	if !ok {
 		return fmt.Errorf("filesystem does not support Stat")
 	}
-	
+
 	// Check source exists
 	info, err := statFS.Stat(op.srcDir)
 	if err != nil {
 		return fmt.Errorf("source directory does not exist: %w", err)
 	}
-	
+
 	if !info.IsDir() {
 		return fmt.Errorf("source is not a directory: %s", op.srcDir)
 	}
-	
+
 	// Check if destination exists
 	if _, err := statFS.Stat(op.dstDir); err == nil && !op.options.Overwrite {
 		return fmt.Errorf("destination already exists: %s", op.dstDir)
 	}
-	
+
 	return nil
 }
 

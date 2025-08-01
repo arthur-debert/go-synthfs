@@ -14,7 +14,7 @@ func TestOperationRollback(t *testing.T) {
 
 	t.Run("Rollback create file operation", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		// Setup: create a file first
 		op := operations.NewCreateFileOperation(core.OperationID("test-op"), "test/file.txt")
 		fileItem := &TestFileItem{
@@ -49,7 +49,7 @@ func TestOperationRollback(t *testing.T) {
 
 	t.Run("Rollback create directory operation", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		// Setup: create a directory first
 		op := operations.NewCreateDirectoryOperation(core.OperationID("test-op"), "test/dir")
 		dirItem := &TestDirItem{
@@ -83,7 +83,7 @@ func TestOperationRollback(t *testing.T) {
 
 	t.Run("Rollback copy operation", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		// Setup: create source file and copy operation
 		err := fs.WriteFile("test/source.txt", []byte("content"), 0644)
 		if err != nil {
@@ -125,7 +125,7 @@ func TestOperationRollback(t *testing.T) {
 
 	t.Run("Rollback move operation", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		// Setup: create source file and move operation
 		err := fs.WriteFile("test/movesource.txt", []byte("content"), 0644)
 		if err != nil {
@@ -183,7 +183,7 @@ func TestOperationRollback(t *testing.T) {
 
 	t.Run("Rollback create symlink operation", func(t *testing.T) {
 		fs := NewMockFilesystem()
-		
+
 		// Setup: create a symlink first
 		op := operations.NewCreateSymlinkOperation(core.OperationID("test-op"), "test/link")
 		// Set target in description
@@ -191,7 +191,7 @@ func TestOperationRollback(t *testing.T) {
 
 		// Note: MockFilesystem doesn't support symlinks, so Execute will fail
 		// But we can still test that Rollback attempts to remove it
-		
+
 		// Create a fake symlink (as a file for testing)
 		if err := fs.WriteFile("test/link", []byte("symlink"), 0644); err != nil {
 			t.Fatalf("Failed to create fake symlink: %v", err)

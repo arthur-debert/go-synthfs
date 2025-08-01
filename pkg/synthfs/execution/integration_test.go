@@ -163,7 +163,7 @@ func TestPrerequisiteResolutionIntegration(t *testing.T) {
 		if opInterface == nil {
 			continue
 		}
-		
+
 		// Use interface assertion to check operation details
 		if describer, ok := opInterface.(interface{ Describe() core.OperationDesc }); ok {
 			desc := describer.Describe()
@@ -213,12 +213,12 @@ type mockFileInfo struct {
 	isDir bool
 }
 
-func (fi *mockFileInfo) Name() string     { return fi.name }
-func (fi *mockFileInfo) Size() int64      { return 0 }
-func (fi *mockFileInfo) Mode() interface{} { return 0644 }
+func (fi *mockFileInfo) Name() string         { return fi.name }
+func (fi *mockFileInfo) Size() int64          { return 0 }
+func (fi *mockFileInfo) Mode() interface{}    { return 0644 }
 func (fi *mockFileInfo) ModTime() interface{} { return nil }
-func (fi *mockFileInfo) IsDir() bool      { return fi.isDir }
-func (fi *mockFileInfo) Sys() interface{} { return nil }
+func (fi *mockFileInfo) IsDir() bool          { return fi.isDir }
+func (fi *mockFileInfo) Sys() interface{}     { return nil }
 
 // mockPathError implements error for path operations
 type mockPathError struct {
@@ -241,11 +241,11 @@ func (l *mockLogger) Trace() core.LogEvent { return &mockLogEvent{} }
 
 type mockLogEvent struct{}
 
-func (e *mockLogEvent) Str(key, val string) core.LogEvent             { return e }
-func (e *mockLogEvent) Int(key string, val int) core.LogEvent         { return e }
-func (e *mockLogEvent) Bool(key string, val bool) core.LogEvent       { return e }
-func (e *mockLogEvent) Dur(key string, val interface{}) core.LogEvent { return e }
+func (e *mockLogEvent) Str(key, val string) core.LogEvent                   { return e }
+func (e *mockLogEvent) Int(key string, val int) core.LogEvent               { return e }
+func (e *mockLogEvent) Bool(key string, val bool) core.LogEvent             { return e }
+func (e *mockLogEvent) Dur(key string, val interface{}) core.LogEvent       { return e }
 func (e *mockLogEvent) Interface(key string, val interface{}) core.LogEvent { return e }
-func (e *mockLogEvent) Err(err error) core.LogEvent                   { return e }
-func (e *mockLogEvent) Float64(key string, val float64) core.LogEvent { return e }
-func (e *mockLogEvent) Msg(msg string)                                {}
+func (e *mockLogEvent) Err(err error) core.LogEvent                         { return e }
+func (e *mockLogEvent) Float64(key string, val float64) core.LogEvent       { return e }
+func (e *mockLogEvent) Msg(msg string)                                      {}

@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
 func TestReverseOperations_CreateFile(t *testing.T) {

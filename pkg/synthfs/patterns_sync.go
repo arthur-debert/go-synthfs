@@ -7,7 +7,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
-	
+
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
@@ -27,13 +27,13 @@ type SyncOptions struct {
 
 // SyncResult contains information about a sync operation
 type SyncResult struct {
-	FilesCreated   []string
-	FilesUpdated   []string
-	FilesDeleted   []string
-	DirsCreated    []string
-	DirsDeleted    []string
+	FilesCreated    []string
+	FilesUpdated    []string
+	FilesDeleted    []string
+	DirsCreated     []string
+	DirsDeleted     []string
 	SymlinksCreated []string
-	Errors         []error
+	Errors          []error
 }
 
 // SyncOperation synchronizes two directories
@@ -52,12 +52,12 @@ func (s *SynthFS) NewSyncOperation(srcDir, dstDir string, opts ...SyncOptions) *
 	if len(opts) > 0 {
 		options = opts[0]
 	}
-	
+
 	// Default filter accepts everything
 	if options.Filter == nil {
 		options.Filter = func(path string, info fs.FileInfo) bool { return true }
 	}
-	
+
 	id := s.idGen("sync", srcDir)
 	return &SyncOperation{
 		id: id,
@@ -65,11 +65,11 @@ func (s *SynthFS) NewSyncOperation(srcDir, dstDir string, opts ...SyncOptions) *
 			Type: "sync",
 			Path: srcDir,
 			Details: map[string]interface{}{
-				"src":           srcDir,
-				"dst":           dstDir,
-				"delete_extra":  options.DeleteExtra,
-				"update_newer":  options.UpdateNewer,
-				"dry_run":       options.DryRun,
+				"src":          srcDir,
+				"dst":          dstDir,
+				"delete_extra": options.DeleteExtra,
+				"update_newer": options.UpdateNewer,
+				"dry_run":      options.DryRun,
 			},
 		},
 		srcDir:  srcDir,
@@ -172,7 +172,7 @@ func (op *SyncOperation) ReverseOps(ctx context.Context, fsys FileSystem, budget
 func (op *SyncOperation) Execute(ctx context.Context, fsys FileSystem) error {
 	// Reset result
 	op.result = &SyncResult{}
-	
+
 	// Build source file map
 	srcFiles := make(map[string]fs.FileInfo)
 	err := op.walkDir(fsys, op.srcDir, "", func(relPath string, info fs.FileInfo) error {
@@ -184,7 +184,7 @@ func (op *SyncOperation) Execute(ctx context.Context, fsys FileSystem) error {
 	if err != nil {
 		return fmt.Errorf("failed to scan source: %w", err)
 	}
-	
+
 	// Build destination file map
 	dstFiles := make(map[string]fs.FileInfo)
 	err = op.walkDir(fsys, op.dstDir, "", func(relPath string, info fs.FileInfo) error {
@@ -194,7 +194,7 @@ func (op *SyncOperation) Execute(ctx context.Context, fsys FileSystem) error {
 	if err != nil && !isNotExist(err) {
 		return fmt.Errorf("failed to scan destination: %w", err)
 	}
-	
+
 	// Ensure destination exists
 	if !op.options.DryRun {
 		if writeFS, ok := fsys.(WriteFS); ok {
@@ -203,14 +203,14 @@ func (op *SyncOperation) Execute(ctx context.Context, fsys FileSystem) error {
 			}
 		}
 	}
-	
+
 	// Sync files from source to destination
 	for relPath, srcInfo := range srcFiles {
 		srcPath := filepath.Join(op.srcDir, relPath)
 		dstPath := filepath.Join(op.dstDir, relPath)
-		
+
 		dstInfo, exists := dstFiles[relPath]
-		
+
 		if srcInfo.IsDir() {
 			// Handle directory
 			if !exists {
@@ -243,7 +243,7 @@ func (op *SyncOperation) Execute(ctx context.Context, fsys FileSystem) error {
 		} else {
 			// Handle regular file
 			shouldUpdate := false
-			
+
 			if !exists {
 				shouldUpdate = true
 				op.result.FilesCreated = append(op.result.FilesCreated, relPath)
@@ -262,7 +262,7 @@ func (op *SyncOperation) Execute(ctx context.Context, fsys FileSystem) error {
 					}
 				}
 			}
-			
+
 			if shouldUpdate && !op.options.DryRun {
 				// Copy file
 				content, err := fs.ReadFile(fsys, srcPath)
@@ -270,32 +270,32 @@ func (op *SyncOperation) Execute(ctx context.Context, fsys FileSystem) error {
 					op.result.Errors = append(op.result.Errors, err)
 					continue
 				}
-				
+
 				if writeFS, ok := fsys.(WriteFS); ok {
 					// Ensure parent directory exists
 					parent := filepath.Dir(dstPath)
 					if parent != "." && parent != "/" {
 						_ = writeFS.MkdirAll(parent, 0755)
 					}
-					
+
 					if err := writeFS.WriteFile(dstPath, content, srcInfo.Mode()); err != nil {
 						op.result.Errors = append(op.result.Errors, err)
 					}
 				}
 			}
 		}
-		
+
 		// Remove from destination map (for delete detection)
 		delete(dstFiles, relPath)
 	}
-	
+
 	// Handle extra files in destination
 	if op.options.DeleteExtra {
 		// Process directories first, then files
 		// This ensures we count files in directories before deleting them
 		var dirsToDelete []string
 		deletedDirs := make(map[string]bool)
-		
+
 		// First pass: identify directories to delete
 		for relPath, dstInfo := range dstFiles {
 			if dstInfo.IsDir() {
@@ -303,7 +303,7 @@ func (op *SyncOperation) Execute(ctx context.Context, fsys FileSystem) error {
 				deletedDirs[relPath] = true
 			}
 		}
-		
+
 		// Second pass: count and delete files not in deleted directories
 		for relPath, dstInfo := range dstFiles {
 			if !dstInfo.IsDir() {
@@ -315,7 +315,7 @@ func (op *SyncOperation) Execute(ctx context.Context, fsys FileSystem) error {
 						break
 					}
 				}
-				
+
 				if !skipFile {
 					if !op.options.DryRun {
 						if writeFS, ok := fsys.(WriteFS); ok {
@@ -333,7 +333,7 @@ func (op *SyncOperation) Execute(ctx context.Context, fsys FileSystem) error {
 				}
 			}
 		}
-		
+
 		// Third pass: delete directories
 		for _, relPath := range dirsToDelete {
 			if !op.options.DryRun {
@@ -348,7 +348,7 @@ func (op *SyncOperation) Execute(ctx context.Context, fsys FileSystem) error {
 			op.result.DirsDeleted = append(op.result.DirsDeleted, relPath)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -359,13 +359,15 @@ func (op *SyncOperation) walkDir(fsys FileSystem, root, prefix string, fn func(s
 		return err
 	}
 	defer func() { _ = f.Close() }()
-	
-	if dirReader, ok := f.(interface{ ReadDir(int) ([]fs.DirEntry, error) }); ok {
+
+	if dirReader, ok := f.(interface {
+		ReadDir(int) ([]fs.DirEntry, error)
+	}); ok {
 		entries, err := dirReader.ReadDir(-1)
 		if err != nil {
 			return err
 		}
-		
+
 		for _, entry := range entries {
 			name := entry.Name()
 			path := filepath.Join(root, name)
@@ -373,16 +375,16 @@ func (op *SyncOperation) walkDir(fsys FileSystem, root, prefix string, fn func(s
 			if prefix != "" {
 				relPath = filepath.Join(prefix, name)
 			}
-			
+
 			info, err := entry.Info()
 			if err != nil {
 				continue
 			}
-			
+
 			if err := fn(relPath, info); err != nil {
 				return err
 			}
-			
+
 			if entry.IsDir() {
 				if err := op.walkDir(fsys, path, relPath, fn); err != nil {
 					return err
@@ -390,7 +392,7 @@ func (op *SyncOperation) walkDir(fsys FileSystem, root, prefix string, fn func(s
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -398,11 +400,11 @@ func (op *SyncOperation) walkDir(fsys FileSystem, root, prefix string, fn func(s
 func (op *SyncOperation) filesEqual(fsys FileSystem, path1, path2 string) bool {
 	content1, err1 := fs.ReadFile(fsys, path1)
 	content2, err2 := fs.ReadFile(fsys, path2)
-	
+
 	if err1 != nil || err2 != nil {
 		return false
 	}
-	
+
 	return bytes.Equal(content1, content2)
 }
 
@@ -412,7 +414,7 @@ func (op *SyncOperation) Validate(ctx context.Context, fsys FileSystem) error {
 	if _, ok := fsys.(WriteFS); !ok {
 		return fmt.Errorf("filesystem does not support write operations")
 	}
-	
+
 	// Check if source exists
 	if statFS, ok := fsys.(StatFS); ok {
 		info, err := statFS.Stat(op.srcDir)
@@ -423,7 +425,7 @@ func (op *SyncOperation) Validate(ctx context.Context, fsys FileSystem) error {
 			return fmt.Errorf("source is not a directory: %s", op.srcDir)
 		}
 	}
-	
+
 	return nil
 }
 

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"text/template"
-	
+
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
@@ -138,17 +138,17 @@ func (op *WriteTemplateOperation) Execute(ctx context.Context, fsys FileSystem) 
 	if err != nil {
 		return fmt.Errorf("failed to parse template: %w", err)
 	}
-	
+
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, op.data); err != nil {
 		return fmt.Errorf("failed to execute template: %w", err)
 	}
-	
+
 	// Write the rendered content
 	if writeFS, ok := fsys.(WriteFS); ok {
 		return writeFS.WriteFile(op.path, buf.Bytes(), op.mode)
 	}
-	
+
 	return fmt.Errorf("filesystem does not support WriteFile")
 }
 
@@ -158,12 +158,12 @@ func (op *WriteTemplateOperation) Validate(ctx context.Context, fsys FileSystem)
 	if _, err := template.New("validate").Parse(op.template); err != nil {
 		return fmt.Errorf("invalid template syntax: %w", err)
 	}
-	
+
 	// Check if filesystem supports write
 	if _, ok := fsys.(WriteFS); !ok {
 		return fmt.Errorf("filesystem does not support WriteFile")
 	}
-	
+
 	return nil
 }
 

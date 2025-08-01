@@ -190,7 +190,6 @@ func TestSimpleBatchAPI(t *testing.T) {
 	})
 }
 
-
 func TestSimpleBatchWithRollback(t *testing.T) {
 	t.Run("Successful rollback", func(t *testing.T) {
 		ResetSequenceCounter()
