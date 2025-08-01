@@ -25,7 +25,7 @@ type CopyTreeOptions struct {
 }
 
 // CopyTree creates operations to recursively copy a directory tree
-func CopyTree(srcDir, dstDir string, opts ...CopyTreeOptions) ([]Operation, error) {
+func (s *SynthFS) CopyTree(srcDir, dstDir string, opts ...CopyTreeOptions) ([]Operation, error) {
 	var options CopyTreeOptions
 	if len(opts) > 0 {
 		options = opts[0]
@@ -54,15 +54,15 @@ func CopyTree(srcDir, dstDir string, opts ...CopyTreeOptions) ([]Operation, erro
 		
 		if info.IsDir() {
 			// Create directory
-			op := CreateDir(targetPath, info.Mode())
+			op := s.CreateDir(targetPath, info.Mode())
 			ops = append(ops, op)
 		} else if info.Mode()&fs.ModeSymlink != 0 && !options.FollowSymlinks {
 			// Copy symlink
-			op := CreateSymlink("", targetPath) // We'd need to read the link target
+			op := s.CreateSymlink("", targetPath) // We'd need to read the link target
 			ops = append(ops, op)
 		} else {
 			// Copy file
-			op := Copy(srcPath, targetPath)
+			op := s.Copy(srcPath, targetPath)
 			if options.PreservePermissions {
 				if adapter, ok := op.(*OperationsPackageAdapter); ok {
 					adapter.SetDescriptionDetail("preserve_mode", true)
@@ -91,7 +91,7 @@ type CopyTreeOperation struct {
 }
 
 // NewCopyTreeOperation creates a new copy tree operation
-func NewCopyTreeOperation(srcDir, dstDir string, opts ...CopyTreeOptions) *CopyTreeOperation {
+func (s *SynthFS) NewCopyTreeOperation(srcDir, dstDir string, opts ...CopyTreeOptions) *CopyTreeOperation {
 	var options CopyTreeOptions
 	if len(opts) > 0 {
 		options = opts[0]
@@ -102,7 +102,7 @@ func NewCopyTreeOperation(srcDir, dstDir string, opts ...CopyTreeOptions) *CopyT
 		options.Filter = func(path string, info fs.FileInfo) bool { return true }
 	}
 	
-	id := GenerateID("copy_tree", srcDir)
+	id := s.idGen("copy_tree", srcDir)
 	return &CopyTreeOperation{
 		id: id,
 		desc: OperationDesc{
@@ -405,7 +405,7 @@ func (b *CopyTreeBuilder) Overwrite() *CopyTreeBuilder {
 
 // Build creates the copy tree operation
 func (b *CopyTreeBuilder) Build() Operation {
-	return NewCopyTreeOperation(b.srcDir, b.dstDir, b.options)
+	return New().NewCopyTreeOperation(b.srcDir, b.dstDir, b.options)
 }
 
 // Execute builds and executes the operation
@@ -416,6 +416,6 @@ func (b *CopyTreeBuilder) Execute(ctx context.Context, fs FileSystem) error {
 
 // CopyTreeFunc is a convenience function for copying directory trees
 func CopyTreeFunc(ctx context.Context, fs FileSystem, srcDir, dstDir string) error {
-	op := NewCopyTreeOperation(srcDir, dstDir)
+	op := New().NewCopyTreeOperation(srcDir, dstDir)
 	return op.Execute(ctx, fs)
 }

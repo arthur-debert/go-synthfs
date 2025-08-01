@@ -26,8 +26,8 @@ func detectArchiveFormat(path string) targets.ArchiveFormat {
 }
 
 // CreateArchive creates an archive operation
-func CreateArchive(archivePath string, sources ...string) Operation {
-	id := GenerateID("create_archive", archivePath)
+func (s *SynthFS) CreateArchive(archivePath string, sources ...string) Operation {
+	id := s.idGen("create_archive", archivePath)
 	
 	// Detect format from file extension
 	format := detectArchiveFormat(archivePath)
@@ -47,8 +47,8 @@ func CreateArchive(archivePath string, sources ...string) Operation {
 }
 
 // CreateZipArchive creates a ZIP archive operation
-func CreateZipArchive(archivePath string, sources ...string) Operation {
-	id := GenerateID("create_archive", archivePath)
+func (s *SynthFS) CreateZipArchive(archivePath string, sources ...string) Operation {
+	id := s.idGen("create_archive", archivePath)
 	
 	// Create the archive target with ZIP format
 	archive := targets.NewArchive(archivePath, targets.ArchiveFormatZip, sources)
@@ -65,14 +65,14 @@ func CreateZipArchive(archivePath string, sources ...string) Operation {
 }
 
 // CreateTarArchive creates a TAR archive operation
-func CreateTarArchive(archivePath string, sources ...string) Operation {
+func (s *SynthFS) CreateTarArchive(archivePath string, sources ...string) Operation {
 	// Note: We don't have a plain TAR format in targets, so we use TarGz
-	return CreateTarGzArchive(archivePath, sources...)
+	return s.CreateTarGzArchive(archivePath, sources...)
 }
 
 // CreateTarGzArchive creates a gzipped TAR archive operation
-func CreateTarGzArchive(archivePath string, sources ...string) Operation {
-	id := GenerateID("create_archive", archivePath)
+func (s *SynthFS) CreateTarGzArchive(archivePath string, sources ...string) Operation {
+	id := s.idGen("create_archive", archivePath)
 	
 	// Create the archive target with TAR.GZ format
 	archive := targets.NewArchive(archivePath, targets.ArchiveFormatTarGz, sources)
@@ -89,8 +89,8 @@ func CreateTarGzArchive(archivePath string, sources ...string) Operation {
 }
 
 // ExtractArchive creates an unarchive operation
-func ExtractArchive(archivePath, extractPath string) Operation {
-	id := GenerateID("unarchive", archivePath)
+func (s *SynthFS) ExtractArchive(archivePath, extractPath string) Operation {
+	id := s.idGen("unarchive", archivePath)
 	
 	// Create the unarchive item
 	unarchive := targets.NewUnarchive(archivePath, extractPath)
@@ -103,8 +103,8 @@ func ExtractArchive(archivePath, extractPath string) Operation {
 }
 
 // ExtractArchiveWithPatterns creates an unarchive operation with file patterns
-func ExtractArchiveWithPatterns(archivePath, extractPath string, patterns ...string) Operation {
-	id := GenerateID("unarchive", archivePath)
+func (s *SynthFS) ExtractArchiveWithPatterns(archivePath, extractPath string, patterns ...string) Operation {
+	id := s.idGen("unarchive", archivePath)
 	
 	// Create the unarchive item with patterns
 	unarchive := targets.NewUnarchive(archivePath, extractPath).WithPatterns(patterns...)
@@ -118,13 +118,13 @@ func ExtractArchiveWithPatterns(archivePath, extractPath string, patterns ...str
 
 // Archive provides direct archive creation with execution
 func Archive(ctx context.Context, fs FileSystem, archivePath string, sources ...string) error {
-	op := CreateArchive(archivePath, sources...)
+	op := New().CreateArchive(archivePath, sources...)
 	return op.Execute(ctx, fs)
 }
 
 // Extract provides direct archive extraction with execution
 func Extract(ctx context.Context, fs FileSystem, archivePath, extractPath string) error {
-	op := ExtractArchive(archivePath, extractPath)
+	op := New().ExtractArchive(archivePath, extractPath)
 	return op.Execute(ctx, fs)
 }
 
@@ -180,19 +180,20 @@ func (ab *ArchiveBuilder) AsTarGz() *ArchiveBuilder {
 
 // Build creates the archive operation
 func (ab *ArchiveBuilder) Build() Operation {
+	sfs := New()
 	if len(ab.sources) == 0 {
 		// Return an operation that will fail validation
-		return CreateArchive(ab.archivePath)
+		return sfs.CreateArchive(ab.archivePath)
 	}
 	
 	var op Operation
 	switch ab.format {
 	case targets.ArchiveFormatZip:
-		op = CreateZipArchive(ab.archivePath, ab.sources...)
+		op = sfs.CreateZipArchive(ab.archivePath, ab.sources...)
 	case targets.ArchiveFormatTarGz:
-		op = CreateTarGzArchive(ab.archivePath, ab.sources...)
+		op = sfs.CreateTarGzArchive(ab.archivePath, ab.sources...)
 	default:
-		op = CreateArchive(ab.archivePath, ab.sources...)
+		op = sfs.CreateArchive(ab.archivePath, ab.sources...)
 	}
 	
 	return op
@@ -245,10 +246,11 @@ func (eb *ExtractBuilder) OnlyFiles(patterns ...string) *ExtractBuilder {
 
 // Build creates the extract operation
 func (eb *ExtractBuilder) Build() Operation {
+	sfs := New()
 	if len(eb.patterns) > 0 {
-		return ExtractArchiveWithPatterns(eb.archivePath, eb.extractPath, eb.patterns...)
+		return sfs.ExtractArchiveWithPatterns(eb.archivePath, eb.extractPath, eb.patterns...)
 	}
-	return ExtractArchive(eb.archivePath, eb.extractPath)
+	return sfs.ExtractArchive(eb.archivePath, eb.extractPath)
 }
 
 // Execute creates and executes the extract operation

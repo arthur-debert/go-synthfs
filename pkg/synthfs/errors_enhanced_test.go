@@ -165,31 +165,27 @@ func TestRollbackError(t *testing.T) {
 }
 
 func TestWrapOperationError(t *testing.T) {
-	// Use sequence generator for predictable IDs
-	defer func() {
-		SetIDGenerator(HashIDGenerator)
-	}()
-	SetIDGenerator(SequenceIDGenerator)
+	sfs := WithIDGenerator(SequenceIDGenerator)
 	ResetSequenceCounter()
-	
+
 	t.Run("Wrap nil error", func(t *testing.T) {
-		op := CreateFile("/tmp/test.txt", []byte("content"), 0644)
+		op := sfs.CreateFile("/tmp/test.txt", []byte("content"), 0644)
 		err := WrapOperationError(op, "create file", nil)
 		if err != nil {
 			t.Error("Wrapping nil error should return nil")
 		}
 	})
-	
+
 	t.Run("Wrap regular error", func(t *testing.T) {
-		op := CreateFile("/tmp/test.txt", []byte("content"), 0644)
+		op := sfs.CreateFile("/tmp/test.txt", []byte("content"), 0644)
 		baseErr := errors.New("permission denied")
 		err := WrapOperationError(op, "create file", baseErr)
-		
+
 		opErr, ok := err.(*OperationError)
 		if !ok {
 			t.Fatal("Should return an OperationError")
 		}
-		
+
 		if opErr.Op != "create_file" {
 			t.Errorf("Expected op type 'create_file', got: %s", opErr.Op)
 		}
@@ -203,9 +199,9 @@ func TestWrapOperationError(t *testing.T) {
 			t.Error("Should preserve the base error")
 		}
 	})
-	
+
 	t.Run("Don't double-wrap OperationError", func(t *testing.T) {
-		op := CreateFile("/tmp/test.txt", []byte("content"), 0644)
+		op := sfs.CreateFile("/tmp/test.txt", []byte("content"), 0644)
 		opErr := &OperationError{
 			Op:     "create_file",
 			ID:     "create_file-123",
@@ -213,7 +209,7 @@ func TestWrapOperationError(t *testing.T) {
 			Action: "create file",
 			Err:    errors.New("base error"),
 		}
-		
+
 		wrapped := WrapOperationError(op, "create file", opErr)
 		if wrapped != opErr {
 			t.Error("Should return the same OperationError without double-wrapping")

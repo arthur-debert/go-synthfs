@@ -24,8 +24,8 @@ type WriteTemplateOperation struct {
 }
 
 // NewWriteTemplateOperation creates a new template write operation
-func NewWriteTemplateOperation(path, templateContent string, data TemplateData, mode fs.FileMode) *WriteTemplateOperation {
-	id := GenerateID("write_template", path)
+func (s *SynthFS) NewWriteTemplateOperation(path, templateContent string, data TemplateData, mode fs.FileMode) *WriteTemplateOperation {
+	id := s.idGen("write_template", path)
 	return &WriteTemplateOperation{
 		id: id,
 		desc: OperationDesc{
@@ -127,7 +127,7 @@ func (op *WriteTemplateOperation) Rollback(ctx context.Context, fsys FileSystem)
 // ReverseOps generates reverse operations
 func (op *WriteTemplateOperation) ReverseOps(ctx context.Context, fsys FileSystem, budget *core.BackupBudget) ([]Operation, *core.BackupData, error) {
 	// Would create a delete operation
-	deleteOp := Delete(op.path)
+	deleteOp := New().Delete(op.path)
 	return []Operation{deleteOp}, nil, nil
 }
 
@@ -168,18 +168,18 @@ func (op *WriteTemplateOperation) Validate(ctx context.Context, fsys FileSystem)
 }
 
 // WriteTemplate creates a template write operation
-func WriteTemplate(path, templateContent string, data TemplateData) Operation {
-	return NewWriteTemplateOperation(path, templateContent, data, 0644)
+func (s *SynthFS) WriteTemplate(path, templateContent string, data TemplateData) Operation {
+	return s.NewWriteTemplateOperation(path, templateContent, data, 0644)
 }
 
 // WriteTemplateWithMode creates a template write operation with custom mode
-func WriteTemplateWithMode(path, templateContent string, data TemplateData, mode fs.FileMode) Operation {
-	return NewWriteTemplateOperation(path, templateContent, data, mode)
+func (s *SynthFS) WriteTemplateWithMode(path, templateContent string, data TemplateData, mode fs.FileMode) Operation {
+	return s.NewWriteTemplateOperation(path, templateContent, data, mode)
 }
 
 // WriteTemplateFile is a convenience function that writes a template directly
 func WriteTemplateFile(ctx context.Context, fs FileSystem, path, templateContent string, data TemplateData) error {
-	op := WriteTemplate(path, templateContent, data)
+	op := New().WriteTemplate(path, templateContent, data)
 	return op.Execute(ctx, fs)
 }
 
@@ -226,7 +226,7 @@ func (tb *TemplateBuilder) WithMode(mode fs.FileMode) *TemplateBuilder {
 
 // Build creates the write template operation
 func (tb *TemplateBuilder) Build() Operation {
-	return NewWriteTemplateOperation(tb.path, tb.template, tb.data, tb.mode)
+	return New().NewWriteTemplateOperation(tb.path, tb.template, tb.data, tb.mode)
 }
 
 // Execute builds and executes the operation
@@ -285,9 +285,10 @@ func (btw *BatchTemplateWriter) AddWithMode(path, template string, data Template
 
 // BuildOperations creates all template operations
 func (btw *BatchTemplateWriter) BuildOperations() []Operation {
+	sfs := New()
 	var ops []Operation
 	for path, tmpl := range btw.templates {
-		op := NewWriteTemplateOperation(path, tmpl.template, tmpl.data, tmpl.mode)
+		op := sfs.NewWriteTemplateOperation(path, tmpl.template, tmpl.data, tmpl.mode)
 		ops = append(ops, op)
 	}
 	return ops

@@ -12,9 +12,8 @@ import (
 
 func TestBatchCompleteAPI(t *testing.T) {
 	testFS := testutil.NewTestFileSystem()
-	registry := synthfs.GetDefaultRegistry()
 	fileSystem := testutil.NewTestFileSystem()
-	batch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)
+	batch := synthfs.NewBatch(fileSystem).WithFileSystem(testFS)
 
 	t.Run("CreateSymlink operation", func(t *testing.T) {
 		// Create target file first
@@ -66,9 +65,8 @@ func TestBatchCompleteAPI(t *testing.T) {
 		}
 
 		testFS := testutil.NewTestFileSystem()
-		registry := synthfs.GetDefaultRegistry()
 		fileSystem := testutil.NewTestFileSystem()
-		setupBatch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)
+		setupBatch := synthfs.NewBatch(fileSystem).WithFileSystem(testFS)
 
 		// Create some files to archive
 		_, err := setupBatch.CreateDir("archive-test")
@@ -93,7 +91,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 		}
 
 		// Now, create the batch for the actual test
-		archiveBatch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)
+		archiveBatch := synthfs.NewBatch(fileSystem).WithFileSystem(testFS)
 
 		// Create tar.gz archive
 		_, err = archiveBatch.CreateArchive("backup.tar.gz", synthfs.ArchiveFormatTarGz, "archive-test/file1.txt", "archive-test/file2.txt")
@@ -144,12 +142,11 @@ func TestBatchCompleteAPI(t *testing.T) {
 	t.Run("Complete workflow with all operations", func(t *testing.T) {
 		// Test dependency resolution between operations
 		testFS := testutil.NewTestFileSystem()
-		registry := synthfs.GetDefaultRegistry()
 		fileSystem := testutil.NewTestFileSystem()
 
 		// --- Setup Phase ---
 		// Create initial files and directories first.
-		setupBatch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)
+		setupBatch := synthfs.NewBatch(fileSystem).WithFileSystem(testFS)
 		_, err := setupBatch.CreateDir("project")
 		if err != nil {
 			t.Fatalf("CreateDir failed: %v", err)
@@ -169,7 +166,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 
 		// --- Test Phase ---
 		// Now run the workflow on the pre-existing files.
-		fullBatch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)
+		fullBatch := synthfs.NewBatch(fileSystem).WithFileSystem(testFS)
 
 		// Copy file to project directory
 		_, err = fullBatch.Copy("README.md", "project/README.md")
@@ -236,11 +233,10 @@ func TestBatchCompleteAPI(t *testing.T) {
 
 	t.Run("Operation objects detailed inspection", func(t *testing.T) {
 		testFS := testutil.NewTestFileSystem()
-		registry := synthfs.GetDefaultRegistry()
 		fileSystem := testutil.NewTestFileSystem()
 
 		// --- Setup Phase ---
-		setupBatch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)
+		setupBatch := synthfs.NewBatch(fileSystem).WithFileSystem(testFS)
 		_, err := setupBatch.CreateFile("inspect.txt", []byte("inspection content"))
 		if err != nil {
 			t.Fatalf("CreateFile for setup failed: %v", err)
@@ -251,7 +247,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 		}
 
 		// --- Test Phase ---
-		inspectBatch := synthfs.NewBatch(fileSystem, registry).WithFileSystem(testFS)
+		inspectBatch := synthfs.NewBatch(fileSystem).WithFileSystem(testFS)
 
 		// This operation is now invalid because the file already exists.
 		// We'll test symlink and archive on the existing file.

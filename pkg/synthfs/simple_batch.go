@@ -32,42 +32,42 @@ func (sb *SimpleBatch) WithContext(ctx context.Context) *SimpleBatch {
 
 // CreateDir adds a directory creation operation to the batch
 func (sb *SimpleBatch) CreateDir(path string, mode fs.FileMode) *SimpleBatch {
-	op := CreateDir(path, mode)
+	op := New().CreateDir(path, mode)
 	sb.operations = append(sb.operations, op)
 	return sb
 }
 
 // WriteFile adds a file write operation to the batch
 func (sb *SimpleBatch) WriteFile(path string, content []byte, mode fs.FileMode) *SimpleBatch {
-	op := CreateFile(path, content, mode)
+	op := New().CreateFile(path, content, mode)
 	sb.operations = append(sb.operations, op)
 	return sb
 }
 
 // Copy adds a copy operation to the batch
 func (sb *SimpleBatch) Copy(src, dst string) *SimpleBatch {
-	op := Copy(src, dst)
+	op := New().Copy(src, dst)
 	sb.operations = append(sb.operations, op)
 	return sb
 }
 
 // Move adds a move operation to the batch
 func (sb *SimpleBatch) Move(src, dst string) *SimpleBatch {
-	op := Move(src, dst)
+	op := New().Move(src, dst)
 	sb.operations = append(sb.operations, op)
 	return sb
 }
 
 // Delete adds a delete operation to the batch
 func (sb *SimpleBatch) Delete(path string) *SimpleBatch {
-	op := Delete(path)
+	op := New().Delete(path)
 	sb.operations = append(sb.operations, op)
 	return sb
 }
 
 // CreateSymlink adds a symlink creation operation to the batch
 func (sb *SimpleBatch) CreateSymlink(target, linkPath string) *SimpleBatch {
-	op := CreateSymlink(target, linkPath)
+	op := New().CreateSymlink(target, linkPath)
 	sb.operations = append(sb.operations, op)
 	return sb
 }

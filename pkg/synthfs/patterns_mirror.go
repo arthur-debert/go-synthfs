@@ -30,7 +30,7 @@ type MirrorWithSymlinksOperation struct {
 }
 
 // NewMirrorWithSymlinksOperation creates a new mirror operation
-func NewMirrorWithSymlinksOperation(srcDir, dstDir string, opts ...MirrorOptions) *MirrorWithSymlinksOperation {
+func (s *SynthFS) NewMirrorWithSymlinksOperation(srcDir, dstDir string, opts ...MirrorOptions) *MirrorWithSymlinksOperation {
 	var options MirrorOptions
 	if len(opts) > 0 {
 		options = opts[0]
@@ -41,7 +41,7 @@ func NewMirrorWithSymlinksOperation(srcDir, dstDir string, opts ...MirrorOptions
 		options.Filter = func(path string, info fs.FileInfo) bool { return true }
 	}
 	
-	id := GenerateID("mirror_symlinks", srcDir)
+	id := s.idGen("mirror_symlinks", srcDir)
 	return &MirrorWithSymlinksOperation{
 		id: id,
 		desc: OperationDesc{
@@ -351,7 +351,7 @@ func (b *MirrorBuilder) Overwrite() *MirrorBuilder {
 
 // Build creates the mirror operation
 func (b *MirrorBuilder) Build() Operation {
-	return NewMirrorWithSymlinksOperation(b.srcDir, b.dstDir, b.options)
+	return New().NewMirrorWithSymlinksOperation(b.srcDir, b.dstDir, b.options)
 }
 
 // Execute builds and executes the operation
@@ -362,6 +362,6 @@ func (b *MirrorBuilder) Execute(ctx context.Context, fs FileSystem) error {
 
 // MirrorWithSymlinks is a convenience function
 func MirrorWithSymlinks(ctx context.Context, fs FileSystem, srcDir, dstDir string) error {
-	op := NewMirrorWithSymlinksOperation(srcDir, dstDir)
+	op := New().NewMirrorWithSymlinksOperation(srcDir, dstDir)
 	return op.Execute(ctx, fs)
 }

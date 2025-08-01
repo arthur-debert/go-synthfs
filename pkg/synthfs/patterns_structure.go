@@ -150,13 +150,13 @@ type CreateStructureOperation struct {
 }
 
 // NewCreateStructureOperation creates a new structure creation operation
-func NewCreateStructureOperation(structure string, baseDir string) (*CreateStructureOperation, error) {
+func (s *SynthFS) NewCreateStructureOperation(structure string, baseDir string) (*CreateStructureOperation, error) {
 	entries, err := ParseStructure(structure)
 	if err != nil {
 		return nil, err
 	}
 	
-	id := GenerateID("create_structure", baseDir)
+	id := s.idGen("create_structure", baseDir)
 	return &CreateStructureOperation{
 		id: id,
 		desc: OperationDesc{
@@ -382,13 +382,13 @@ func (op *CreateStructureOperation) Validate(ctx context.Context, fsys FileSyste
 }
 
 // CreateStructure creates a directory structure from a string definition
-func CreateStructure(structure string) (Operation, error) {
-	return NewCreateStructureOperation(structure, "")
+func (s *SynthFS) CreateStructure(structure string) (Operation, error) {
+	return s.NewCreateStructureOperation(structure, "")
 }
 
 // CreateStructureIn creates a directory structure in a specific base directory
-func CreateStructureIn(baseDir, structure string) (Operation, error) {
-	return NewCreateStructureOperation(structure, baseDir)
+func (s *SynthFS) CreateStructureIn(baseDir, structure string) (Operation, error) {
+	return s.NewCreateStructureOperation(structure, baseDir)
 }
 
 // StructureBuilder provides a fluent interface for building directory structures
@@ -430,7 +430,7 @@ func (sb *StructureBuilder) WithTextFile(path string, content string) *Structure
 
 // Build creates the structure operation
 func (sb *StructureBuilder) Build() (Operation, error) {
-	op, err := NewCreateStructureOperation(sb.structure, sb.baseDir)
+	op, err := New().NewCreateStructureOperation(sb.structure, sb.baseDir)
 	if err != nil {
 		return nil, err
 	}

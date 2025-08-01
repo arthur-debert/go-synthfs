@@ -17,8 +17,7 @@ func TestEventIntegration(t *testing.T) {
 		fs := testutil.NewTestFileSystem()
 
 		// Create batch and executor
-		registry := synthfs.GetDefaultRegistry()
-		batch := synthfs.NewBatch(fs, registry).WithContext(ctx)
+		batch := synthfs.NewBatch(fs).WithContext(ctx)
 		executor := synthfs.NewExecutor()
 
 		// Track events
@@ -137,8 +136,7 @@ func TestEventIntegration(t *testing.T) {
 		ctx := context.Background()
 		fs := testutil.NewTestFileSystem()
 
-		registry := synthfs.GetDefaultRegistry()
-		batch := synthfs.NewBatch(fs, registry).WithContext(ctx)
+		batch := synthfs.NewBatch(fs).WithContext(ctx)
 		executor := synthfs.NewExecutor()
 
 		// Track events

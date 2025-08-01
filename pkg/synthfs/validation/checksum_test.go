@@ -20,9 +20,8 @@ func TestBatchChecksumming(t *testing.T) {
 			t.Fatalf("Failed to create source file: %v", err)
 		}
 
-		registry := synthfs.GetDefaultRegistry()
 		fs := testutil.NewTestFileSystem()
-		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
+		batch := synthfs.NewBatch(fs).WithFileSystem(testFS)
 
 		// Copy operation should compute checksum
 		op, err := batch.Copy("source.txt", "destination.txt")
@@ -66,9 +65,8 @@ func TestBatchChecksumming(t *testing.T) {
 			t.Fatalf("Failed to create source file: %v", err)
 		}
 
-		registry := synthfs.GetDefaultRegistry()
 		fs := testutil.NewTestFileSystem()
-		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
+		batch := synthfs.NewBatch(fs).WithFileSystem(testFS)
 
 		// Move operation should compute checksum
 		op, err := batch.Move("old.txt", "new.txt")
@@ -119,9 +117,8 @@ func TestBatchChecksumming(t *testing.T) {
 			}
 		}
 
-		registry := synthfs.GetDefaultRegistry()
 		fs := testutil.NewTestFileSystem()
-		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
+		batch := synthfs.NewBatch(fs).WithFileSystem(testFS)
 
 		// Archive operation should compute checksums for all sources
 		op, err := batch.CreateArchive("backup.tar.gz", synthfs.ArchiveFormatTarGz, "file1.txt", "file2.txt", "file3.txt")
@@ -172,9 +169,8 @@ func TestBatchChecksumming(t *testing.T) {
 			t.Fatalf("Failed to create directory: %v", err)
 		}
 
-		registry := synthfs.GetDefaultRegistry()
 		fs := testutil.NewTestFileSystem()
-		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
+		batch := synthfs.NewBatch(fs).WithFileSystem(testFS)
 
 		// Try to copy a directory (should not fail checksum computation)
 		op, err := batch.Copy("testdir", "copydir")
@@ -203,9 +199,8 @@ func TestBatchChecksumming(t *testing.T) {
 			t.Fatalf("Failed to create file2: %v", err)
 		}
 
-		registry := synthfs.GetDefaultRegistry()
 		fs := testutil.NewTestFileSystem()
-		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
+		batch := synthfs.NewBatch(fs).WithFileSystem(testFS)
 
 		// Create two copy operations
 		op1, err := batch.Copy("file1.txt", "copy1.txt")
@@ -247,9 +242,8 @@ func TestBatchChecksumming(t *testing.T) {
 			t.Fatalf("Failed to create identical2: %v", err)
 		}
 
-		registry := synthfs.GetDefaultRegistry()
 		fs := testutil.NewTestFileSystem()
-		batch := synthfs.NewBatch(fs, registry).WithFileSystem(testFS)
+		batch := synthfs.NewBatch(fs).WithFileSystem(testFS)
 
 		// Create two copy operations
 		op1, err := batch.Copy("identical1.txt", "copy1.txt")
@@ -278,3 +272,4 @@ func TestBatchChecksumming(t *testing.T) {
 		}
 	})
 }
+

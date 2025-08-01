@@ -14,28 +14,9 @@ import (
 type IDGenerator func(opType, path string) core.OperationID
 
 var (
-	// globalIDGenerator is the currently active ID generator
-	globalIDGenerator atomic.Value
-
 	// sequenceCounter for SequenceIDGenerator
 	sequenceCounter atomic.Uint64
 )
-
-func init() {
-	// Default to hash-based generator
-	globalIDGenerator.Store(IDGenerator(HashIDGenerator))
-}
-
-// SetIDGenerator sets the global ID generator
-func SetIDGenerator(gen IDGenerator) {
-	globalIDGenerator.Store(gen)
-}
-
-// GenerateID generates an ID using the current global generator
-func GenerateID(opType, path string) core.OperationID {
-	gen := globalIDGenerator.Load().(IDGenerator)
-	return gen(opType, path)
-}
 
 // HashIDGenerator generates IDs based on operation type and path hash
 func HashIDGenerator(opType, path string) core.OperationID {

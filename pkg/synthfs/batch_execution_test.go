@@ -13,9 +13,8 @@ func TestBatchExecution(t *testing.T) {
 	// Use TestFileSystem for controlled testing
 	testFS := testutil.NewTestFileSystem()
 
-	registry := synthfs.GetDefaultRegistry()
 	fs := testutil.NewTestFileSystem()
-	batch := synthfs.NewBatch(fs, registry).
+	batch := synthfs.NewBatch(fs).
 		WithFileSystem(testFS).
 		WithContext(context.Background())
 
@@ -91,9 +90,8 @@ func TestBatchExecution(t *testing.T) {
 	})
 
 	t.Run("Execute with auto-generated dependencies", func(t *testing.T) {
-		registry := synthfs.GetDefaultRegistry()
 		fs := testutil.NewTestFileSystem()
-		newBatch := synthfs.NewBatch(fs, registry).WithFileSystem(testutil.NewTestFileSystem())
+		newBatch := synthfs.NewBatch(fs).WithFileSystem(testutil.NewTestFileSystem())
 
 		// This should auto-create multiple parent directories
 		_, err := newBatch.CreateFile("deep/nested/path/file.txt", []byte("nested content"))
@@ -153,9 +151,8 @@ func TestBatchExecution(t *testing.T) {
 	})
 
 	t.Run("Empty batch execution", func(t *testing.T) {
-		registry := synthfs.GetDefaultRegistry()
 		fs := testutil.NewTestFileSystem()
-		emptyBatch := synthfs.NewBatch(fs, registry).WithFileSystem(testutil.NewTestFileSystem())
+		emptyBatch := synthfs.NewBatch(fs).WithFileSystem(testutil.NewTestFileSystem())
 
 		result, err := emptyBatch.Run()
 		if err != nil {

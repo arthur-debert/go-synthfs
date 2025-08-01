@@ -47,7 +47,7 @@ type SyncOperation struct {
 }
 
 // NewSyncOperation creates a new sync operation
-func NewSyncOperation(srcDir, dstDir string, opts ...SyncOptions) *SyncOperation {
+func (s *SynthFS) NewSyncOperation(srcDir, dstDir string, opts ...SyncOptions) *SyncOperation {
 	var options SyncOptions
 	if len(opts) > 0 {
 		options = opts[0]
@@ -58,7 +58,7 @@ func NewSyncOperation(srcDir, dstDir string, opts ...SyncOptions) *SyncOperation
 		options.Filter = func(path string, info fs.FileInfo) bool { return true }
 	}
 	
-	id := GenerateID("sync", srcDir)
+	id := s.idGen("sync", srcDir)
 	return &SyncOperation{
 		id: id,
 		desc: OperationDesc{
@@ -428,13 +428,13 @@ func (op *SyncOperation) Validate(ctx context.Context, fsys FileSystem) error {
 }
 
 // Sync creates a sync operation
-func Sync(srcDir, dstDir string, opts ...SyncOptions) Operation {
-	return NewSyncOperation(srcDir, dstDir, opts...)
+func (s *SynthFS) Sync(srcDir, dstDir string, opts ...SyncOptions) Operation {
+	return s.NewSyncOperation(srcDir, dstDir, opts...)
 }
 
 // SyncDirectories is a convenience function that syncs directories directly
 func SyncDirectories(ctx context.Context, fs FileSystem, srcDir, dstDir string, opts ...SyncOptions) (*SyncResult, error) {
-	op := NewSyncOperation(srcDir, dstDir, opts...)
+	op := New().NewSyncOperation(srcDir, dstDir, opts...)
 	err := op.Execute(ctx, fs)
 	return op.GetResult(), err
 }
@@ -489,7 +489,7 @@ func (sb *SyncBuilder) DryRun() *SyncBuilder {
 
 // Build creates the sync operation
 func (sb *SyncBuilder) Build() Operation {
-	return NewSyncOperation(sb.srcDir, sb.dstDir, sb.options)
+	return New().NewSyncOperation(sb.srcDir, sb.dstDir, sb.options)
 }
 
 // Execute builds and executes the operation

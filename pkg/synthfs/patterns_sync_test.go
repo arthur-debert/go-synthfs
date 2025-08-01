@@ -8,11 +8,7 @@ import (
 )
 
 func TestSyncPatterns(t *testing.T) {
-	// Use sequence generator for predictable IDs
-	defer func() {
-		SetIDGenerator(HashIDGenerator)
-	}()
-	SetIDGenerator(SequenceIDGenerator)
+	sfs := WithIDGenerator(SequenceIDGenerator)
 
 	t.Run("Basic directory sync", func(t *testing.T) {
 		ResetSequenceCounter()
@@ -333,7 +329,7 @@ func TestSyncPatterns(t *testing.T) {
 		filesys := NewTestFileSystemWithPaths("/workspace")
 
 		// Non-existent source
-		op := Sync("nonexistent", "dst")
+		op := sfs.Sync("nonexistent", "dst")
 		err := op.Validate(ctx, filesys)
 		if err == nil {
 			t.Error("Should fail validation with non-existent source")
@@ -343,7 +339,7 @@ func TestSyncPatterns(t *testing.T) {
 		if err := filesys.WriteFile("notdir", []byte("file"), 0644); err != nil {
 			t.Fatal(err)
 		}
-		op = Sync("notdir", "dst")
+		op = sfs.Sync("notdir", "dst")
 		err = op.Validate(ctx, filesys)
 		if err == nil {
 			t.Error("Should fail validation when source is not a directory")
