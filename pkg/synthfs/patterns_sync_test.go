@@ -202,10 +202,11 @@ func TestSyncPatterns(t *testing.T) {
 	})
 
 	t.Run("Sync with UpdateNewer", func(t *testing.T) {
-		t.Skip("Test filesystem doesn't support modification times")
+		// Use a real filesystem to test modification time behavior
+		tmpDir := t.TempDir()
 		ResetSequenceCounter()
 		ctx := context.Background()
-		filesys := NewTestFileSystemWithPaths("/workspace")
+		filesys := NewOSFileSystemWithPaths(tmpDir)
 
 		// Create files
 		if err := filesys.MkdirAll("src", 0755); err != nil {
