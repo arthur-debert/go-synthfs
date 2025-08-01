@@ -108,25 +108,35 @@ func TestSimpleRunAPI(t *testing.T) {
 		}
 	})
 	
-	t.Run("RunWithOptions", func(t *testing.T) {
+	t.Run("RunWithOptions with custom options", func(t *testing.T) {
 		ResetSequenceCounter()
 		ctx := context.Background()
 		fs := filesystem.NewTestFileSystem()
-		
+
 		// Create custom options
 		options := DefaultPipelineOptions()
-		
+		options.DryRun = true // This is not implemented yet, but we can test that it doesn't crash
+
 		// Create operations
 		op1 := CreateDir("testdir", 0755)
 		op2 := CreateFile("testdir/file.txt", []byte("content"), 0644)
-		
+
 		result, err := RunWithOptions(ctx, fs, options, op1, op2)
 		if err != nil {
 			t.Fatalf("RunWithOptions failed: %v", err)
 		}
-		
+
 		if len(result.GetOperations()) != 2 {
 			t.Error("Should have 2 operation results")
+		}
+
+		// Since DryRun is not implemented, the files will be created.
+		// When DryRun is implemented, this test should be updated to check that the files are not created.
+		if _, err := fs.Stat("testdir"); err != nil {
+			t.Error("Directory should exist")
+		}
+		if _, err := fs.Stat("testdir/file.txt"); err != nil {
+			t.Error("File should exist")
 		}
 	})
 }

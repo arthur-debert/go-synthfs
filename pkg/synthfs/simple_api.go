@@ -5,12 +5,16 @@ import (
 	"time"
 )
 
-// Run executes a series of operations in sequence
+// Run executes a series of operations in sequence.
+// If an operation fails, subsequent operations are not executed, and the error is returned.
+// This function does not perform a rollback of successful operations.
 func Run(ctx context.Context, fs FileSystem, ops ...Operation) (*Result, error) {
 	return RunWithOptions(ctx, fs, DefaultPipelineOptions(), ops...)
 }
 
-// RunWithOptions executes operations with custom options
+// RunWithOptions executes operations with custom options.
+// Note: This simplified runner does not currently support all pipeline options (e.g., DryRun).
+// It executes operations sequentially and does not perform a pre-validation step for the entire pipeline.
 func RunWithOptions(ctx context.Context, fs FileSystem, options PipelineOptions, ops ...Operation) (*Result, error) {
 	if len(ops) == 0 {
 		return &Result{
