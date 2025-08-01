@@ -3,17 +3,25 @@ package synthfs
 import (
 	"context"
 	"io/fs"
+	"runtime"
 	"testing"
 	"time"
+
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 func TestSyncPatterns(t *testing.T) {
 	sfs := WithIDGenerator(SequenceIDGenerator)
 
 	t.Run("Basic directory sync", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		filesys := NewTestFileSystemWithPaths("/workspace")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		filesys := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Create source directory structure
 		if err := filesys.MkdirAll("src/subdir", 0755); err != nil {
@@ -26,6 +34,11 @@ func TestSyncPatterns(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := filesys.WriteFile("src/subdir/file3.txt", []byte("content3"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create destination directory (required for real filesystem)
+		if err := filesys.MkdirAll("dst", 0755); err != nil {
 			t.Fatal(err)
 		}
 
@@ -59,9 +72,14 @@ func TestSyncPatterns(t *testing.T) {
 	})
 
 	t.Run("Sync with updates", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		filesys := NewTestFileSystemWithPaths("/workspace")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		filesys := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Create initial structure
 		if err := filesys.MkdirAll("src", 0755); err != nil {
@@ -100,9 +118,14 @@ func TestSyncPatterns(t *testing.T) {
 	})
 
 	t.Run("Sync with DeleteExtra", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		filesys := NewTestFileSystemWithPaths("/workspace")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		filesys := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Create structures
 		if err := filesys.MkdirAll("src", 0755); err != nil {
@@ -153,9 +176,14 @@ func TestSyncPatterns(t *testing.T) {
 	})
 
 	t.Run("Sync with filter", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		filesys := NewTestFileSystemWithPaths("/workspace")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		filesys := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Create source files
 		if err := filesys.MkdirAll("src", 0755); err != nil {
@@ -168,6 +196,11 @@ func TestSyncPatterns(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := filesys.WriteFile("src/readme.md", []byte("readme"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create destination directory (required for real filesystem)
+		if err := filesys.MkdirAll("dst", 0755); err != nil {
 			t.Fatal(err)
 		}
 
@@ -254,15 +287,25 @@ func TestSyncPatterns(t *testing.T) {
 	})
 
 	t.Run("Sync with DryRun", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		filesys := NewTestFileSystemWithPaths("/workspace")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		filesys := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Create source
 		if err := filesys.MkdirAll("src", 0755); err != nil {
 			t.Fatal(err)
 		}
 		if err := filesys.WriteFile("src/file.txt", []byte("content"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create destination directory (required for real filesystem)
+		if err := filesys.MkdirAll("dst", 0755); err != nil {
 			t.Fatal(err)
 		}
 
@@ -285,9 +328,14 @@ func TestSyncPatterns(t *testing.T) {
 	})
 
 	t.Run("SyncBuilder fluent API", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		filesys := NewTestFileSystemWithPaths("/workspace")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		filesys := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Setup
 		if err := filesys.MkdirAll("src", 0755); err != nil {
@@ -325,8 +373,13 @@ func TestSyncPatterns(t *testing.T) {
 	})
 
 	t.Run("Sync operation validation", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ctx := context.Background()
-		filesys := NewTestFileSystemWithPaths("/workspace")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		filesys := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Non-existent source
 		op := sfs.Sync("nonexistent", "dst")
@@ -347,9 +400,14 @@ func TestSyncPatterns(t *testing.T) {
 	})
 
 	t.Run("Sync with symlinks", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		filesys := NewTestFileSystemWithPaths("/workspace")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		filesys := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Create source with symlink
 		if err := filesys.MkdirAll("src", 0755); err != nil {
@@ -360,6 +418,11 @@ func TestSyncPatterns(t *testing.T) {
 		}
 		if fullFS, ok := FileSystem(filesys).(FullFileSystem); ok {
 			_ = fullFS.Symlink("target.txt", "src/link.txt")
+		}
+
+		// Create destination directory (required for real filesystem)
+		if err := filesys.MkdirAll("dst", 0755); err != nil {
+			t.Fatal(err)
 		}
 
 		// Sync with PreserveSymlinks
@@ -384,12 +447,22 @@ func TestSyncPatterns(t *testing.T) {
 	})
 
 	t.Run("Sync empty directories", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		filesys := NewTestFileSystemWithPaths("/workspace")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		filesys := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Create empty source directory
 		if err := filesys.MkdirAll("src/empty", 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create destination directory (required for real filesystem)
+		if err := filesys.MkdirAll("dst", 0755); err != nil {
 			t.Fatal(err)
 		}
 
@@ -414,9 +487,14 @@ func TestSyncPatterns(t *testing.T) {
 	})
 
 	t.Run("Sync deeply nested structure", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		filesys := NewTestFileSystemWithPaths("/workspace")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		filesys := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Create deep structure
 		deepPath := "src/a/b/c/d/e"
@@ -424,6 +502,11 @@ func TestSyncPatterns(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := filesys.WriteFile(deepPath+"/deep.txt", []byte("deep"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create destination directory (required for real filesystem)
+		if err := filesys.MkdirAll("dst", 0755); err != nil {
 			t.Fatal(err)
 		}
 
