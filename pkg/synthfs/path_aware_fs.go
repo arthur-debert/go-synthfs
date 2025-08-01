@@ -85,6 +85,23 @@ func (pfs *PathAwareFileSystem) Stat(name string) (fs.FileInfo, error) {
 	return f.Stat()
 }
 
+// ReadFile implements ReadFS
+func (pfs *PathAwareFileSystem) ReadFile(name string) ([]byte, error) {
+	resolved, err := pfs.resolvePath(name)
+	if err != nil {
+		return nil, &fs.PathError{Op: "readfile", Path: name, Err: err}
+	}
+	
+	f, err := pfs.fs.Open(resolved)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	
+	// Use fs.ReadFile if available
+	return fs.ReadFile(pfs.fs, resolved)
+}
+
 // WriteFile implements WriteFS
 func (pfs *PathAwareFileSystem) WriteFile(name string, data []byte, perm fs.FileMode) error {
 	resolved, err := pfs.resolvePath(name)
