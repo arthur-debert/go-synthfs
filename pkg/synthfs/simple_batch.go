@@ -80,19 +80,31 @@ func (sb *SimpleBatch) Execute() error {
 
 // ExecuteWithRollback runs all operations and attempts rollback on failure
 func (sb *SimpleBatch) ExecuteWithRollback() error {
-	err := sb.Execute()
+	result, err := Run(sb.ctx, sb.fs, sb.operations...)
 	if err == nil {
 		return nil
 	}
 	
-	// Attempt rollback
+	// Determine which operations succeeded
+	var successfulOps []Operation
+	if result != nil {
+		for i, opResult := range result.GetOperations() {
+			if opRes, ok := opResult.(OperationResult); ok && opRes.Error == nil {
+				if i < len(sb.operations) {
+					successfulOps = append(successfulOps, sb.operations[i])
+				}
+			}
+		}
+	}
+	
+	// Attempt rollback of successful operations only
 	rollbackErrs := make(map[OperationID]error)
 	
-	// Roll back in reverse order
-	for i := len(sb.operations) - 1; i >= 0; i-- {
-		op := sb.operations[i]
+	// Roll back successful operations in reverse order
+	for i := len(successfulOps) - 1; i >= 0; i-- {
+		op := successfulOps[i]
 		if rollbackErr := op.Rollback(sb.ctx, sb.fs); rollbackErr != nil {
-			// Ignore "not found" errors during rollback as they're expected
+			// Store rollback errors but continue trying
 			rollbackErrs[op.ID()] = rollbackErr
 		}
 	}

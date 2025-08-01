@@ -2,6 +2,7 @@ package synthfs
 
 import (
 	"context"
+	"time"
 )
 
 // Run executes a series of operations in sequence
@@ -13,45 +14,98 @@ func Run(ctx context.Context, fs FileSystem, ops ...Operation) (*Result, error) 
 func RunWithOptions(ctx context.Context, fs FileSystem, options PipelineOptions, ops ...Operation) (*Result, error) {
 	if len(ops) == 0 {
 		return &Result{
+			success:    true,
 			operations: []interface{}{},
 			duration:   0,
 		}, nil
 	}
 	
-	// Create pipeline
-	pipeline := NewMemPipeline()
+	// For simple API, execute operations sequentially without pipeline validation
+	// This allows operations like Copy to work when the source is created by a previous operation
+	results := make([]interface{}, 0, len(ops))
+	startTime := time.Now()
 	
-	// Add operations
-	for _, op := range ops {
-		if err := pipeline.Add(op); err != nil {
-			return nil, WrapOperationError(op, "add to pipeline", err)
-		}
-	}
-	
-	// Create executor and run
-	executor := NewExecutor()
-	result := executor.RunWithOptions(ctx, pipeline, fs, options)
-	
-	// Check for errors and enhance them
-	for i, opResult := range result.GetOperations() {
-		if opRes, ok := opResult.(OperationResult); ok && opRes.Error != nil {
-			// Enhance the error with pipeline context
+	for i, op := range ops {
+		// Validate before execute
+		if err := op.Validate(ctx, fs); err != nil {
+			// Create failed operation result
+			opResult := OperationResult{
+				OperationID:  op.ID(),
+				Operation:    op,
+				Status:       StatusValidation,
+				Error:        err,
+				Duration:     0,
+			}
+			
+			// Get successful operations
 			var successfulOps []OperationID
 			for j := 0; j < i; j++ {
-				if prevRes, ok := result.GetOperations()[j].(OperationResult); ok && prevRes.Error == nil {
-					successfulOps = append(successfulOps, prevRes.OperationID)
+				if res, ok := results[j].(OperationResult); ok && res.Error == nil {
+					successfulOps = append(successfulOps, res.OperationID)
 				}
 			}
 			
-			return result, &PipelineError{
-				FailedOp:      ops[i],
+			// Return partial result with error
+			return &Result{
+				success:    false,
+				operations: append(results, opResult),
+				duration:   time.Since(startTime),
+				err:        err,
+			}, &PipelineError{
+				FailedOp:      op,
 				FailedIndex:   i + 1,
 				TotalOps:      len(ops),
-				Err:           opRes.Error,
+				Err:           err,
 				SuccessfulOps: successfulOps,
 			}
 		}
+		
+		// Execute operation
+		startOpTime := time.Now()
+		err := op.Execute(ctx, fs)
+		duration := time.Since(startOpTime)
+		
+		// Create operation result
+		opResult := OperationResult{
+			OperationID:  op.ID(),
+			Operation:    op,
+			Status:       StatusSuccess,
+			Error:        err,
+			Duration:     duration,
+		}
+		
+		if err != nil {
+			opResult.Status = StatusFailure
+			
+			// Get successful operations
+			var successfulOps []OperationID
+			for j := 0; j < i; j++ {
+				if res, ok := results[j].(OperationResult); ok && res.Error == nil {
+					successfulOps = append(successfulOps, res.OperationID)
+				}
+			}
+			
+			// Return partial result with error
+			return &Result{
+				success:    false,
+				operations: append(results, opResult),
+				duration:   time.Since(startTime),
+				err:        err,
+			}, &PipelineError{
+				FailedOp:      op,
+				FailedIndex:   i + 1,
+				TotalOps:      len(ops),
+				Err:           err,
+				SuccessfulOps: successfulOps,
+			}
+		}
+		
+		results = append(results, opResult)
 	}
 	
-	return result, nil
+	return &Result{
+		success:    true,
+		operations: results,
+		duration:   time.Since(startTime),
+	}, nil
 }

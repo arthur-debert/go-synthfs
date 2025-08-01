@@ -449,7 +449,9 @@ func TestPipeline_ResolvePrerequisites(t *testing.T) {
 		prereq := NewMockPrerequisite("parent_dir", "parent", errors.New("not satisfied"))
 		op1.SetPrerequisites([]core.Prerequisite{prereq})
 
-		pipeline.Add(op1)
+		if err := pipeline.Add(op1); err != nil {
+			t.Fatal(err)
+		}
 
 		err := pipeline.ResolvePrerequisites(resolver, fs)
 		if err != nil {
@@ -479,7 +481,9 @@ func TestPipeline_ResolvePrerequisites(t *testing.T) {
 		op1.SetPrerequisites([]core.Prerequisite{prereq1})
 		op2.SetPrerequisites([]core.Prerequisite{prereq2})
 
-		pipeline.Add(op1, op2)
+		if err := pipeline.Add(op1, op2); err != nil {
+			t.Fatal(err)
+		}
 
 		err := pipeline.ResolvePrerequisites(resolver, fs)
 		if err != nil {
@@ -503,7 +507,9 @@ func TestPipeline_ResolvePrerequisites(t *testing.T) {
 		prereq := NewMockPrerequisite("unknown_type", "something", errors.New("not satisfied"))
 		op1.SetPrerequisites([]core.Prerequisite{prereq})
 
-		pipeline.Add(op1)
+		if err := pipeline.Add(op1); err != nil {
+			t.Fatal(err)
+		}
 
 		err := pipeline.ResolvePrerequisites(resolver, fs)
 		if err != nil {
@@ -541,7 +547,9 @@ func TestPipeline_Validate(t *testing.T) {
 		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
 		op2 := NewMockPipelineOperation("op2", "create_directory", "dir1")
 
-		pipeline.Add(op1, op2)
+		if err := pipeline.Add(op1, op2); err != nil {
+			t.Fatal(err)
+		}
 
 		err := pipeline.Validate(ctx, fs)
 		if err != nil {
@@ -558,7 +566,9 @@ func TestPipeline_Validate(t *testing.T) {
 		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
 		op1.SetDependencies([]core.OperationID{"missing_op"})
 
-		pipeline.Add(op1)
+		if err := pipeline.Add(op1); err != nil {
+			t.Fatal(err)
+		}
 
 		err := pipeline.Validate(ctx, fs)
 		if err == nil {
@@ -579,7 +589,9 @@ func TestPipeline_Validate(t *testing.T) {
 		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
 		op1.SetValidateError(errors.New("validation failed"))
 
-		pipeline.Add(op1)
+		if err := pipeline.Add(op1); err != nil {
+			t.Fatal(err)
+		}
 
 		err := pipeline.Validate(ctx, fs)
 		if err == nil {
@@ -603,7 +615,9 @@ func TestPipeline_Validate(t *testing.T) {
 		// Make op1 conflict with op2
 		op1.SetConflicts([]core.OperationID{"op2"})
 
-		pipeline.Add(op1, op2)
+		if err := pipeline.Add(op1, op2); err != nil {
+			t.Fatal(err)
+		}
 
 		err := pipeline.Validate(ctx, fs)
 		if err == nil {
@@ -624,7 +638,9 @@ func TestPipeline_Validate(t *testing.T) {
 		op1 := NewMockPipelineOperation("op1", "create_file", "file1.txt")
 		op1.SetConflicts([]core.OperationID{"not_in_pipeline"}) // Conflict not in pipeline
 
-		pipeline.Add(op1)
+		if err := pipeline.Add(op1); err != nil {
+			t.Fatal(err)
+		}
 
 		err := pipeline.Validate(ctx, fs)
 		if err != nil {

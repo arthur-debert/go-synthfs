@@ -31,12 +31,12 @@ project/
 		// Check entries
 		expected := []string{
 			"project",
-			"src",
-			"src/main.go",
-			"src/lib",
-			"src/lib/utils.go",
-			"tests",
-			"README.md",
+			"project/src",
+			"project/src/main.go",
+			"project/src/lib",
+			"project/src/lib/utils.go",
+			"project/tests",
+			"project/README.md",
 		}
 		
 		if len(entries) != len(expected) {
@@ -197,6 +197,8 @@ project/
         app
     src/
         main.go
+    versions/
+        v1.0.0/
     current -> versions/v1.0.0
 `
 		

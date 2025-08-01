@@ -18,7 +18,33 @@ func BuildPipeline(ops ...Operation) *PipelineBuilder {
 		dependencies: make(map[OperationID][]OperationID),
 	}
 	
+	// Track operations that create paths
+	pathCreators := make(map[string]Operation)
+	
 	for _, op := range ops {
+		// Auto-detect dependencies based on paths
+		if adapter, ok := op.(*OperationsPackageAdapter); ok {
+			srcPath, dstPath := adapter.opsOperation.GetPaths()
+			desc := adapter.opsOperation.Describe()
+			opType := desc.Type
+			
+			// For operations that read from a source, check if source was created by a previous op
+			if srcPath != "" && (opType == "copy" || opType == "move") {
+				if creator, exists := pathCreators[srcPath]; exists {
+					op.AddDependency(creator.ID())
+				}
+			}
+			
+			// Track paths this operation creates
+			if dstPath != "" {
+				pathCreators[dstPath] = op
+			} else if srcPath != "" && (opType == "create_file" || 
+			                            opType == "create_directory" ||
+			                            opType == "create_symlink") {
+				pathCreators[srcPath] = op
+			}
+		}
+		
 		if err := pb.pipeline.Add(op); err == nil {
 			pb.lastOp = op
 		}
@@ -66,40 +92,11 @@ func (pb *PipelineBuilder) Build() Pipeline {
 
 // Execute runs the pipeline with the given context and filesystem
 func (pb *PipelineBuilder) Execute(ctx context.Context, fs FileSystem) (*Result, error) {
-	// Resolve pipeline dependencies first
-	if err := pb.pipeline.Resolve(); err != nil {
-		return nil, err
-	}
-	
-	executor := NewExecutor()
-	result := executor.Run(ctx, pb.pipeline, fs)
-	
-	// Check for errors and return enhanced error
-	for i, opResult := range result.GetOperations() {
-		if opRes, ok := opResult.(OperationResult); ok && opRes.Error != nil {
-			// Collect successful operations
-			var successfulOps []OperationID
-			for j := 0; j < i; j++ {
-				if prevRes, ok := result.GetOperations()[j].(OperationResult); ok && prevRes.Error == nil {
-					successfulOps = append(successfulOps, prevRes.OperationID)
-				}
-			}
-			
-			ops := pb.pipeline.Operations()
-			if i < len(ops) {
-				return result, &PipelineError{
-					FailedOp:      ops[i],
-					FailedIndex:   i + 1,
-					TotalOps:      len(ops),
-					Err:           opRes.Error,
-					SuccessfulOps: successfulOps,
-				}
-			}
-			return result, opRes.Error
-		}
-	}
-	
-	return result, nil
+	// For BuildPipeline, use sequential execution like simple_api to handle dependencies
+	// The pipeline/executor approach validates all operations upfront which fails for
+	// operations that depend on files created by previous operations
+	ops := pb.pipeline.Operations()
+	return RunWithOptions(ctx, fs, DefaultPipelineOptions(), ops...)
 }
 
 // ExecuteWith runs the pipeline with a custom executor

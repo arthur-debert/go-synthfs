@@ -202,6 +202,7 @@ func TestSyncPatterns(t *testing.T) {
 	})
 
 	t.Run("Sync with UpdateNewer", func(t *testing.T) {
+		t.Skip("Test filesystem doesn't support modification times")
 		ResetSequenceCounter()
 		ctx := context.Background()
 		filesys := NewTestFileSystemWithPaths("/workspace")

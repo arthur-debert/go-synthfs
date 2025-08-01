@@ -7,6 +7,9 @@ import (
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
+// Define a custom type for context keys to avoid collisions
+type testContextKey string
+
 func TestSimpleBatchAPI(t *testing.T) {
 	// Use sequence generator for predictable IDs
 	defer func() {
@@ -52,7 +55,7 @@ func TestSimpleBatchAPI(t *testing.T) {
 	t.Run("Batch with context", func(t *testing.T) {
 		ResetSequenceCounter()
 		fs := filesystem.NewTestFileSystem()
-		ctx := context.WithValue(context.Background(), "test", "value")
+		ctx := context.WithValue(context.Background(), testContextKey("test"), "value")
 		
 		batch := NewSimpleBatch(fs).WithContext(ctx)
 		batch.CreateDir("testdir", 0755)

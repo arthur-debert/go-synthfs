@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"strings"
 	
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
@@ -290,32 +291,61 @@ func (op *SyncOperation) Execute(ctx context.Context, fsys FileSystem) error {
 	
 	// Handle extra files in destination
 	if op.options.DeleteExtra {
+		// Process directories first, then files
+		// This ensures we count files in directories before deleting them
+		var dirsToDelete []string
+		deletedDirs := make(map[string]bool)
+		
+		// First pass: identify directories to delete
 		for relPath, dstInfo := range dstFiles {
-			dstPath := filepath.Join(op.dstDir, relPath)
-			
-			if !op.options.DryRun {
-				if writeFS, ok := fsys.(WriteFS); ok {
-					if dstInfo.IsDir() {
-						if err := writeFS.RemoveAll(dstPath); err != nil {
-							op.result.Errors = append(op.result.Errors, err)
-							continue
-						}
-						op.result.DirsDeleted = append(op.result.DirsDeleted, relPath)
-					} else {
-						if err := writeFS.Remove(dstPath); err != nil {
-							op.result.Errors = append(op.result.Errors, err)
-							continue
-						}
-						op.result.FilesDeleted = append(op.result.FilesDeleted, relPath)
+			if dstInfo.IsDir() {
+				dirsToDelete = append(dirsToDelete, relPath)
+				deletedDirs[relPath] = true
+			}
+		}
+		
+		// Second pass: count and delete files not in deleted directories
+		for relPath, dstInfo := range dstFiles {
+			if !dstInfo.IsDir() {
+				// Check if this file is inside a directory we're deleting
+				skipFile := false
+				for dirPath := range deletedDirs {
+					if strings.HasPrefix(relPath, dirPath+"/") {
+						skipFile = true
+						break
 					}
 				}
-			} else {
-				if dstInfo.IsDir() {
-					op.result.DirsDeleted = append(op.result.DirsDeleted, relPath)
+				
+				if !skipFile {
+					if !op.options.DryRun {
+						if writeFS, ok := fsys.(WriteFS); ok {
+							dstPath := filepath.Join(op.dstDir, relPath)
+							if err := writeFS.Remove(dstPath); err != nil {
+								op.result.Errors = append(op.result.Errors, err)
+								continue
+							}
+						}
+					}
+					op.result.FilesDeleted = append(op.result.FilesDeleted, relPath)
 				} else {
+					// File is inside a directory being deleted, count it
 					op.result.FilesDeleted = append(op.result.FilesDeleted, relPath)
 				}
 			}
+		}
+		
+		// Third pass: delete directories
+		for _, relPath := range dirsToDelete {
+			if !op.options.DryRun {
+				if writeFS, ok := fsys.(WriteFS); ok {
+					dstPath := filepath.Join(op.dstDir, relPath)
+					if err := writeFS.RemoveAll(dstPath); err != nil {
+						op.result.Errors = append(op.result.Errors, err)
+						continue
+					}
+				}
+			}
+			op.result.DirsDeleted = append(op.result.DirsDeleted, relPath)
 		}
 	}
 	

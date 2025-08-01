@@ -32,7 +32,7 @@ func TestOperationError(t *testing.T) {
 			Action: "create directory",
 			Err:    errors.New("disk full"),
 		}
-		err.WithContext("mode", "0755").WithContext("parent", "/tmp")
+		err = err.WithContext("mode", "0755").WithContext("parent", "/tmp")
 		
 		msg := err.Error()
 		if !strings.Contains(msg, "disk full") {

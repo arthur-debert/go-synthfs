@@ -91,6 +91,8 @@ func CreateSymlink(target, linkPath string) Operation {
 	op := operations.NewCreateSymlinkOperation(id, linkPath)
 	item := targets.NewSymlink(linkPath, target)
 	op.SetItem(item)
+	// Set target in description details for validation
+	op.SetDescriptionDetail("target", target)
 	return NewOperationsPackageAdapter(op)
 }
 
@@ -99,6 +101,8 @@ func CreateSymlinkWithID(id string, target, linkPath string) Operation {
 	op := operations.NewCreateSymlinkOperation(core.OperationID(id), linkPath)
 	item := targets.NewSymlink(linkPath, target)
 	op.SetItem(item)
+	// Set target in description details for validation
+	op.SetDescriptionDetail("target", target)
 	return NewOperationsPackageAdapter(op)
 }
 

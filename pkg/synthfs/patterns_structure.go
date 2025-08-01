@@ -35,17 +35,35 @@ func ParseStructure(structure string) ([]StructureEntry, error) {
 		}
 		
 		// Count leading spaces/tabs to determine depth
+		// For tree-style format, we need to handle tree characters specially
 		depth := 0
-		for i, ch := range line {
-			if ch == ' ' || ch == '\t' {
-				depth = i + 1
-			} else {
-				break
-			}
-		}
+		hasTreeChars := strings.ContainsAny(line, "│├└")
 		
-		// Normalize depth (4 spaces = 1 level)
-		depth = depth / 4
+		if hasTreeChars {
+			// For tree format, count the │ prefixes first
+			tempLine := line
+			for strings.HasPrefix(tempLine, "│   ") {
+				depth++
+				tempLine = tempLine[4:]
+			}
+			// Trim any spaces between │ and branch characters
+			tempLine = strings.TrimLeft(tempLine, " ")
+			// Then check for branch characters
+			if strings.HasPrefix(tempLine, "├── ") || strings.HasPrefix(tempLine, "└── ") {
+				depth++
+			}
+		} else {
+			// Normal indentation counting
+			for i, ch := range line {
+				if ch == ' ' || ch == '\t' {
+					depth = i + 1
+				} else {
+					break
+				}
+			}
+			// Normalize depth (4 spaces = 1 level)
+			depth = depth / 4
+		}
 		
 		// Adjust directory stack based on depth
 		if depth <= lastDepth {
@@ -63,10 +81,14 @@ func ParseStructure(structure string) ([]StructureEntry, error) {
 		// Parse the line
 		trimmed := strings.TrimSpace(line)
 		
-		// Skip tree drawing characters
+		// Skip tree drawing characters (and their variations)
 		trimmed = strings.TrimPrefix(trimmed, "├── ")
 		trimmed = strings.TrimPrefix(trimmed, "└── ")
 		trimmed = strings.TrimPrefix(trimmed, "│   ")
+		trimmed = strings.TrimPrefix(trimmed, "├──")
+		trimmed = strings.TrimPrefix(trimmed, "└──")
+		trimmed = strings.TrimPrefix(trimmed, "│")
+		trimmed = strings.TrimSpace(trimmed)
 		
 		if trimmed == "" {
 			continue
@@ -104,11 +126,14 @@ func ParseStructure(structure string) ([]StructureEntry, error) {
 		
 		if isDir {
 			entry.Mode = 0755
-			// Add to directory stack
-			dirStack = append(dirStack, trimmed)
 		}
 		
 		entries = append(entries, entry)
+		
+		// Update directory stack AFTER creating the entry
+		if isDir {
+			dirStack = append(dirStack, trimmed)
+		}
 	}
 	
 	return entries, nil
@@ -250,8 +275,27 @@ func (op *CreateStructureOperation) Execute(ctx context.Context, fsys FileSystem
 		return fmt.Errorf("filesystem does not support write operations")
 	}
 	
+	// Sort entries: directories first, then files, then symlinks
+	// This ensures targets exist before symlinks are created
+	sortedEntries := make([]StructureEntry, len(op.entries))
+	copy(sortedEntries, op.entries)
+	
+	// Custom sort
+	for i := 0; i < len(sortedEntries)-1; i++ {
+		for j := i + 1; j < len(sortedEntries); j++ {
+			// Directories come first
+			if sortedEntries[j].IsDir && !sortedEntries[i].IsDir && !sortedEntries[i].IsSymlink {
+				sortedEntries[i], sortedEntries[j] = sortedEntries[j], sortedEntries[i]
+			}
+			// Files come before symlinks
+			if !sortedEntries[j].IsSymlink && sortedEntries[i].IsSymlink {
+				sortedEntries[i], sortedEntries[j] = sortedEntries[j], sortedEntries[i]
+			}
+		}
+	}
+	
 	// Create entries
-	for _, entry := range op.entries {
+	for _, entry := range sortedEntries {
 		fullPath := entry.Path
 		if op.baseDir != "" && op.baseDir != "." {
 			fullPath = filepath.Join(op.baseDir, entry.Path)
@@ -287,8 +331,20 @@ func (op *CreateStructureOperation) Execute(ctx context.Context, fsys FileSystem
 			
 			// Get content if provided
 			content := entry.Content
+			// Try to find content by various path formats
 			if customContent, ok := op.fileContent[entry.Path]; ok {
 				content = customContent
+			} else if customContent, ok := op.fileContent[fullPath]; ok {
+				content = customContent
+			} else {
+				// Try relative path without the root directory
+				relPath := entry.Path
+				if idx := strings.Index(relPath, "/"); idx > 0 {
+					relPath = relPath[idx+1:]
+					if customContent, ok := op.fileContent[relPath]; ok {
+						content = customContent
+					}
+				}
 			}
 			
 			if err := writeFS.WriteFile(fullPath, content, entry.Mode); err != nil {
