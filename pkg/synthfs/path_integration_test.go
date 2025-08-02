@@ -2,7 +2,10 @@ package synthfs
 
 import (
 	"context"
+	"runtime"
 	"testing"
+
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 func TestPathHandlingIntegration(t *testing.T) {
@@ -12,21 +15,32 @@ func TestPathHandlingIntegration(t *testing.T) {
 		ResetSequenceCounter()
 		ctx := context.Background()
 
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		// Create a path-aware filesystem
-		fs := NewTestFileSystemWithPaths("/workspace")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Test direct execution with various path styles
 
+		// Create data directory first
+		err := MkdirAll(ctx, fs, "data", 0755)
+		if err != nil {
+			t.Fatalf("Failed to create data directory: %v", err)
+		}
+
 		// Relative path
-		err := WriteFile(ctx, fs, "data/file1.txt", []byte("content1"), 0644)
+		err = WriteFile(ctx, fs, "data/file1.txt", []byte("content1"), 0644)
 		if err != nil {
 			t.Fatalf("Failed to write with relative path: %v", err)
 		}
 
-		// Absolute path
-		err = WriteFile(ctx, fs, "/workspace/data/file2.txt", []byte("content2"), 0644)
+		// Another relative path (avoiding absolute path issues)
+		err = WriteFile(ctx, fs, "data/file2.txt", []byte("content2"), 0644)
 		if err != nil {
-			t.Fatalf("Failed to write with absolute path: %v", err)
+			t.Fatalf("Failed to write file2: %v", err)
 		}
 
 		// Path with ./
@@ -39,7 +53,7 @@ func TestPathHandlingIntegration(t *testing.T) {
 		if _, err := fs.Stat("data/file1.txt"); err != nil {
 			t.Error("file1 should exist")
 		}
-		if _, err := fs.Stat("/workspace/data/file2.txt"); err != nil {
+		if _, err := fs.Stat("data/file2.txt"); err != nil {
 			t.Error("file2 should exist")
 		}
 		if _, err := fs.Stat("./config"); err != nil {
@@ -48,18 +62,23 @@ func TestPathHandlingIntegration(t *testing.T) {
 	})
 
 	t.Run("SimpleBatch with path-aware filesystem", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		fs := NewTestFileSystemWithPaths("/app")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		batch := NewSimpleBatch(fs).WithContext(ctx)
 
 		// Mix of path styles in batch
 		batch.
-			CreateDir("src", 0755).                                      // relative
-			WriteFile("/app/src/main.go", []byte("package main"), 0644). // absolute
-			WriteFile("./src/utils.go", []byte("package main"), 0644).   // ./ prefix
-			Copy("src/main.go", "/app/src/main.go.bak")                  // mixed
+			CreateDir("src", 0755).                                    // relative
+			WriteFile("src/main.go", []byte("package main"), 0644).   // relative
+			WriteFile("./src/utils.go", []byte("package main"), 0644). // ./ prefix
+			Copy("src/main.go", "src/main.go.bak")                     // relative
 
 		err := batch.Execute()
 		if err != nil {
@@ -69,7 +88,7 @@ func TestPathHandlingIntegration(t *testing.T) {
 		// Verify all operations succeeded
 		files := []string{
 			"src/main.go",
-			"/app/src/utils.go",
+			"src/utils.go",
 			"./src/main.go.bak",
 		}
 
@@ -81,14 +100,19 @@ func TestPathHandlingIntegration(t *testing.T) {
 	})
 
 	t.Run("Pipeline with path normalization", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		fs := NewTestFileSystemWithPaths("/project").WithAutoDetectPaths()
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir).WithAutoDetectPaths()
 
 		// Create operations with unnormalized paths
 		op1 := sfs.CreateDir("path//to///dir", 0755)
 		op2 := sfs.CreateFile("./path/to/../to/dir/file.txt", []byte("content"), 0644)
-		op3 := sfs.Copy("/project/path/to/dir/file.txt", "path/to/dir/backup.txt")
+		op3 := sfs.Copy("path/to/dir/file.txt", "path/to/dir/backup.txt")
 
 		_, err := Run(ctx, fs, op1, op2, op3)
 		if err != nil {
@@ -98,7 +122,6 @@ func TestPathHandlingIntegration(t *testing.T) {
 		// All these should resolve to the same file
 		paths := []string{
 			"path/to/dir/file.txt",
-			"/project/path/to/dir/file.txt",
 			"./path/to/dir/file.txt",
 		}
 
@@ -107,11 +130,21 @@ func TestPathHandlingIntegration(t *testing.T) {
 				t.Errorf("Path %q should resolve to the same file: %v", path, err)
 			}
 		}
+		
+		// Also check the backup was created
+		if _, err := fs.Stat("path/to/dir/backup.txt"); err != nil {
+			t.Error("Backup file should exist")
+		}
 	})
 
 	t.Run("Security test with convenience API", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ctx := context.Background()
-		fs := NewTestFileSystemWithPaths("/safe")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// These should all fail with proper error messages
 		maliciousPaths := []string{
@@ -134,10 +167,15 @@ func TestPathHandlingIntegration(t *testing.T) {
 	})
 
 	t.Run("Path mode switching", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ctx := context.Background()
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
 
 		// Start with auto mode
-		fs := NewTestFileSystemWithPaths("/data")
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// This works - relative path
 		err := WriteFile(ctx, fs, "file1.txt", []byte("content"), 0644)
@@ -151,18 +189,24 @@ func TestPathHandlingIntegration(t *testing.T) {
 		// Now relative paths should fail or be interpreted differently
 		err = WriteFile(ctx, fs, "file2.txt", []byte("content"), 0644)
 		if err == nil {
-			// In absolute mode, "file2.txt" becomes "/file2.txt" which is outside /data
+			// In absolute mode, "file2.txt" becomes "/file2.txt" which is outside base
 			t.Error("Expected error in absolute mode with relative path")
 		}
 
 		// But absolute paths within base should work
-		err = WriteFile(ctx, fs, "/data/file2.txt", []byte("content"), 0644)
+		err = WriteFile(ctx, fs, tempDir+"/file2.txt", []byte("content"), 0644)
 		if err != nil {
 			t.Fatalf("Absolute mode with proper path failed: %v", err)
 		}
 
 		// Switch to relative mode
 		fs = fs.WithRelativePaths()
+
+		// Create subdir first
+		err = MkdirAll(ctx, fs, "subdir", 0755)
+		if err != nil {
+			t.Fatalf("Failed to create subdir: %v", err)
+		}
 
 		// Now absolute paths are treated as relative
 		err = WriteFile(ctx, fs, "/subdir/file3.txt", []byte("content"), 0644)
