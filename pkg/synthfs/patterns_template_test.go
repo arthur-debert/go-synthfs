@@ -2,17 +2,25 @@ package synthfs
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 func TestTemplatePatterns(t *testing.T) {
 	sfs := WithIDGenerator(SequenceIDGenerator)
 
 	t.Run("Basic template write", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		fs := NewTestFileSystemWithPaths("/workspace")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Simple template
 		tmpl := "Hello, {{.Name}}! You have {{.Count}} messages."
@@ -39,9 +47,14 @@ func TestTemplatePatterns(t *testing.T) {
 	})
 
 	t.Run("Template with complex data", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		fs := NewTestFileSystemWithPaths("/project")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Config file template
 		tmpl := `{
@@ -78,9 +91,14 @@ func TestTemplatePatterns(t *testing.T) {
 	})
 
 	t.Run("TemplateBuilder", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		fs := NewTestFileSystemWithPaths("/app")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Build template with fluent API
 		err := NewTemplateBuilder("config.yaml").
@@ -119,9 +137,14 @@ database:
 	})
 
 	t.Run("BatchTemplateWriter", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		fs := NewTestFileSystemWithPaths("/site")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Create multiple templates
 		err := NewBatchTemplateWriter().
@@ -157,8 +180,13 @@ database:
 	})
 
 	t.Run("Template validation", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ctx := context.Background()
-		fs := NewTestFileSystemWithPaths("/test")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Invalid template syntax
 		op := sfs.WriteTemplate("bad.txt", "{{.Name", TemplateData{"Name": "test"})
@@ -176,9 +204,14 @@ database:
 	})
 
 	t.Run("Template with functions", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		fs := NewTestFileSystemWithPaths("/workspace")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Template with built-in functions
 		tmpl := `{{.Items | len}} items: {{range .Items}}{{.}}, {{end}}`
