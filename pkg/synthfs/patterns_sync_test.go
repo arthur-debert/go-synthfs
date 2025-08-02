@@ -529,4 +529,57 @@ func TestSyncPatterns(t *testing.T) {
 			t.Error("Deep file has wrong content")
 		}
 	})
+
+	t.Run("Sync creates destination directory automatically", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
+		ResetSequenceCounter()
+		ctx := context.Background()
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		filesys := NewPathAwareFileSystem(osFS, tempDir)
+
+		// Create source structure
+		if err := filesys.MkdirAll("source", 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := filesys.WriteFile("source/file1.txt", []byte("content1"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := filesys.WriteFile("source/file2.txt", []byte("content2"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify destination doesn't exist
+		if _, err := filesys.Stat("new-destination"); err == nil {
+			t.Fatal("Destination should not exist before sync")
+		}
+
+		// Sync to non-existent destination - should auto-create
+		result, err := SyncDirectories(ctx, filesys, "source", "new-destination")
+		if err != nil {
+			t.Fatalf("Sync should auto-create destination, but got error: %v", err)
+		}
+
+		// Verify destination was created
+		info, err := filesys.Stat("new-destination")
+		if err != nil {
+			t.Fatalf("Destination should exist after sync: %v", err)
+		}
+		if !info.IsDir() {
+			t.Error("Destination should be a directory")
+		}
+
+		// Verify files were synced
+		if len(result.FilesCreated) != 2 {
+			t.Errorf("Expected 2 files created, got %d", len(result.FilesCreated))
+		}
+
+		// Verify content
+		content, _ := filesys.ReadFile("new-destination/file1.txt")
+		if string(content) != "content1" {
+			t.Error("File content mismatch")
+		}
+	})
 }

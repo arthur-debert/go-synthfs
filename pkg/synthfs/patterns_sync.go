@@ -185,6 +185,15 @@ func (op *SyncOperation) Execute(ctx context.Context, fsys FileSystem) error {
 		return fmt.Errorf("failed to scan source: %w", err)
 	}
 
+	// Ensure destination exists before scanning
+	if !op.options.DryRun {
+		if writeFS, ok := fsys.(WriteFS); ok {
+			if err := writeFS.MkdirAll(op.dstDir, 0755); err != nil {
+				return fmt.Errorf("failed to create destination: %w", err)
+			}
+		}
+	}
+
 	// Build destination file map
 	dstFiles := make(map[string]fs.FileInfo)
 	err = op.walkDir(fsys, op.dstDir, "", func(relPath string, info fs.FileInfo) error {
@@ -193,15 +202,6 @@ func (op *SyncOperation) Execute(ctx context.Context, fsys FileSystem) error {
 	})
 	if err != nil && !isNotExist(err) {
 		return fmt.Errorf("failed to scan destination: %w", err)
-	}
-
-	// Ensure destination exists
-	if !op.options.DryRun {
-		if writeFS, ok := fsys.(WriteFS); ok {
-			if err := writeFS.MkdirAll(op.dstDir, 0755); err != nil {
-				return fmt.Errorf("failed to create destination: %w", err)
-			}
-		}
 	}
 
 	// Sync files from source to destination
