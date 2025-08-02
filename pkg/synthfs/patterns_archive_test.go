@@ -2,7 +2,10 @@ package synthfs
 
 import (
 	"context"
+	"runtime"
 	"testing"
+
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 func TestArchivePatterns(t *testing.T) {
@@ -72,8 +75,13 @@ func TestArchivePatterns(t *testing.T) {
 	})
 
 	t.Run("Direct archive execution", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ctx := context.Background()
-		fs := NewTestFileSystemWithPaths("/workspace")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Create some test files
 		_ = fs.WriteFile("file1.txt", []byte("content1"), 0644)
@@ -111,8 +119,13 @@ func TestArchivePatterns(t *testing.T) {
 	})
 
 	t.Run("ArchiveBuilder execution", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ctx := context.Background()
-		fs := NewTestFileSystemWithPaths("/project")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Create test files
 		_ = fs.MkdirAll("src", 0755)
