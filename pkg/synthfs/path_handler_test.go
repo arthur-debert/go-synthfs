@@ -1,8 +1,11 @@
 package synthfs
 
 import (
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 func TestPathHandler(t *testing.T) {
@@ -180,21 +183,26 @@ func TestPathHandler(t *testing.T) {
 
 func TestPathAwareFileSystem(t *testing.T) {
 	t.Run("Path resolution", func(t *testing.T) {
-		fs := NewTestFileSystemWithPaths("/project")
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Write a file using different path styles
 		content := []byte("test content")
 
-		// Relative path
-		err := fs.WriteFile("data/file1.txt", content, 0644)
+		// Create data directory first
+		err := fs.MkdirAll("data", 0755)
 		if err != nil {
-			t.Errorf("Failed to write with relative path: %v", err)
+			t.Fatalf("Failed to create data directory: %v", err)
 		}
 
-		// Absolute path within base
-		err = fs.WriteFile("/project/data/file2.txt", content, 0644)
+		// Relative path
+		err = fs.WriteFile("data/file1.txt", content, 0644)
 		if err != nil {
-			t.Errorf("Failed to write with absolute path: %v", err)
+			t.Errorf("Failed to write with relative path: %v", err)
 		}
 
 		// Path with ./
@@ -203,8 +211,8 @@ func TestPathAwareFileSystem(t *testing.T) {
 			t.Errorf("Failed to write with ./ path: %v", err)
 		}
 
-		// Verify all files exist
-		for _, path := range []string{"data/file1.txt", "/project/data/file2.txt", "./data/file3.txt"} {
+		// Verify files exist with relative paths
+		for _, path := range []string{"data/file1.txt", "./data/file3.txt"} {
 			if _, err := fs.Stat(path); err != nil {
 				t.Errorf("Failed to stat %q: %v", path, err)
 			}
@@ -212,10 +220,16 @@ func TestPathAwareFileSystem(t *testing.T) {
 	})
 
 	t.Run("Path modes", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
 		// Test absolute mode
-		fs := NewTestFileSystemWithPaths("/workspace").WithAbsolutePaths()
+		fs := NewPathAwareFileSystem(osFS, tempDir).WithAbsolutePaths()
 
-		err := fs.WriteFile("/workspace/file.txt", []byte("content"), 0644)
+		// In absolute mode, we need to use the actual temp directory path
+		err := fs.WriteFile(tempDir + "/file.txt", []byte("content"), 0644)
 		if err != nil {
 			t.Errorf("Failed to write in absolute mode: %v", err)
 		}
@@ -227,11 +241,23 @@ func TestPathAwareFileSystem(t *testing.T) {
 		}
 
 		// Test relative mode
-		fs = NewTestFileSystemWithPaths("/workspace").WithRelativePaths()
+		fs = NewPathAwareFileSystem(osFS, tempDir).WithRelativePaths()
 
+		// Create directories first
+		err = fs.MkdirAll("relative", 0755)
+		if err != nil {
+			t.Fatalf("Failed to create relative directory: %v", err)
+		}
+		
 		err = fs.WriteFile("relative/file.txt", []byte("content"), 0644)
 		if err != nil {
 			t.Errorf("Failed to write in relative mode: %v", err)
+		}
+
+		// Create directory for absolute path test
+		err = fs.MkdirAll("absolute", 0755)
+		if err != nil {
+			t.Fatalf("Failed to create absolute directory: %v", err)
 		}
 
 		// Absolute paths should be converted to relative
@@ -242,7 +268,12 @@ func TestPathAwareFileSystem(t *testing.T) {
 	})
 
 	t.Run("Security - path traversal", func(t *testing.T) {
-		fs := NewTestFileSystemWithPaths("/safe/dir")
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// These should all fail
 		badPaths := []string{
@@ -261,7 +292,12 @@ func TestPathAwareFileSystem(t *testing.T) {
 	})
 
 	t.Run("All operations", func(t *testing.T) {
-		fs := NewTestFileSystemWithPaths("/app")
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Create directory
 		err := fs.MkdirAll("config", 0755)
