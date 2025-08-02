@@ -157,3 +157,61 @@ func NormalizePath(path string) string {
 
 	return path
 }
+
+// ResolveSymlinkTarget resolves a symlink target path to an absolute path within the filesystem root.
+// This is a critical security function that prevents symlinks from escaping the filesystem boundary.
+//
+// Parameters:
+//   - linkPath: The path where the symlink will be created
+//   - targetPath: The target path the symlink should point to
+//
+// Returns:
+//   - The resolved absolute target path within the filesystem root
+//   - An error if the target would escape the filesystem root
+//
+// Security considerations:
+//   - Relative paths with "../" are converted to absolute paths within the root
+//   - Absolute paths are validated to be within the filesystem root
+//   - This prevents symlink attacks that could access files outside the sandbox
+func (ph *PathHandler) ResolveSymlinkTarget(linkPath, targetPath string) (string, error) {
+	// Clean both paths
+	linkPath = filepath.Clean(linkPath)
+	targetPath = filepath.Clean(targetPath)
+
+	// If target is already absolute, validate it's within our root
+	if filepath.IsAbs(targetPath) {
+		// For absolute paths, ensure they're within our filesystem root
+		if ph.base != "/" && !strings.HasPrefix(targetPath, ph.base) {
+			return "", fmt.Errorf("absolute symlink target %q escapes filesystem root %q", targetPath, ph.base)
+		}
+		return targetPath, nil
+	}
+
+	// For relative paths, we need to resolve them relative to the link's directory
+	linkDir := filepath.Dir(linkPath)
+	
+	// If linkDir is relative, resolve it first
+	if !filepath.IsAbs(linkDir) {
+		resolvedLinkDir, err := ph.ResolvePath(linkDir)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve link directory %q: %w", linkDir, err)
+		}
+		linkDir = resolvedLinkDir
+	}
+
+	// Now resolve the target relative to the link's directory
+	resolvedTarget := filepath.Join(linkDir, targetPath)
+	resolvedTarget = filepath.Clean(resolvedTarget)
+
+	// Ensure the resolved target is within our filesystem root
+	if ph.base != "/" && !strings.HasPrefix(resolvedTarget, ph.base) {
+		return "", fmt.Errorf("symlink target %q (resolved to %q) escapes filesystem root %q", targetPath, resolvedTarget, ph.base)
+	}
+
+	return resolvedTarget, nil
+}
+
+// GetBase returns the base path of the filesystem
+func (ph *PathHandler) GetBase() string {
+	return ph.base
+}

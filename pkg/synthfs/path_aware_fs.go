@@ -256,3 +256,9 @@ func (pfs *PathAwareFileSystem) resolvePath(path string) (string, error) {
 func (pfs *PathAwareFileSystem) GetPathHandler() *PathHandler {
 	return pfs.handler
 }
+
+// ResolveSymlinkTarget resolves a symlink target path to an absolute path within the filesystem root.
+// This delegates to the path handler's security-critical symlink resolution function.
+func (pfs *PathAwareFileSystem) ResolveSymlinkTarget(linkPath, targetPath string) (string, error) {
+	return pfs.handler.ResolveSymlinkTarget(linkPath, targetPath)
+}

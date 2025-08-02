@@ -57,13 +57,23 @@ func TestMirrorPatterns(t *testing.T) {
 		}
 
 		// Verify they are symlinks
-		// Note: PathAwareFileSystem implements Readlink
+		// Note: The symlink target should point to the source file
 		target, err := fs.Readlink("mirror/README.md")
 		if err != nil {
 			t.Logf("Warning: Could not read symlink (test filesystem may not support): %v", err)
 		} else {
+			// The underlying filesystem may return relative paths, but they should
+			// resolve correctly within the filesystem root
 			if !strings.Contains(target, "source/README.md") {
 				t.Errorf("Expected symlink to point to source/README.md, got %s", target)
+			}
+			
+			// Verify the symlink actually works by reading through it
+			content, err := fs.ReadFile("mirror/README.md")
+			if err != nil {
+				t.Errorf("Failed to read through symlink: %v", err)
+			} else if string(content) != "# Project" {
+				t.Errorf("Symlink content mismatch: expected '# Project', got %q", string(content))
 			}
 		}
 	})

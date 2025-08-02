@@ -212,11 +212,21 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 							}
 						}
 
-						// Symlink the directory with relative path
-						relTarget, err := filepath.Rel(filepath.Dir(dstPath), srcPath)
-						if err != nil {
-							// Fallback to absolute within the filesystem
-							relTarget = srcPath
+						// Calculate relative path from destination to source
+						relTarget, _ := filepath.Rel(filepath.Dir(dstPath), srcPath)
+						
+						// Use PathAwareFileSystem if available for secure symlink resolution
+						var resolvedTarget string
+						if pafs, ok := fsys.(*PathAwareFileSystem); ok {
+							// Use centralized security-aware symlink resolution
+							resolved, err := pafs.ResolveSymlinkTarget(dstPath, relTarget)
+							if err != nil {
+								return fmt.Errorf("failed to resolve symlink target for %s -> %s: %w", dstPath, relTarget, err)
+							}
+							resolvedTarget = resolved
+						} else {
+							// Fallback for non-PathAwareFileSystem (should not happen in practice)
+							resolvedTarget = srcPath
 						}
 
 						// Remove existing if overwrite is enabled
@@ -224,9 +234,9 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 							_ = fullFS.Remove(dstPath)
 						}
 
-						err = fullFS.Symlink(relTarget, dstPath)
+						err = fullFS.Symlink(resolvedTarget, dstPath)
 						if err != nil && !strings.Contains(err.Error(), "exists") {
-							return fmt.Errorf("failed to create symlink %s -> %s: %w", dstPath, relTarget, err)
+							return fmt.Errorf("failed to create symlink %s -> %s: %w", dstPath, resolvedTarget, err)
 						}
 					}
 				} else {
@@ -239,11 +249,21 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 						}
 					}
 
-					// Create symlink to file with relative path
-					relTarget, err := filepath.Rel(filepath.Dir(dstPath), srcPath)
-					if err != nil {
-						// Fallback to absolute within the filesystem
-						relTarget = srcPath
+					// Calculate relative path from destination to source
+					relTarget, _ := filepath.Rel(filepath.Dir(dstPath), srcPath)
+					
+					// Use PathAwareFileSystem if available for secure symlink resolution
+					var resolvedTarget string
+					if pafs, ok := fsys.(*PathAwareFileSystem); ok {
+						// Use centralized security-aware symlink resolution
+						resolved, err := pafs.ResolveSymlinkTarget(dstPath, relTarget)
+						if err != nil {
+							return fmt.Errorf("failed to resolve symlink target for %s -> %s: %w", dstPath, relTarget, err)
+						}
+						resolvedTarget = resolved
+					} else {
+						// Fallback for non-PathAwareFileSystem (should not happen in practice)
+						resolvedTarget = srcPath
 					}
 
 					// Remove existing if overwrite is enabled
@@ -251,9 +271,9 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 						_ = fullFS.Remove(dstPath)
 					}
 
-					err = fullFS.Symlink(relTarget, dstPath)
+					err = fullFS.Symlink(resolvedTarget, dstPath)
 					if err != nil && !strings.Contains(err.Error(), "exists") {
-						return fmt.Errorf("failed to create symlink %s -> %s: %w", dstPath, relTarget, err)
+						return fmt.Errorf("failed to create symlink %s -> %s: %w", dstPath, resolvedTarget, err)
 					}
 				}
 			}
