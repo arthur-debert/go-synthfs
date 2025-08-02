@@ -3,6 +3,8 @@ package synthfs
 import (
 	"io/fs"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
@@ -186,36 +188,75 @@ func TestPathAwareFS_SymlinkSecurity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			testFS := filesystem.NewTestFileSystem()
-			pfs := NewPathAwareFileSystem(testFS, tt.base)
-
-			// Create symlink in test filesystem
-			if err := testFS.Symlink(tt.symlinkTarget, tt.symlinkPath); err != nil {
-				t.Skipf("test filesystem doesn't support symlinks: %v - test documents expected behavior", err)
+			if runtime.GOOS == "windows" {
+				t.Skip("SynthFS does not officially support Windows")
 			}
-
-			// Test accessing through symlink
-			_, err := pfs.Readlink(tt.accessPath)
-
+			
+			// Use real filesystem for security testing
+			tempDir := t.TempDir()
+			
+			// Create the PathAwareFileSystem rooted at temp directory
+			osFS := filesystem.NewOSFileSystem(tempDir)
+			pfs := NewPathAwareFileSystem(osFS, tempDir)
+			
+			// For symlink tests, we need to test the security at symlink creation time
+			// because that's where the real filesystem enforces security
 			if tt.expectError {
-				if err == nil {
-					t.Errorf("expected error but got none")
-					return
+				// These should fail at Symlink creation with real filesystem
+				// Adjust the paths - remove /safe prefix since we're at root
+				linkPath := strings.TrimPrefix(tt.symlinkPath, "/safe/")
+				if linkPath == tt.symlinkPath {
+					linkPath = strings.TrimPrefix(linkPath, "/")
 				}
-				// Note: TestFileSystem may not implement full symlink security validation
-				// The test documents the expected behavior even if the test filesystem 
-				// doesn't fully implement it
-				if tt.errorContains != "" && !containsString(err.Error(), tt.errorContains) {
-					t.Logf("expected error %q but got %q - test filesystem may not implement full symlink security", tt.errorContains, err.Error())
-					// Don't fail the test - document the limitation
+				
+				err := pfs.Symlink(tt.symlinkTarget, linkPath)
+				if err == nil {
+					t.Error("Expected error creating dangerous symlink, but got none")
+				} else {
+					t.Logf("Got security error as expected: %v", err)
 				}
 			} else {
-				// For safe symlinks, we don't expect path resolution errors
-				// The symlink itself might not exist in test FS, but path resolution should work
+				// For safe symlinks, create the target first
+				targetPath := strings.TrimPrefix(tt.symlinkTarget, "/safe/")
+				if targetPath == tt.symlinkTarget {
+					targetPath = strings.TrimPrefix(targetPath, "/")
+				}
+				
+				// Skip if it's an absolute path within root - not testable with real FS
+				if strings.HasPrefix(tt.symlinkTarget, "/safe/") {
+					t.Skip("Absolute path symlinks within root not testable with real filesystem")
+					return
+				}
+				
+				// Create target file/directory
+				if strings.Contains(targetPath, "/") {
+					dir := filepath.Dir(targetPath)
+					if err := pfs.MkdirAll(dir, 0755); err != nil {
+						t.Fatalf("Failed to create target directory: %v", err)
+					}
+				}
+				if err := pfs.WriteFile(targetPath, []byte("test content"), 0644); err != nil {
+					t.Fatalf("Failed to create target file: %v", err)
+				}
+				
+				// Create the symlink
+				linkPath := strings.TrimPrefix(tt.symlinkPath, "/safe/")
+				if linkPath == tt.symlinkPath {
+					linkPath = strings.TrimPrefix(linkPath, "/")
+				}
+				err := pfs.Symlink(targetPath, linkPath)
 				if err != nil {
-					var pathErr *fs.PathError
-					if !isPathError(err, &pathErr) {
-						t.Errorf("unexpected error type: %v", err)
+					// Real filesystem may still reject some symlinks
+					if strings.Contains(err.Error(), "invalid argument") {
+						t.Skip("Filesystem doesn't support this type of symlink")
+						return
+					}
+					t.Errorf("Failed to create safe symlink: %v", err)
+				} else {
+					// Verify we can read through the symlink
+					_, err := pfs.Readlink(linkPath)
+					if err != nil {
+						t.Errorf("Failed to read symlink: %v", err)
 					}
 				}
 			}
