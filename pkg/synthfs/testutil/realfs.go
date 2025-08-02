@@ -1,3 +1,18 @@
+// Package testutil provides testing utilities for SynthFS.
+//
+// IMPORTANT: All new tests should use RealFSTestHelper instead of TestFileSystem.
+// Real filesystem testing ensures tests validate actual filesystem behavior and
+// has revealed multiple security and behavioral issues that TestFileSystem was hiding.
+//
+// Example usage:
+//
+//	func TestMyFeature(t *testing.T) {
+//	    helper := testutil.NewRealFSTestHelper(t)
+//	    fs := helper.FS
+//	    // Your test code here...
+//	}
+//
+// See docs/dev/README.md for comprehensive testing guidelines.
 package testutil
 
 import (
@@ -8,8 +23,10 @@ import (
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
-// RealFSTestHelper provides utilities for testing with real filesystem operations
-// This helper is Unix-only (Linux/macOS) as SynthFS doesn't officially support Windows
+// RealFSTestHelper provides utilities for testing with real filesystem operations.
+// This helper is Unix-only (Linux/macOS) as SynthFS doesn't officially support Windows.
+//
+// Use this helper for all new tests instead of the deprecated TestFileSystem.
 type RealFSTestHelper struct {
 	t       *testing.T
 	tempDir string
