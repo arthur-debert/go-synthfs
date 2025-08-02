@@ -243,10 +243,16 @@ project/
 			}
 		}
 
-		// Check symlinks
+		// Check symlinks - they should now be absolute paths for security
 		if target, err := filesys.Readlink("project/bin/app"); err == nil {
-			if target != "../build/app" {
-				t.Errorf("Expected symlink target '../build/app', got %q", target)
+			// Should be an absolute path within the filesystem
+			if !strings.Contains(target, "build/app") {
+				t.Errorf("Expected symlink to point to build/app, got %q", target)
+			}
+			
+			// Verify the symlink actually works by reading through it
+			if _, err := filesys.Stat("project/bin/app"); err != nil {
+				t.Errorf("Failed to stat through symlink: %v", err)
 			}
 		} else {
 			t.Logf("Warning: Could not read symlink (test filesystem may not support): %v", err)

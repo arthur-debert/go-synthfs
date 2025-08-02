@@ -310,8 +310,22 @@ func (op *CreateStructureOperation) Execute(ctx context.Context, fsys FileSystem
 					_ = writeFS.MkdirAll(parent, 0755)
 				}
 
-				if err := fullFS.Symlink(entry.Target, fullPath); err != nil {
-					return fmt.Errorf("failed to create symlink %s -> %s: %w", fullPath, entry.Target, err)
+				// Use PathAwareFileSystem if available for secure symlink resolution
+				var resolvedTarget string
+				if pafs, ok := fsys.(*PathAwareFileSystem); ok {
+					// Use centralized security-aware symlink resolution
+					resolved, err := pafs.ResolveSymlinkTarget(fullPath, entry.Target)
+					if err != nil {
+						return fmt.Errorf("failed to resolve symlink target for %s -> %s: %w", fullPath, entry.Target, err)
+					}
+					resolvedTarget = resolved
+				} else {
+					// Fallback for non-PathAwareFileSystem (should not happen in practice)
+					resolvedTarget = entry.Target
+				}
+
+				if err := fullFS.Symlink(resolvedTarget, fullPath); err != nil {
+					return fmt.Errorf("failed to create symlink %s -> %s: %w", fullPath, resolvedTarget, err)
 				}
 			} else {
 				return fmt.Errorf("filesystem does not support symlinks")
