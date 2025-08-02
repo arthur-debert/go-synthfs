@@ -3,17 +3,25 @@ package synthfs
 import (
 	"context"
 	iofs "io/fs"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 func TestCopyTreePatterns(t *testing.T) {
 	sfs := WithIDGenerator(SequenceIDGenerator)
 
 	t.Run("Basic copy tree", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		fs := NewTestFileSystemWithPaths("/workspace")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Create source structure
 		_ = fs.MkdirAll("src/lib", 0755)
@@ -45,9 +53,14 @@ func TestCopyTreePatterns(t *testing.T) {
 	})
 
 	t.Run("CopyTreeBuilder with filters", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		fs := NewTestFileSystemWithPaths("/project")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Create source structure
 		_ = fs.MkdirAll("code/src", 0755)
@@ -88,8 +101,13 @@ func TestCopyTreePatterns(t *testing.T) {
 	})
 
 	t.Run("CopyTreeOperation validation", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ctx := context.Background()
-		fs := NewTestFileSystemWithPaths("/test")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Test with non-existent source
 		op := sfs.NewCopyTreeOperation("nonexistent", "dest")
@@ -127,9 +145,14 @@ func TestCopyTreePatterns(t *testing.T) {
 	})
 
 	t.Run("Custom filter function", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("SynthFS does not officially support Windows")
+		}
 		ResetSequenceCounter()
 		ctx := context.Background()
-		fs := NewTestFileSystemWithPaths("/workspace")
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
 		// Create source files
 		_ = fs.MkdirAll("project", 0755)

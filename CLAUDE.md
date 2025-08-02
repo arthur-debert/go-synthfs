@@ -78,10 +78,31 @@ Key recent changes:
 
 ### Testing Strategy
 
-- Comprehensive test suite using `testutil/mock_fs.go` for filesystem mocking
+- **IMPORTANT**: New tests should use real filesystem instead of TestFileSystem
+- Real filesystem test helper available at `pkg/synthfs/testutil/realfs.go`
 - Tests focus on operation validation, execution, and rollback scenarios
 - Use `go test -v -run TestName ./pkg/synthfs/...` to run specific tests
 - Coverage reports generated with `./scripts/test`
+
+#### Real Filesystem Testing Guidelines
+
+When writing new tests, use real filesystem testing to ensure tests validate actual filesystem behavior:
+
+```go
+// DON'T use TestFileSystem (deprecated, hides real behavior)
+fs := NewTestFileSystemWithPaths("/workspace")
+
+// DO use real filesystem with test helper
+tempDir := t.TempDir()
+osFS := filesystem.NewOSFileSystem(tempDir)
+fs := NewPathAwareFileSystem(osFS, tempDir)
+
+// Or use the helper from testutil/realfs.go
+helper := testutil.NewRealFSTestHelper(t)
+fs := helper.FS
+```
+
+Real filesystem testing has revealed several security and behavioral issues that TestFileSystem was hiding. Always prefer real filesystem for new tests.
 
 ### Important Notes
 

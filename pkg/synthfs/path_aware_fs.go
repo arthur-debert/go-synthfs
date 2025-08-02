@@ -15,6 +15,16 @@ func NewOSFileSystemWithPaths(root string) *PathAwareFileSystem {
 }
 
 // NewTestFileSystemWithPaths creates a test filesystem with path handling
+//
+// DEPRECATED: Use real filesystem testing instead. TestFileSystem hides important
+// security and behavioral issues. For new tests, use:
+//
+//	tempDir := t.TempDir()
+//	osFS := filesystem.NewOSFileSystem(tempDir)
+//	fs := NewPathAwareFileSystem(osFS, tempDir)
+//
+// Or use testutil.NewRealFSTestHelper(t) for a convenient helper.
+// See docs/dev/README.md for testing guidelines.
 func NewTestFileSystemWithPaths(root string) *PathAwareFileSystem {
 	testfs := filesystem.NewTestFileSystem()
 	return NewPathAwareFileSystem(testfs, root)
