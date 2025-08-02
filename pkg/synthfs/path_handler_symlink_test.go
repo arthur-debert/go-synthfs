@@ -109,6 +109,24 @@ func TestPathHandler_ResolveSymlinkTarget(t *testing.T) {
 			want:       "/etc/passwd",
 			wantErr:    false,
 		},
+		
+		// Additional test cases for absolute paths within root
+		{
+			name:       "absolute path within filesystem root",
+			base:       "/workspace",
+			linkPath:   "/workspace/project/link",
+			targetPath: "/workspace/shared/lib.so",
+			want:       "/workspace/shared/lib.so",
+			wantErr:    false,
+		},
+		{
+			name:       "absolute path within nested filesystem root",
+			base:       "/home/user/project",
+			linkPath:   "/home/user/project/bin/app",
+			targetPath: "/home/user/project/build/app",
+			want:       "/home/user/project/build/app",
+			wantErr:    false,
+		},
 	}
 
 	for _, tt := range tests {
