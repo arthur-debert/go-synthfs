@@ -9,7 +9,8 @@ import (
 //
 // Operations are executed in the order provided, with each operation's success required
 // before proceeding. If an operation fails, subsequent operations are not executed.
-// This function does not perform rollback of successful operations.
+// By default, this function does not perform a rollback. To enable rollback,
+// use RunWithOptions with RollbackOnError set to true.
 //
 // Example - Simple sequential operations:
 //
@@ -52,44 +53,14 @@ func RunWithOptions(ctx context.Context, fs FileSystem, options PipelineOptions,
 		}, nil
 	}
 
-	// For simple API, execute operations sequentially without pipeline validation
-	// This allows operations like Copy to work when the source is created by a previous operation
 	results := make([]interface{}, 0, len(ops))
+	successfulOps := make([]Operation, 0, len(ops))
 	startTime := time.Now()
 
 	for i, op := range ops {
 		// Validate before execute
 		if err := op.Validate(ctx, fs); err != nil {
-			// Create failed operation result
-			opResult := OperationResult{
-				OperationID: op.ID(),
-				Operation:   op,
-				Status:      StatusValidation,
-				Error:       err,
-				Duration:    0,
-			}
-
-			// Get successful operations
-			var successfulOps []OperationID
-			for j := 0; j < i; j++ {
-				if res, ok := results[j].(OperationResult); ok && res.Error == nil {
-					successfulOps = append(successfulOps, res.OperationID)
-				}
-			}
-
-			// Return partial result with error
-			return &Result{
-					success:    false,
-					operations: append(results, opResult),
-					duration:   time.Since(startTime),
-					err:        err,
-				}, &PipelineError{
-					FailedOp:      op,
-					FailedIndex:   i + 1,
-					TotalOps:      len(ops),
-					Err:           err,
-					SuccessfulOps: successfulOps,
-				}
+			return handleOpError(ctx, fs, options, err, op, i, ops, results, successfulOps, startTime, true)
 		}
 
 		// Execute operation
@@ -97,7 +68,6 @@ func RunWithOptions(ctx context.Context, fs FileSystem, options PipelineOptions,
 		err := op.Execute(ctx, fs)
 		duration := time.Since(startOpTime)
 
-		// Create operation result
 		opResult := OperationResult{
 			OperationID: op.ID(),
 			Operation:   op,
@@ -108,31 +78,12 @@ func RunWithOptions(ctx context.Context, fs FileSystem, options PipelineOptions,
 
 		if err != nil {
 			opResult.Status = StatusFailure
-
-			// Get successful operations
-			var successfulOps []OperationID
-			for j := 0; j < i; j++ {
-				if res, ok := results[j].(OperationResult); ok && res.Error == nil {
-					successfulOps = append(successfulOps, res.OperationID)
-				}
-			}
-
-			// Return partial result with error
-			return &Result{
-					success:    false,
-					operations: append(results, opResult),
-					duration:   time.Since(startTime),
-					err:        err,
-				}, &PipelineError{
-					FailedOp:      op,
-					FailedIndex:   i + 1,
-					TotalOps:      len(ops),
-					Err:           err,
-					SuccessfulOps: successfulOps,
-				}
+			results = append(results, opResult)
+			return handleOpError(ctx, fs, options, err, op, i, ops, results, successfulOps, startTime, false)
 		}
 
 		results = append(results, opResult)
+		successfulOps = append(successfulOps, op)
 	}
 
 	return &Result{
@@ -140,4 +91,66 @@ func RunWithOptions(ctx context.Context, fs FileSystem, options PipelineOptions,
 		operations: results,
 		duration:   time.Since(startTime),
 	}, nil
+}
+
+func handleOpError(
+	ctx context.Context,
+	fs FileSystem,
+	options PipelineOptions,
+	err error,
+	op Operation,
+	i int,
+	ops []Operation,
+	results []interface{},
+	successfulOps []Operation,
+	startTime time.Time,
+	isValidation bool,
+) (*Result, error) {
+	if isValidation {
+		opResult := OperationResult{
+			OperationID: op.ID(),
+			Operation:   op,
+			Status:      StatusValidation,
+			Error:       err,
+			Duration:    0,
+		}
+		results = append(results, opResult)
+	}
+
+	// Attempt rollback if requested
+	if options.RollbackOnError {
+		rollbackErrs := make(map[OperationID]error)
+		for k := len(successfulOps) - 1; k >= 0; k-- {
+			opToRollback := successfulOps[k]
+			if rollbackErr := opToRollback.Rollback(ctx, fs); rollbackErr != nil {
+				rollbackErrs[opToRollback.ID()] = rollbackErr
+			}
+		}
+		if len(rollbackErrs) > 0 {
+			err = &RollbackError{
+				OriginalErr:  err,
+				RollbackErrs: rollbackErrs,
+			}
+		}
+	}
+
+	var successfulOpIDs []OperationID
+	for _, successfulOp := range successfulOps {
+		successfulOpIDs = append(successfulOpIDs, successfulOp.ID())
+	}
+
+	pipelineErr := &PipelineError{
+		FailedOp:      op,
+		FailedIndex:   i + 1,
+		TotalOps:      len(ops),
+		Err:           err,
+		SuccessfulOps: successfulOpIDs,
+	}
+
+	return &Result{
+		success:    false,
+		operations: results,
+		duration:   time.Since(startTime),
+		err:        err,
+	}, pipelineErr
 }
