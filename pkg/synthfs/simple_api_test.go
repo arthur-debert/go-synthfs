@@ -174,3 +174,37 @@ func TestSimpleRunAPIValidationFailure(t *testing.T) {
 		t.Error("First operation should have succeeded")
 	}
 }
+
+func TestSimpleRunWithRollback(t *testing.T) {
+	sfs := WithIDGenerator(SequenceIDGenerator)
+	ResetSequenceCounter()
+	ctx := context.Background()
+	fs := filesystem.NewTestFileSystem()
+
+	// Create a conflict
+	err := fs.WriteFile("conflict.txt", []byte("existing"), 0644)
+	if err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+
+	// Create operations where the third will fail
+	op1 := sfs.CreateDir("dir1", 0755)
+	op2 := sfs.CreateFile("dir1/file.txt", []byte("content"), 0644)
+	op3 := sfs.CreateDir("conflict.txt", 0755) // This will fail
+
+	options := DefaultPipelineOptions()
+	options.RollbackOnError = true
+
+	_, err = RunWithOptions(ctx, fs, options, op1, op2, op3)
+	if err == nil {
+		t.Fatal("Expected error from conflicting operation")
+	}
+
+	// Verify that the successful operations were rolled back
+	if _, err := fs.Stat("dir1"); err == nil {
+		t.Error("Directory 'dir1' should have been rolled back")
+	}
+	if _, err := fs.Stat("dir1/file.txt"); err == nil {
+		t.Error("File 'dir1/file.txt' should have been rolled back")
+	}
+}
