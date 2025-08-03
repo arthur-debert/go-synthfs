@@ -336,7 +336,7 @@ Simple API Migration Guide
 		Solution: Update error handling to use error wrapping and type assertions
 
 		Pitfall: Assuming direct functions have rollback capability
-		Solution: Use batch operations or pipelines when rollback is needed
+		Solution: Use the `RollbackOnError` option with `RunWithOptions` or the `ExecuteWithRollback` method on a `SimpleBatch` when rollback is needed.
 
 
 11. Best Practices

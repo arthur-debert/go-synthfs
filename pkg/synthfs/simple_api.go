@@ -9,7 +9,8 @@ import (
 //
 // Operations are executed in the order provided, with each operation's success required
 // before proceeding. If an operation fails, subsequent operations are not executed.
-// This function does not perform rollback of successful operations.
+// By default, this function does not perform a rollback. To enable rollback,
+// use RunWithOptions with RollbackOnError set to true.
 //
 // Example - Simple sequential operations:
 //
