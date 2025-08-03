@@ -3,6 +3,8 @@ package synthfs
 import (
 	"context"
 	"time"
+
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 // Run executes a series of operations in sequence.
@@ -37,14 +39,18 @@ import (
 //	)
 //
 // For complex dependency management, consider using BuildPipeline instead.
-func Run(ctx context.Context, fs FileSystem, ops ...Operation) (*Result, error) {
+func Run(ctx context.Context, fs filesystem.FullFileSystem, ops ...Operation) (*Result, error) {
 	return RunWithOptions(ctx, fs, DefaultPipelineOptions(), ops...)
 }
 
 // RunWithOptions executes operations with custom options.
 // Note: This simplified runner does not currently support all pipeline options (e.g., DryRun).
 // It executes operations sequentially and does not perform a pre-validation step for the entire pipeline.
-func RunWithOptions(ctx context.Context, fs FileSystem, options PipelineOptions, ops ...Operation) (*Result, error) {
+func RunWithOptions(ctx context.Context, fs filesystem.FullFileSystem, options PipelineOptions, ops ...Operation) (*Result, error) {
+	if options.DryRun {
+		fs = NewDryRunFS()
+	}
+
 	if len(ops) == 0 {
 		return &Result{
 			success:    true,

@@ -2,6 +2,8 @@ package synthfs
 
 import (
 	"context"
+
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 // PipelineBuilder provides a fluent API for building and executing pipelines
@@ -90,8 +92,8 @@ func (pb *PipelineBuilder) Build() Pipeline {
 	return pb.pipeline
 }
 
-// Execute runs the pipeline with the given context and filesystem
-func (pb *PipelineBuilder) Execute(ctx context.Context, fs FileSystem) (*Result, error) {
+// Execute runs the pipeline against the given filesystem.
+func (pb *PipelineBuilder) Execute(ctx context.Context, fs filesystem.FullFileSystem) (*Result, error) {
 	// For BuildPipeline, use sequential execution like simple_api to handle dependencies
 	// The pipeline/executor approach validates all operations upfront which fails for
 	// operations that depend on files created by previous operations

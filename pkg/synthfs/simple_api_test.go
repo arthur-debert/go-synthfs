@@ -126,13 +126,12 @@ func TestSimpleRunAPI(t *testing.T) {
 			t.Error("Should have 2 operation results")
 		}
 
-		// Since DryRun is not implemented, the files will be created.
-		// When DryRun is implemented, this test should be updated to check that the files are not created.
-		if _, err := fs.Stat("testdir"); err != nil {
-			t.Error("Directory should exist")
+		// Since DryRun is implemented, this test should be updated to check that the files are not created.
+		if _, err := fs.Stat("testdir"); err == nil {
+			t.Error("Directory should not exist")
 		}
-		if _, err := fs.Stat("testdir/file.txt"); err != nil {
-			t.Error("File should exist")
+		if _, err := fs.Stat("testdir/file.txt"); err == nil {
+			t.Error("File should not exist")
 		}
 	})
 }
@@ -206,5 +205,36 @@ func TestSimpleRunWithRollback(t *testing.T) {
 	}
 	if _, err := fs.Stat("dir1/file.txt"); err == nil {
 		t.Error("File 'dir1/file.txt' should have been rolled back")
+	}
+}
+
+func TestSimpleRunWithDryRun(t *testing.T) {
+	sfs := WithIDGenerator(SequenceIDGenerator)
+	ResetSequenceCounter()
+	ctx := context.Background()
+	fs := filesystem.NewTestFileSystem()
+
+	// Create operations
+	op1 := sfs.CreateDir("testdir", 0755)
+	op2 := sfs.CreateFile("testdir/file.txt", []byte("content"), 0644)
+
+	options := DefaultPipelineOptions()
+	options.DryRun = true
+
+	result, err := RunWithOptions(ctx, fs, options, op1, op2)
+	if err != nil {
+		t.Fatalf("RunWithOptions with DryRun failed: %v", err)
+	}
+
+	if len(result.GetOperations()) != 2 {
+		t.Error("Should have 2 operation results")
+	}
+
+	// Verify that no changes were made to the real filesystem
+	if _, err := fs.Stat("testdir"); err == nil {
+		t.Error("Directory 'testdir' should not have been created")
+	}
+	if _, err := fs.Stat("testdir/file.txt"); err == nil {
+		t.Error("File 'testdir/file.txt' should not have been created")
 	}
 }

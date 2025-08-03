@@ -8,6 +8,7 @@ import (
 	"text/template"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 // TemplateData holds template data for rendering
@@ -178,7 +179,7 @@ func (s *SynthFS) WriteTemplateWithMode(path, templateContent string, data Templ
 }
 
 // WriteTemplateFile is a convenience function that writes a template directly
-func WriteTemplateFile(ctx context.Context, fs FileSystem, path, templateContent string, data TemplateData) error {
+func WriteTemplateFile(ctx context.Context, fs filesystem.FullFileSystem, path, templateContent string, data TemplateData) error {
 	op := New().WriteTemplate(path, templateContent, data)
 	return op.Execute(ctx, fs)
 }
@@ -230,7 +231,7 @@ func (tb *TemplateBuilder) Build() Operation {
 }
 
 // Execute builds and executes the operation
-func (tb *TemplateBuilder) Execute(ctx context.Context, fs FileSystem) error {
+func (tb *TemplateBuilder) Execute(ctx context.Context, fs filesystem.FullFileSystem) error {
 	op := tb.Build()
 	return op.Execute(ctx, fs)
 }
@@ -295,7 +296,7 @@ func (btw *BatchTemplateWriter) BuildOperations() []Operation {
 }
 
 // Execute writes all templates
-func (btw *BatchTemplateWriter) Execute(ctx context.Context, fs FileSystem) error {
+func (btw *BatchTemplateWriter) Execute(ctx context.Context, fs filesystem.FullFileSystem) error {
 	ops := btw.BuildOperations()
 	result, err := Run(ctx, fs, ops...)
 	if err != nil {
