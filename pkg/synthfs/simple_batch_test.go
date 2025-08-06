@@ -2,6 +2,10 @@ package synthfs
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
@@ -228,24 +232,157 @@ func TestSimpleBatchWithRollback(t *testing.T) {
 
 	t.Run("Rollback with errors", func(t *testing.T) {
 		ResetSequenceCounter()
-		fs := filesystem.NewTestFileSystem()
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
 
-		// This is a simplified test - in reality, rollback errors would occur
-		// when files are locked, permissions changed, etc.
+		// Create initial files
 		batch := NewSimpleBatch(fs)
-		batch.CreateDir("dir1", 0755)
+		batch.
+			CreateDir("protected", 0755).
+			WriteFile("protected/file1.txt", []byte("content1"), 0644).
+			WriteFile("protected/file2.txt", []byte("content2"), 0644)
 
-		// Execute successfully first
 		err := batch.Execute()
 		if err != nil {
-			t.Fatalf("Initial execution failed: %v", err)
+			t.Fatalf("Initial setup failed: %v", err)
 		}
 
-		// Now if we try ExecuteWithRollback on an empty batch, it should succeed
-		batch.Clear()
-		err = batch.ExecuteWithRollback()
-		if err != nil {
-			t.Error("Empty batch rollback should succeed")
+		// Make the directory read-only to cause rollback failures
+		protectedPath := filepath.Join(tempDir, "protected")
+		if err := os.Chmod(protectedPath, 0555); err != nil {
+			t.Fatalf("Failed to change permissions: %v", err)
+		}
+
+		// Create a new batch that will fail and trigger rollback
+		batch2 := NewSimpleBatch(fs)
+		batch2.
+			WriteFile("protected/file3.txt", []byte("content3"), 0644). // This will succeed
+			WriteFile("protected/file4.txt", []byte("content4"), 0644). // This will succeed
+			CreateDir("protected/subdir", 0755) // This will fail due to read-only parent
+
+		// Execute with rollback - should fail and rollback should also fail
+		err = batch2.ExecuteWithRollback()
+		if err == nil {
+			t.Fatal("Expected error from batch execution")
+		}
+
+		// Check if it's a RollbackError
+		var rollbackErr *RollbackError
+		if !errors.As(err, &rollbackErr) {
+			// Not a rollback error - the main operation failed but rollback succeeded
+			// This is OK, but let's verify the files were rolled back
+			if _, statErr := fs.Stat("protected/file3.txt"); statErr == nil {
+				t.Error("File should have been rolled back")
+			}
+			if _, statErr := fs.Stat("protected/file4.txt"); statErr == nil {
+				t.Error("File should have been rolled back")
+			}
+		} else {
+			// We got a rollback error - verify the details
+			if rollbackErr.OriginalErr == nil {
+				t.Error("RollbackError should contain original error")
+			}
+			if len(rollbackErr.RollbackErrs) == 0 {
+				t.Error("RollbackError should contain rollback errors")
+			}
+
+			// Files that couldn't be rolled back should still exist
+			if _, statErr := fs.Stat("protected/file3.txt"); statErr != nil {
+				t.Error("File that failed rollback should still exist")
+			}
+		}
+
+		// Restore permissions for cleanup
+		_ = os.Chmod(protectedPath, 0755)
+	})
+
+	t.Run("Rollback failure with custom operation", func(t *testing.T) {
+		ResetSequenceCounter()
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
+		sfs := New()
+
+		// Track what operations were executed and rolled back
+		var executed []string
+		var rolledBack []string
+
+		// Create custom operation with a rollback that will fail
+		op1 := NewCustomOperation("op1", func(ctx context.Context, fs filesystem.FileSystem) error {
+			executed = append(executed, "op1")
+			return osFS.WriteFile("file1.txt", []byte("content1"), 0644)
+		}).WithRollback(func(ctx context.Context, fs filesystem.FileSystem) error {
+			rolledBack = append(rolledBack, "op1")
+			// Try to delete but simulate failure
+			return errors.New("rollback failed: file locked")
+		})
+		op1Adapter := NewCustomOperationAdapter(op1)
+
+		op2 := sfs.CreateFileWithID("op2", "file2.txt", []byte("content2"), 0644)
+
+		// This operation will fail
+		op3 := sfs.CustomOperationWithID("op3", func(ctx context.Context, fs filesystem.FileSystem) error {
+			executed = append(executed, "op3")
+			return errors.New("operation failed")
+		})
+
+		// Run with rollback
+		options := DefaultPipelineOptions()
+		options.RollbackOnError = true
+		result, err := RunWithOptions(context.Background(), fs, options, op1Adapter, op2, op3)
+
+		// Should have error
+		if err == nil {
+			t.Fatal("Expected error from failed operation")
+		}
+
+		// Check execution order (op2 is not a custom op anymore, so only op1 and op3)
+		if len(executed) != 2 || executed[0] != "op1" || executed[1] != "op3" {
+			t.Errorf("Expected execution order [op1, op3], got %v", executed)
+		}
+
+		// Check rollback was attempted
+		if len(rolledBack) == 0 {
+			t.Error("Expected rollback to be attempted")
+		}
+
+		// Should be a pipeline error wrapping a rollback error
+		var pipelineErr *PipelineError
+		if !errors.As(err, &pipelineErr) {
+			t.Fatalf("Expected PipelineError, got %T", err)
+		}
+
+		// The inner error should be a rollback error
+		var rollbackErr *RollbackError
+		if !errors.As(pipelineErr.Err, &rollbackErr) {
+			t.Fatalf("Expected RollbackError in pipeline error, got %T", pipelineErr.Err)
+		}
+
+		// Verify rollback error details
+		if rollbackErr.OriginalErr == nil || !strings.Contains(rollbackErr.OriginalErr.Error(), "operation failed") {
+			t.Errorf("Expected original error 'operation failed', got %v", rollbackErr.OriginalErr)
+		}
+
+		if len(rollbackErr.RollbackErrs) == 0 {
+			t.Error("Expected rollback errors to be recorded")
+		}
+
+		// Files should still exist since rollback failed
+		if _, err := fs.Stat("file1.txt"); err != nil {
+			t.Error("File1 should exist since rollback failed")
+		}
+		// File2 should NOT exist because it was successfully rolled back
+		if _, err := fs.Stat("file2.txt"); err == nil {
+			t.Error("File2 should not exist - it should have been rolled back")
+		}
+
+		// Verify result details
+		if result.IsSuccess() {
+			t.Error("Result should not be successful")
+		}
+		if len(result.GetOperations()) != 3 {
+			t.Errorf("Expected 3 operation results, got %d", len(result.GetOperations()))
 		}
 	})
 }
