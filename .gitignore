@@ -42,3 +42,10 @@ coverage.html
 report.json
 report.html
 .DS_Store
+
+# Test output files from shell command tests
+pkg/synthfs/env.txt
+pkg/synthfs/long.txt
+pkg/synthfs/output.txt
+pkg/synthfs/shell.txt
+pkg/synthfs/special.txt
