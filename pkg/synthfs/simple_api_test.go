@@ -2,6 +2,7 @@ package synthfs
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
@@ -237,4 +238,127 @@ func TestSimpleRunWithDryRun(t *testing.T) {
 	if _, err := fs.Stat("testdir/file.txt"); err == nil {
 		t.Error("File 'testdir/file.txt' should not have been created")
 	}
+}
+
+func TestSimpleRunAPI_FirstOperationFailure(t *testing.T) {
+	t.Run("failure on first operation", func(t *testing.T) {
+		ResetSequenceCounter()
+		fs := filesystem.NewTestFileSystem()
+		sfs := New()
+
+		// Create operations where the first one will fail
+		ops := []Operation{
+			sfs.CreateFile("/nonexistent/file.txt", []byte("fail"), 0644), // Will fail - parent doesn't exist
+			sfs.CreateDir("/should-not-run", 0755),
+			sfs.CreateFile("/also-should-not-run.txt", []byte("nope"), 0644),
+		}
+
+		result, err := Run(context.Background(), fs, ops...)
+		
+		// Should have error
+		if err == nil {
+			t.Fatal("Expected error when first operation fails")
+		}
+
+		// Check it's a PipelineError
+		var pipelineErr *PipelineError
+		if !errors.As(err, &pipelineErr) {
+			t.Fatalf("Expected PipelineError, got %T", err)
+		}
+
+		// Verify pipeline error details
+		if pipelineErr.FailedIndex != 1 {
+			t.Errorf("Expected FailedIndex=1, got %d", pipelineErr.FailedIndex)
+		}
+
+		if pipelineErr.TotalOps != 3 {
+			t.Errorf("Expected TotalOps=3, got %d", pipelineErr.TotalOps)
+		}
+
+		if len(pipelineErr.SuccessfulOps) != 0 {
+			t.Errorf("Expected 0 successful operations, got %d", len(pipelineErr.SuccessfulOps))
+		}
+
+		// Check result
+		if result.IsSuccess() {
+			t.Error("Result should not be successful")
+		}
+
+		// Should have exactly 1 operation result (the failed one)
+		if len(result.GetOperations()) != 1 {
+			t.Errorf("Expected 1 operation result, got %d", len(result.GetOperations()))
+		}
+
+		// Verify the failed operation details
+		if len(result.GetOperations()) > 0 {
+			opResult := result.GetOperations()[0].(OperationResult)
+			if opResult.Status != StatusFailure {
+				t.Errorf("Expected first operation status to be StatusFailure, got %v", opResult.Status)
+			}
+			if opResult.Error == nil {
+				t.Error("Expected first operation to have an error")
+			}
+		}
+
+		// Verify no operations were executed
+		entries, _ := fs.ReadDir("/")
+		if len(entries) != 0 {
+			t.Errorf("Expected filesystem to be empty, found %d entries", len(entries))
+		}
+	})
+
+	t.Run("validation failure on first operation", func(t *testing.T) {
+		ResetSequenceCounter()
+		tempDir := t.TempDir()
+		osFS := filesystem.NewOSFileSystem(tempDir)
+		fs := NewPathAwareFileSystem(osFS, tempDir)
+		sfs := New()
+		
+		// Create a file that will cause validation to fail for copy
+		if err := osFS.WriteFile("conflict.txt", []byte("existing"), 0644); err != nil {
+			t.Fatalf("Failed to create conflict file: %v", err)
+		}
+
+		// First operation tries to copy non-existent file
+		ops := []Operation{
+			sfs.Copy("/nonexistent/source.txt", "conflict.txt"), // Will fail validation - source doesn't exist
+			sfs.CreateFile("should-not-run.txt", []byte("nope"), 0644),
+		}
+
+		result, err := Run(context.Background(), fs, ops...)
+		
+		// Should have error
+		if err == nil {
+			t.Fatal("Expected error when first operation validation fails")
+		}
+
+		// Check it's a PipelineError
+		var pipelineErr *PipelineError
+		if !errors.As(err, &pipelineErr) {
+			t.Fatalf("Expected PipelineError, got %T", err)
+		}
+
+		// Verify pipeline error details for validation failure
+		if pipelineErr.FailedIndex != 1 {
+			t.Errorf("Expected FailedIndex=1, got %d", pipelineErr.FailedIndex)
+		}
+
+		if len(pipelineErr.SuccessfulOps) != 0 {
+			t.Errorf("Expected 0 successful operations, got %d", len(pipelineErr.SuccessfulOps))
+		}
+
+		// Verify the operation result shows validation failure
+		if len(result.GetOperations()) > 0 {
+			opResult := result.GetOperations()[0].(OperationResult)
+			if opResult.Status != StatusValidation {
+				t.Errorf("Expected first operation status to be StatusValidation, got %v", opResult.Status)
+			}
+		}
+
+		// Verify second operation was not created
+		shouldNotExist := "should-not-run.txt"
+		if _, err := fs.Stat(shouldNotExist); err == nil {
+			t.Error("Second operation should not have been executed")
+		}
+	})
 }
