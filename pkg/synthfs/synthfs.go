@@ -120,3 +120,24 @@ func (s *SynthFS) CreateSymlinkWithID(id string, target, linkPath string) Operat
 	op.SetDescriptionDetail("target", target)
 	return NewOperationsPackageAdapter(op)
 }
+
+// CustomOperation creates a custom operation with an auto-generated ID.
+// This allows users to define their own operations that integrate with SynthFS's pipeline system.
+//
+// Example:
+//   op := sfs.CustomOperation("run-tests", func(ctx context.Context, fs filesystem.FileSystem) error {
+//       // Custom logic here
+//       return exec.Command("go", "test", "./...").Run()
+//   })
+func (s *SynthFS) CustomOperation(name string, executeFunc CustomOperationFunc) Operation {
+	id := s.idGen("custom", name)
+	op := NewCustomOperation(string(id), executeFunc)
+	return NewCustomOperationAdapter(op)
+}
+
+// CustomOperationWithID creates a custom operation with an explicit ID.
+// This allows users to define their own operations with a specific ID for dependency management.
+func (s *SynthFS) CustomOperationWithID(id string, executeFunc CustomOperationFunc) Operation {
+	op := NewCustomOperation(id, executeFunc)
+	return NewCustomOperationAdapter(op)
+}
