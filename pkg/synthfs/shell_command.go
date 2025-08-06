@@ -85,7 +85,7 @@ func WithShell(shell string, args ...string) ShellCommandOption {
 // defaultShellCommandOptions returns default options for shell commands
 func defaultShellCommandOptions() *ShellCommandOptions {
 	opts := &ShellCommandOptions{
-		CaptureOutput: true,
+		CaptureOutput: false, // Default to not capturing unless explicitly requested
 		Timeout:       2 * time.Minute,
 		Env:          make(map[string]string),
 	}
@@ -102,6 +102,73 @@ func defaultShellCommandOptions() *ShellCommandOptions {
 	return opts
 }
 
+// executeShellCommand is the core execution logic
+func executeShellCommand(ctx context.Context, command string, opts *ShellCommandOptions) (stdout, stderr string, err error) {
+	// Build command arguments
+	args := append(opts.ShellArgs, command)
+	cmd := exec.CommandContext(ctx, opts.Shell, args...)
+	
+	// Set working directory if specified
+	if opts.WorkDir != "" {
+		cmd.Dir = opts.WorkDir
+	}
+	
+	// Set environment variables
+	if len(opts.Env) > 0 {
+		cmd.Env = os.Environ()
+		for k, v := range opts.Env {
+			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+	
+	// Capture output if requested
+	var stdoutBuf, stderrBuf bytes.Buffer
+	if opts.CaptureOutput {
+		cmd.Stdout = &stdoutBuf
+		cmd.Stderr = &stderrBuf
+	} else {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
+	
+	// Apply timeout if specified
+	if opts.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
+		defer cancel()
+		cmd = exec.CommandContext(ctx, opts.Shell, args...)
+		// Re-apply all settings to new command
+		if opts.WorkDir != "" {
+			cmd.Dir = opts.WorkDir
+		}
+		if len(opts.Env) > 0 {
+			cmd.Env = os.Environ()
+			for k, v := range opts.Env {
+				cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+			}
+		}
+		if opts.CaptureOutput {
+			cmd.Stdout = &stdoutBuf
+			cmd.Stderr = &stderrBuf
+		} else {
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+		}
+	}
+	
+	// Execute command
+	err = cmd.Run()
+	if err != nil {
+		errMsg := fmt.Sprintf("command failed: %v", err)
+		if opts.CaptureOutput && stderrBuf.Len() > 0 {
+			errMsg += fmt.Sprintf("\nstderr: %s", stderrBuf.String())
+		}
+		return stdoutBuf.String(), stderrBuf.String(), fmt.Errorf("%s", errMsg)
+	}
+	
+	return stdoutBuf.String(), stderrBuf.String(), nil
+}
+
 // createShellCommand creates a shell command operation
 func createShellCommand(id, command string, options ...ShellCommandOption) *CustomOperation {
 	opts := defaultShellCommandOptions()
@@ -109,76 +176,32 @@ func createShellCommand(id, command string, options ...ShellCommandOption) *Cust
 		opt(opts)
 	}
 	
-	// Execution function
-	executeFunc := func(ctx context.Context, fs filesystem.FileSystem) error {
-		// Build command arguments
-		args := append(opts.ShellArgs, command)
-		cmd := exec.CommandContext(ctx, opts.Shell, args...)
-		
-		// Set working directory if specified
-		if opts.WorkDir != "" {
-			cmd.Dir = opts.WorkDir
-		}
-		
-		// Set environment variables
-		if len(opts.Env) > 0 {
-			cmd.Env = os.Environ()
-			for k, v := range opts.Env {
-				cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+	var op *CustomOperation
+	
+	if opts.CaptureOutput {
+		// Use version with output capture
+		op = NewCustomOperationWithOutput(id, func(ctx context.Context, fs filesystem.FileSystem, storeOutput func(string, interface{})) error {
+			stdout, stderr, err := executeShellCommand(ctx, command, opts)
+			
+			// Store captured output
+			if stdout != "" {
+				storeOutput("stdout", stdout)
 			}
-		}
-		
-		// Capture output if requested
-		var stdout, stderr bytes.Buffer
-		if opts.CaptureOutput {
-			cmd.Stdout = &stdout
-			cmd.Stderr = &stderr
-		} else {
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-		}
-		
-		// Apply timeout if specified
-		if opts.Timeout > 0 {
-			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
-			defer cancel()
-			cmd = exec.CommandContext(ctx, opts.Shell, args...)
-			// Re-apply all settings to new command
-			if opts.WorkDir != "" {
-				cmd.Dir = opts.WorkDir
+			if stderr != "" {
+				storeOutput("stderr", stderr)
 			}
-			if len(opts.Env) > 0 {
-				cmd.Env = os.Environ()
-				for k, v := range opts.Env {
-					cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
-				}
-			}
-			if opts.CaptureOutput {
-				cmd.Stdout = &stdout
-				cmd.Stderr = &stderr
-			} else {
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-			}
-		}
-		
-		// Execute command
-		err := cmd.Run()
-		if err != nil {
-			errMsg := fmt.Sprintf("command failed: %v", err)
-			if opts.CaptureOutput && stderr.Len() > 0 {
-				errMsg += fmt.Sprintf("\nstderr: %s", stderr.String())
-			}
-			return fmt.Errorf("%s", errMsg)
-		}
-		
-		return nil
+			
+			return err
+		})
+	} else {
+		// Use regular version without output capture
+		op = NewCustomOperation(id, func(ctx context.Context, fs filesystem.FileSystem) error {
+			_, _, err := executeShellCommand(ctx, command, opts)
+			return err
+		})
 	}
 	
-	// Create custom operation
-	op := NewCustomOperation(id, executeFunc).
-		WithDescription(fmt.Sprintf("Execute shell command: %s", command))
+	op = op.WithDescription(fmt.Sprintf("Execute shell command: %s", command))
 	
 	// Add rollback if specified
 	if opts.RollbackCommand != "" {

@@ -12,6 +12,9 @@ import (
 // CustomOperationFunc is the signature for custom operation functions
 type CustomOperationFunc func(ctx context.Context, fs filesystem.FileSystem) error
 
+// CustomOperationWithOutputFunc is the signature for custom operations that can store output
+type CustomOperationWithOutputFunc func(ctx context.Context, fs filesystem.FileSystem, storeOutput func(string, interface{})) error
+
 // CustomOperation allows users to define their own operations that integrate
 // with SynthFS's pipeline system. It provides access to all standard operation
 // features including validation, dependencies, and rollback.
@@ -35,6 +38,28 @@ func NewCustomOperation(id string, executeFunc CustomOperationFunc) *CustomOpera
 	}
 }
 
+// NewCustomOperationWithOutput creates a new custom operation that can store output.
+// The storeOutput function passed to the execute function can be used to store any
+// output that should be available after execution.
+func NewCustomOperationWithOutput(id string, executeFunc CustomOperationWithOutputFunc) *CustomOperation {
+	op := &CustomOperation{
+		BaseOperation: operations.NewBaseOperation(
+			core.OperationID(id),
+			"custom",
+			id,
+		),
+	}
+	
+	// Wrap the function to provide the storeOutput helper
+	op.executeFunc = func(ctx context.Context, fs filesystem.FileSystem) error {
+		return executeFunc(ctx, fs, func(key string, value interface{}) {
+			op.StoreOutput(key, value)
+		})
+	}
+	
+	return op
+}
+
 // WithValidation sets a custom validation function for the operation.
 func (op *CustomOperation) WithValidation(validateFunc CustomOperationFunc) *CustomOperation {
 	op.validateFunc = validateFunc
@@ -51,6 +76,12 @@ func (op *CustomOperation) WithRollback(rollbackFunc CustomOperationFunc) *Custo
 func (op *CustomOperation) WithDescription(description string) *CustomOperation {
 	op.SetDescriptionDetail("description", description)
 	return op
+}
+
+// StoreOutput is a helper method that custom operations can use to store output.
+// This allows custom operations to make their output available after execution.
+func (op *CustomOperation) StoreOutput(key string, value interface{}) {
+	op.SetDescriptionDetail(key, value)
 }
 
 // Execute runs the custom operation's execute function.

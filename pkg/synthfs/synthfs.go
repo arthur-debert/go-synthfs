@@ -141,3 +141,27 @@ func (s *SynthFS) CustomOperationWithID(id string, executeFunc CustomOperationFu
 	op := NewCustomOperation(id, executeFunc)
 	return NewCustomOperationAdapter(op)
 }
+
+// CustomOperationWithOutput creates a custom operation that can store output.
+// The storeOutput function passed to executeFunc can be used to store values that
+// will be available in the operation's description details after execution.
+//
+// Example:
+//   op := sfs.CustomOperationWithOutput("process-data", 
+//       func(ctx context.Context, fs filesystem.FileSystem, storeOutput func(string, interface{})) error {
+//           result := processData()
+//           storeOutput("result", result)
+//           storeOutput("recordCount", 42)
+//           return nil
+//       })
+func (s *SynthFS) CustomOperationWithOutput(name string, executeFunc CustomOperationWithOutputFunc) Operation {
+	id := s.idGen("custom", name)
+	op := NewCustomOperationWithOutput(string(id), executeFunc)
+	return NewCustomOperationAdapter(op)
+}
+
+// CustomOperationWithOutputAndID creates a custom operation with explicit ID that can store output.
+func (s *SynthFS) CustomOperationWithOutputAndID(id string, executeFunc CustomOperationWithOutputFunc) Operation {
+	op := NewCustomOperationWithOutput(id, executeFunc)
+	return NewCustomOperationAdapter(op)
+}
