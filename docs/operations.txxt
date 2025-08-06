@@ -48,7 +48,25 @@ SynthFS Operations and Targets Reference
         Unarchive: Extracts contents from compressed archives to specified destinations. Supports the same formats as archive creation (tar.gz and zip), with automatic format detection based on file extensions. Extraction can be filtered using glob patterns to selectively extract only certain files. The operation creates destination directories as needed and can optionally overwrite existing files.
 
 
-    1.5. Dependency Resolution
+    1.5. Custom Operations
+
+        Custom operations allow users to extend SynthFS with their own logic while leveraging the full power of the pipeline system, including dependency management, validation, and rollback capabilities.
+
+        CustomOperation: Executes user-defined functions within the SynthFS framework. Custom operations can perform any logic that requires filesystem access or coordination with other operations. They support optional validation functions to check prerequisites before execution and rollback functions for recovery from failures. Custom operations can also capture and store output data that remains accessible after execution, making them ideal for operations that need to collect information or produce results beyond filesystem changes.
+
+        CustomOperationWithOutput: A specialized variant that provides a structured way to capture operation results. The execute function receives a storeOutput callback that can store key-value pairs of any type. This captured output is accessible through helper functions after execution, enabling workflows where operations need to share data or report results to the caller.
+
+
+    1.6. Shell Commands
+
+        Shell command operations integrate external tools and scripts into SynthFS workflows, providing seamless interaction between filesystem operations and system commands.
+
+        ShellCommand: Executes system commands through the operating system's shell (sh on Unix, cmd on Windows). Commands run with full shell interpretation, allowing pipes, redirections, and shell built-ins. The operation supports extensive configuration including working directory specification, environment variable injection, timeout controls, and output capture. Commands can define rollback operations for failure recovery, making them suitable for operations that modify system state beyond the filesystem.
+
+        Output Capture: When enabled via WithCaptureOutput(), shell commands capture both stdout and stderr during execution. This captured output is stored in the operation's description details and remains accessible after execution through helper functions. Output capture is essential for commands that produce important information, validation results, or status reports that subsequent operations or the calling code needs to process.
+
+
+    1.7. Dependency Resolution
 
         All operations declare their prerequisites using a sophisticated dependency system that automatically resolves requirements:
 
@@ -116,6 +134,19 @@ SynthFS Operations and Targets Reference
         Memory Considerations: Archive operations work through memory buffers, making them suitable for typical project archives but potentially unsuitable for very large archives that exceed available memory. The system is designed for practical development and deployment scenarios rather than large-scale data processing.
 
 
+    2.5. Custom Operations and Shell Commands
+
+        Custom operations and shell commands extend SynthFS beyond traditional filesystem operations, enabling integration with external tools and custom business logic.
+
+        Execution Context: Both custom operations and shell commands receive the same filesystem interface as built-in operations, ensuring consistent access patterns and security boundaries. They participate fully in dependency resolution and can declare dependencies on other operations or be dependencies themselves.
+
+        Output Storage: Operations that produce output beyond filesystem changes store their results in the operation's description details. This design allows output to persist through the execution lifecycle and remain accessible for subsequent processing. The storage mechanism supports any serializable data type, from simple strings to complex structured data.
+
+        Error Propagation: Failures in custom operations and shell commands are treated identically to built-in operation failures. The pipeline halts execution, and if rollback is enabled, the system attempts to reverse previously successful operations. Custom rollback functions execute in reverse order, providing opportunity to undo system state changes.
+
+        Resource Management: Shell commands operate within configurable resource bounds including timeouts and environment controls. The system captures output efficiently in memory when requested, making it suitable for commands that produce reasonable output volumes rather than continuous streams.
+
+
 3. Operation Interaction Patterns
 
     SynthFS operations are designed to work together seamlessly, with automatic dependency resolution and conflict detection enabling complex workflows.
@@ -141,6 +172,17 @@ SynthFS Operations and Targets Reference
         Restoration Capabilities: In restorable mode, failed batches can be rolled back using reverse operations that undo the effects of previously successful operations. The restoration system uses the same operation framework as forward operations, ensuring consistent behavior.
 
         Budget-Controlled Backups: The restoration system operates within memory budgets to prevent unbounded resource consumption while providing predictable rollback capabilities for typical workflows.
+
+
+    3.3. Output Capture and Retrieval
+
+        Operations that produce output beyond filesystem modifications use a structured storage mechanism for capturing and retrieving results.
+
+        Capture Mechanisms: Shell commands with WithCaptureOutput() automatically capture stdout and stderr streams. Custom operations using CustomOperationWithOutput receive a storeOutput function to explicitly store named values. Both mechanisms store data in the operation's description details, ensuring the output travels with the operation through its lifecycle.
+
+        Retrieval Functions: Three helper functions provide access to captured output: GetOperationOutput() retrieves string values by key, GetOperationOutputValue() retrieves values of any type, and GetAllOperationOutputs() returns all stored outputs as a map. These functions work uniformly across all operation types that support output capture.
+
+        Usage Patterns: Output capture enables powerful patterns like validation workflows where shell commands check system state and subsequent operations use those results. Custom operations can analyze filesystem content and store metrics that the calling application processes after execution. Pipeline operations can pass data between stages without external coordination.
 
 
 4. Operational Characteristics and Limitations

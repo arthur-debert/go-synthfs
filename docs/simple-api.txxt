@@ -132,7 +132,7 @@ Simple API Migration Guide
 		- Advanced execution control required
 		- Integration with existing complex workflows
 
-		Examples: Custom Operation implementations
+		Examples: Custom Operation implementations, Shell Commands
 
 
 4. Common Migration Patterns
@@ -180,6 +180,71 @@ Simple API Migration Guide
 				DeleteExtra().
 				UpdateNewer().
 				Execute(ctx, fs)
+
+	4.4. Custom Operations and Shell Commands
+
+		Before:
+			// Complex wrapper code to integrate external commands
+			// Manual process execution and error handling
+			// No integration with SynthFS pipeline
+
+		After (Shell Commands):
+			sfs := synthfs.New()
+			ops := []synthfs.Operation{
+				sfs.CreateFile("config.json", []byte("{}"), 0644),
+				sfs.ShellCommand("npm install", 
+					synthfs.WithWorkDir("/project"),
+					synthfs.WithTimeout(5*time.Minute),
+					synthfs.WithCaptureOutput()),
+				sfs.ShellCommand("npm test",
+					synthfs.WithWorkDir("/project"),
+					synthfs.WithRollbackCommand("npm run cleanup")),
+			}
+			result, err := synthfs.Run(ctx, fs, ops...)
+			
+			// Access captured output
+			for _, opResult := range result.GetOperations() {
+				if strings.Contains(opResult.ID(), "npm_install") {
+					stdout := synthfs.GetOperationOutput(opResult.Operation, "stdout")
+					fmt.Printf("npm install output:\n%s\n", stdout)
+				}
+			}
+
+		After (Custom Operations):
+			sfs := synthfs.New()
+			
+			// Simple custom operation
+			validateOp := sfs.CustomOperation("validate-config", 
+				func(ctx context.Context, fs filesystem.FileSystem) error {
+					// Custom validation logic
+					data, err := fs.ReadFile("config.json")
+					if err != nil {
+						return err
+					}
+					return validateJSON(data)
+				})
+			
+			// Custom operation with output
+			analyzeOp := sfs.CustomOperationWithOutput("analyze-project",
+				func(ctx context.Context, fs filesystem.FileSystem, storeOutput func(string, interface{})) error {
+					fileCount := countFiles(fs, "/project")
+					totalSize := calculateSize(fs, "/project")
+					
+					storeOutput("fileCount", fileCount)
+					storeOutput("totalSize", totalSize)
+					storeOutput("report", fmt.Sprintf("Found %d files, total size: %d bytes", fileCount, totalSize))
+					
+					return nil
+				})
+			
+			result, err := synthfs.Run(ctx, fs, validateOp, analyzeOp)
+			
+			// Retrieve analysis results
+			if err == nil {
+				report := synthfs.GetOperationOutput(analyzeOp, "report")
+				fileCount := synthfs.GetOperationOutputValue(analyzeOp, "fileCount")
+				fmt.Printf("Analysis: %s (count: %v)\n", report, fileCount)
+			}
 
 
 5. Path Handling Improvements

@@ -114,6 +114,8 @@ if err != nil {
 | `Unarchive()` | Extract archives completely | Parent directories | ❌ |
 | `UnarchiveWithPatterns()` | Extract archives selectively | Parent directories, pattern filtering | ❌ |
 
+*SynthFS includes core filesystem operations and shell command support. Custom operations can be added for specialized workflows - see the [Operations Reference](docs/operations.txxt) for details.*
+
 ## 🏛️ **Architecture Overview**
 
 SynthFS uses a three-layer architecture for maximum safety and flexibility:
