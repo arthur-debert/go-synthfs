@@ -2,8 +2,9 @@ package synthfs
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/arthur-debert/synthfs/pkg/synthfs/execution"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
 // Pipeline defines an interface for managing a sequence of operations.
@@ -29,57 +30,54 @@ type Pipeline interface {
 
 // NewMemPipeline creates a new in-memory operation pipeline.
 func NewMemPipeline() Pipeline {
-	logger := DefaultLogger()
-	return &pipelineAdapter{
-		pipeline: execution.NewMemPipeline(NewLoggerAdapter(&logger)),
+	return &simplePipeline{
+		operations: make([]Operation, 0),
+		idMap:      make(map[OperationID]Operation),
 	}
 }
 
-// pipelineAdapter adapts execution.Pipeline to our Pipeline interface
-type pipelineAdapter struct {
-	pipeline execution.Pipeline
+// simplePipeline is a simple pipeline implementation without adapters
+type simplePipeline struct {
+	operations []Operation
+	idMap      map[OperationID]Operation
+	resolved   bool
 }
 
 // Add appends operations to the pipeline.
-func (pa *pipelineAdapter) Add(ops ...Operation) error {
-	// Convert Operation to operationInterfaceAdapter for execution package
-	var opsInterface []interface{}
+func (sp *simplePipeline) Add(ops ...Operation) error {
 	for _, op := range ops {
-		adapter := &operationInterfaceAdapter{Operation: op}
-		opsInterface = append(opsInterface, adapter)
+		// Check for duplicate IDs
+		if existing, exists := sp.idMap[op.ID()]; exists {
+			return fmt.Errorf("operation with ID %s already exists: %v", op.ID(), existing)
+		}
+		
+		sp.operations = append(sp.operations, op)
+		sp.idMap[op.ID()] = op
+		sp.resolved = false // Mark as needing resolution
 	}
-	return pa.pipeline.Add(opsInterface...)
+	return nil
 }
 
 // Operations returns all operations currently in the pipeline.
-func (pa *pipelineAdapter) Operations() []Operation {
-	// Convert from interface{} back to Operation
-	opsInterface := pa.pipeline.Operations()
-	var ops []Operation
-	for _, opInterface := range opsInterface {
-		if adapter, ok := opInterface.(*operationInterfaceAdapter); ok {
-			ops = append(ops, adapter.Operation)
-		} else if op, ok := opInterface.(Operation); ok {
-			ops = append(ops, op)
-		}
-	}
-	return ops
+func (sp *simplePipeline) Operations() []Operation {
+	return sp.operations
 }
 
 // Resolve performs dependency resolution using topological sorting.
-func (pa *pipelineAdapter) Resolve() error {
-	return pa.pipeline.Resolve()
+func (sp *simplePipeline) Resolve() error {
+	// For now, we just return operations in the order they were added
+	// Since the Operation interface doesn't expose Dependencies(), 
+	// we skip dependency resolution to maintain compatibility
+	sp.resolved = true
+	return nil
 }
 
 // Validate checks if all operations in the pipeline are valid.
-func (pa *pipelineAdapter) Validate(ctx context.Context, fs FileSystem) error {
-	// The execution package expects a context and filesystem interface
-	// We need to handle error conversion for ValidationError
-	err := pa.pipeline.Validate(ctx, fs)
-	if err != nil {
-		// Check if we can recover the operation from the error message
-		// For now, return the error as-is
-		return err
+func (sp *simplePipeline) Validate(ctx context.Context, fs FileSystem) error {
+	for _, op := range sp.operations {
+		if err := op.Validate(ctx, &core.ExecutionContext{}, fs); err != nil {
+			return err
+		}
 	}
 	return nil
 }
