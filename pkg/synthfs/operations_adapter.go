@@ -126,14 +126,14 @@ func (a *OperationsPackageAdapter) GetAllChecksums() map[string]*ChecksumRecord 
 func (a *OperationsPackageAdapter) ReverseOps(ctx context.Context, fsys FileSystem, budget *core.BackupBudget) ([]Operation, *core.BackupData, error) {
 	ops, data, err := a.opsOperation.ReverseOps(ctx, fsys, budget)
 
-	// Convert operations
+	// Convert operations - all operations from operations package need adaptation
 	var result []Operation
 	for _, op := range ops {
 		if opsOp, ok := op.(operations.Operation); ok {
 			result = append(result, NewOperationsPackageAdapter(opsOp))
-		} else if mainOp, ok := op.(Operation); ok {
-			result = append(result, mainOp)
 		}
+		// Note: operations.Operation and main.Operation interfaces are now incompatible
+		// due to different ExecuteV2 signatures, so we can't cast between them
 	}
 
 	// Convert backup data
