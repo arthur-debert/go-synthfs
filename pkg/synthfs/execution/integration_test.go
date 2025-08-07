@@ -50,19 +50,6 @@ func (ow *operationWrapper) Describe() core.OperationDesc {
 	return core.OperationDesc{}
 }
 
-func (ow *operationWrapper) Dependencies() []core.OperationID {
-	if op, ok := ow.op.(interface{ Dependencies() []core.OperationID }); ok {
-		return op.Dependencies()
-	}
-	return []core.OperationID{}
-}
-
-func (ow *operationWrapper) Conflicts() []core.OperationID {
-	if op, ok := ow.op.(interface{ Conflicts() []core.OperationID }); ok {
-		return op.Conflicts()
-	}
-	return []core.OperationID{}
-}
 
 func (ow *operationWrapper) Prerequisites() []core.Prerequisite {
 	if op, ok := ow.op.(interface{ Prerequisites() []core.Prerequisite }); ok {

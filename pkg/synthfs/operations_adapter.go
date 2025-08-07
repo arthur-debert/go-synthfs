@@ -31,15 +31,6 @@ func (a *OperationsPackageAdapter) Describe() core.OperationDesc {
 	return a.opsOperation.Describe()
 }
 
-// Dependencies returns the operation's dependencies.
-func (a *OperationsPackageAdapter) Dependencies() []core.OperationID {
-	return a.opsOperation.Dependencies()
-}
-
-// Conflicts returns the operation's conflicts.
-func (a *OperationsPackageAdapter) Conflicts() []core.OperationID {
-	return a.opsOperation.Conflicts()
-}
 
 // Prerequisites returns the operation's prerequisites.
 func (a *OperationsPackageAdapter) Prerequisites() []core.Prerequisite {

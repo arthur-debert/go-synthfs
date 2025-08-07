@@ -27,23 +27,6 @@ func (a *CustomOperationAdapter) Describe() OperationDesc {
 	return OperationDesc(desc)
 }
 
-func (a *CustomOperationAdapter) Dependencies() []OperationID {
-	coreDeps := a.CustomOperation.Dependencies()
-	deps := make([]OperationID, len(coreDeps))
-	for i, dep := range coreDeps {
-		deps[i] = OperationID(dep)
-	}
-	return deps
-}
-
-func (a *CustomOperationAdapter) Conflicts() []OperationID {
-	coreConflicts := a.CustomOperation.Conflicts()
-	conflicts := make([]OperationID, len(coreConflicts))
-	for i, conflict := range coreConflicts {
-		conflicts[i] = OperationID(conflict)
-	}
-	return conflicts
-}
 
 func (a *CustomOperationAdapter) Prerequisites() []core.Prerequisite {
 	return a.CustomOperation.Prerequisites()

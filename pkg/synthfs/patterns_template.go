@@ -55,15 +55,6 @@ func (op *WriteTemplateOperation) Describe() OperationDesc {
 	return op.desc
 }
 
-// Dependencies returns empty - no dependencies
-func (op *WriteTemplateOperation) Dependencies() []OperationID {
-	return nil
-}
-
-// Conflicts returns empty - no conflicts
-func (op *WriteTemplateOperation) Conflicts() []OperationID {
-	return nil
-}
 
 // Prerequisites returns prerequisites for the operation
 func (op *WriteTemplateOperation) Prerequisites() []core.Prerequisite {

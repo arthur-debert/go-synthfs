@@ -14,8 +14,6 @@ type Operation interface {
 	Describe() core.OperationDesc
 
 	// Dependencies
-	Dependencies() []core.OperationID
-	Conflicts() []core.OperationID
 	AddDependency(depID core.OperationID)
 	Prerequisites() []core.Prerequisite
 

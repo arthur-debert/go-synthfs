@@ -39,15 +39,6 @@ func (op *BaseOperation) ID() core.OperationID {
 	return op.id
 }
 
-// Dependencies returns the list of operation dependencies.
-func (op *BaseOperation) Dependencies() []core.OperationID {
-	return op.dependencies
-}
-
-// Conflicts returns an empty list (conflicts not implemented yet).
-func (op *BaseOperation) Conflicts() []core.OperationID {
-	return nil
-}
 
 // Prerequisites returns an empty list of prerequisites (default implementation).
 // Concrete operations should override this method to declare their prerequisites.

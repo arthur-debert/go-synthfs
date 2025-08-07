@@ -68,15 +68,6 @@ func (op *MirrorWithSymlinksOperation) Describe() OperationDesc {
 	return op.desc
 }
 
-// Dependencies returns empty - no dependencies
-func (op *MirrorWithSymlinksOperation) Dependencies() []OperationID {
-	return nil
-}
-
-// Conflicts returns empty - no conflicts
-func (op *MirrorWithSymlinksOperation) Conflicts() []OperationID {
-	return nil
-}
 
 // Prerequisites returns prerequisites for the operation
 func (op *MirrorWithSymlinksOperation) Prerequisites() []core.Prerequisite {

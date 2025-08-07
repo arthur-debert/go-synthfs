@@ -716,8 +716,6 @@ func (m *MockOperationInterface) Describe() core.OperationDesc {
 		Details: m.details,
 	}
 }
-func (m *MockOperationInterface) Dependencies() []core.OperationID     { return []core.OperationID{} }
-func (m *MockOperationInterface) Conflicts() []core.OperationID        { return []core.OperationID{} }
 func (m *MockOperationInterface) Prerequisites() []core.Prerequisite   { return []core.Prerequisite{} }
 func (m *MockOperationInterface) AddDependency(depID core.OperationID) { /* no-op for mock */ }
 func (m *MockOperationInterface) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {

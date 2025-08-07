@@ -19,9 +19,6 @@ type PipelineOptions struct {
 	// executing subsequent operations even if one fails.
 	ContinueOnError bool
 
-	// MaxConcurrent is the maximum number of operations to execute concurrently.
-	// A value of 0 or 1 means sequential execution.
-	MaxConcurrent int
 
 	// Restorable, if true, enables the backup mechanism for rollback.
 	Restorable bool
