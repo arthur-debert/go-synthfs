@@ -31,8 +31,8 @@ func TestPipelineBuilder(t *testing.T) {
 			t.Fatalf("Pipeline execution failed for copy: %v", err)
 		}
 
-		if len(result.GetOperations()) != 1 {
-			t.Errorf("Expected 1 operations, got %d", len(result.GetOperations()))
+		if len(result.Operations) != 1 {
+			t.Errorf("Expected 1 operations, got %d", len(result.Operations))
 		}
 
 		// Verify results
@@ -124,7 +124,7 @@ func TestPipelineBuilder(t *testing.T) {
 			t.Fatalf("Pipeline execution failed: %v", err)
 		}
 
-		if len(result.GetOperations()) != 2 {
+		if len(result.Operations) != 2 {
 			t.Error("Should have executed 2 operations")
 		}
 	})

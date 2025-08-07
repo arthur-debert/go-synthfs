@@ -175,63 +175,8 @@ func LogOperationDetails(t *testing.T, op synthfs.Operation) {
 	}
 }
 
-// TestBatchHelper provides utilities for testing batch operations
-type TestBatchHelper struct {
-	t     *testing.T
-	batch *synthfs.Batch
-	fs    synthfs.FileSystem
-}
-
-// NewTestBatchHelper creates a new batch test helper
-func NewTestBatchHelper(t *testing.T) *TestBatchHelper {
-	fs := NewTestFileSystem()
-	batch := synthfs.NewBatch(fs)
-	return &TestBatchHelper{
-		t:     t,
-		batch: batch,
-		fs:    fs,
-	}
-}
-
-// Batch returns the test batch
-func (tbh *TestBatchHelper) Batch() *synthfs.Batch {
-	return tbh.batch
-}
-
-// FileSystem returns the test filesystem
-func (tbh *TestBatchHelper) FileSystem() synthfs.FileSystem {
-	return tbh.fs
-}
-
-// Run executes the batch and returns the result
-func (tbh *TestBatchHelper) Run() (*synthfs.Result, error) {
-	result, err := tbh.batch.Run()
-	if err != nil {
-		tbh.t.Logf("Batch run failed: %v", err)
-	}
-	return result, err
-}
-
-// AssertSuccess asserts that the batch runs successfully
-func (tbh *TestBatchHelper) AssertSuccess() *synthfs.Result {
-	result, err := tbh.Run()
-	if err != nil {
-		tbh.t.Fatalf("Expected batch to succeed, but got error: %v", err)
-	}
-	if !result.IsSuccess() {
-		tbh.t.Fatalf("Expected batch to succeed, but Success=false. Error: %v", result.GetError())
-	}
-	return result
-}
-
-// AssertFailure asserts that the batch fails
-func (tbh *TestBatchHelper) AssertFailure() *synthfs.Result {
-	result, err := tbh.Run()
-	if err == nil && result.IsSuccess() {
-		tbh.t.Fatalf("Expected batch to fail, but it succeeded")
-	}
-	return result
-}
+// TestBatchHelper has been removed along with the batch API
+// Use TestPipelineHelper or direct operation execution instead
 
 // TestPipelineHelper provides utilities for testing pipelines
 type TestPipelineHelper struct {
@@ -277,8 +222,12 @@ func (tph *TestPipelineHelper) ExecuteWithOptions(ctx context.Context, opts synt
 // AssertSuccess asserts that the pipeline executes successfully
 func (tph *TestPipelineHelper) AssertSuccess(ctx context.Context) *synthfs.Result {
 	result := tph.Execute(ctx)
-	if !result.IsSuccess() {
-		tph.t.Fatalf("Expected pipeline to succeed, but Success=false. Error: %v", result.GetError())
+	if !result.Success {
+		var errMsg string
+		if len(result.Errors) > 0 {
+			errMsg = result.Errors[0].Error()
+		}
+		tph.t.Fatalf("Expected pipeline to succeed, but Success=false. Error: %v", errMsg)
 	}
 	return result
 }
@@ -286,7 +235,7 @@ func (tph *TestPipelineHelper) AssertSuccess(ctx context.Context) *synthfs.Resul
 // AssertFailure asserts that the pipeline fails
 func (tph *TestPipelineHelper) AssertFailure(ctx context.Context) *synthfs.Result {
 	result := tph.Execute(ctx)
-	if result.IsSuccess() {
+	if result.Success {
 		tph.t.Fatalf("Expected pipeline to fail, but it succeeded")
 	}
 	return result

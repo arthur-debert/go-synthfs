@@ -307,7 +307,7 @@ func (btw *BatchTemplateWriter) Execute(ctx context.Context, fs filesystem.FileS
 	if err != nil {
 		return err
 	}
-	if !result.IsSuccess() {
+	if !result.Success {
 		return fmt.Errorf("batch template write failed")
 	}
 	return nil

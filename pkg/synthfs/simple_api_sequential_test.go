@@ -142,7 +142,7 @@ func TestSimpleAPISequentialOperations(t *testing.T) {
 				t.Fatalf("Run failed: %v", err)
 			}
 			
-			if !result.IsSuccess() {
+			if !result.Success {
 				t.Fatal("Run should have succeeded")
 			}
 			
@@ -170,7 +170,7 @@ func TestSimpleAPIDryRun(t *testing.T) {
 		t.Fatalf("Dry run failed: %v", err)
 	}
 	
-	if !result.IsSuccess() {
+	if !result.Success {
 		t.Fatal("Dry run should succeed")
 	}
 	

@@ -43,8 +43,8 @@ func TestShellCommand_Basic(t *testing.T) {
 			t.Fatalf("Command failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Errorf("Command did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Errorf("Command did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 	})
 
@@ -75,8 +75,8 @@ func TestShellCommand_Basic(t *testing.T) {
 			t.Fatalf("Command failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Errorf("Command did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Errorf("Command did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify pwd.txt was created in subdir
@@ -101,8 +101,8 @@ func TestShellCommand_Basic(t *testing.T) {
 			t.Fatalf("Command failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Errorf("Command did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Errorf("Command did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Read the output file
@@ -144,7 +144,7 @@ func TestShellCommand_Basic(t *testing.T) {
 			t.Error("Expected timeout error")
 		}
 
-		if result.IsSuccess() {
+		if result.Success {
 			t.Error("Command should have failed due to timeout")
 		}
 	})
@@ -171,7 +171,7 @@ func TestShellCommand_ErrorHandling(t *testing.T) {
 			t.Error("Expected error from failed command")
 		}
 
-		if result.IsSuccess() {
+		if result.Success {
 			t.Error("Command should have failed")
 		}
 	})
@@ -203,7 +203,7 @@ func TestShellCommand_ErrorHandling(t *testing.T) {
 			t.Error("Expected error from failed command")
 		}
 
-		if result.IsSuccess() {
+		if result.Success {
 			t.Error("Pipeline should have failed")
 		}
 
@@ -237,8 +237,8 @@ func TestShellCommand_InPipeline(t *testing.T) {
 			t.Fatalf("Pipeline failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Errorf("Pipeline did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Errorf("Pipeline did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify all files were created
@@ -274,8 +274,8 @@ func TestShellCommand_InPipeline(t *testing.T) {
 		executor := synthfs.NewExecutor()
 		result := executor.Run(context.Background(), pipeline, fs)
 
-		if !result.IsSuccess() {
-			t.Errorf("Pipeline failed: %v", result.GetError())
+		if !result.Success {
+			t.Errorf("Pipeline failed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify output was created
@@ -338,8 +338,8 @@ func TestAdd(t *testing.T) {
 			t.Fatalf("Build workflow failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Errorf("Build workflow did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Errorf("Build workflow did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify binary was created
@@ -359,7 +359,7 @@ func TestAdd(t *testing.T) {
 		checkGit := sfs.ShellCommand("which git", synthfs.WithCaptureOutput(), synthfs.WithWorkDir(tempDir))
 		result, _ := synthfs.Run(context.Background(), fs, checkGit)
 		
-		if !result.IsSuccess() {
+		if !result.Success {
 			t.Skip("Git not available, skipping git workflow test")
 		}
 
@@ -379,8 +379,8 @@ func TestAdd(t *testing.T) {
 			t.Fatalf("Git workflow failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Errorf("Git workflow did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Errorf("Git workflow did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify git repo was initialized
@@ -419,8 +419,8 @@ Eve,32,Seattle
 			t.Fatalf("Data processing failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Errorf("Data processing did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Errorf("Data processing did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify outputs
@@ -477,7 +477,7 @@ func TestShellCommand_CustomShell(t *testing.T) {
 		checkBash := sfs.ShellCommand("which bash", synthfs.WithCaptureOutput(), synthfs.WithWorkDir(tempDir))
 		result, _ := synthfs.Run(context.Background(), fs, checkBash)
 		
-		if !result.IsSuccess() {
+		if !result.Success {
 			t.Skip("Bash not available, skipping bash-specific test")
 		}
 
@@ -491,8 +491,8 @@ func TestShellCommand_CustomShell(t *testing.T) {
 			t.Fatalf("Command failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Errorf("Command did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Errorf("Command did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Read output
@@ -538,7 +538,7 @@ func TestShellCommand_EdgeCases(t *testing.T) {
 			t.Errorf("Empty command should succeed: %v", err)
 		}
 
-		if !result.IsSuccess() {
+		if !result.Success {
 			t.Error("Empty command should succeed")
 		}
 	})
@@ -557,8 +557,8 @@ func TestShellCommand_EdgeCases(t *testing.T) {
 			t.Fatalf("Command failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Errorf("Command did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Errorf("Command did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify file was created
@@ -587,8 +587,8 @@ func TestShellCommand_EdgeCases(t *testing.T) {
 			t.Fatalf("Command failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Errorf("Command did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Errorf("Command did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify output file was created

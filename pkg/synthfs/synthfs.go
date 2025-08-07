@@ -86,6 +86,24 @@ func (s *SynthFS) CreateSymlink(target, linkPath string) Operation {
 	return op
 }
 
+// Unarchive creates an unarchive operation with an auto-generated ID.
+func (s *SynthFS) Unarchive(archivePath, extractPath string) Operation {
+	id := s.idGen("unarchive", archivePath)
+	op := operations.NewUnarchiveOperation(id, archivePath)
+	item := targets.NewUnarchive(archivePath, extractPath)
+	op.SetItem(item)
+	return op
+}
+
+// UnarchiveWithPatterns creates an unarchive operation with patterns and an auto-generated ID.
+func (s *SynthFS) UnarchiveWithPatterns(archivePath, extractPath string, patterns []string) Operation {
+	id := s.idGen("unarchive", archivePath)
+	op := operations.NewUnarchiveOperation(id, archivePath)
+	item := targets.NewUnarchive(archivePath, extractPath).WithPatterns(patterns...)
+	op.SetItem(item)
+	return op
+}
+
 // CreateFileWithID creates a file creation operation with an explicit ID.
 func (s *SynthFS) CreateFileWithID(id string, path string, content []byte, mode fs.FileMode) Operation {
 	op := operations.NewCreateFileOperation(core.OperationID(id), path)

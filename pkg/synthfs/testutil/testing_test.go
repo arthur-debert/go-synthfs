@@ -1,6 +1,7 @@
 package testutil_test
 
 import (
+	"context"
 	"io/fs"
 	"testing"
 	"testing/fstest"
@@ -246,20 +247,17 @@ func TestTestHelper(t *testing.T) {
 	t.Run("ExecuteAndAssert", func(t *testing.T) {
 		helper := testutil.NewTestHelper(t)
 
-		// Use the new Batch API instead of old ops
-		fs := testutil.NewTestFileSystem()
-		batch := synthfs.NewBatch(fs).WithFileSystem(helper.FileSystem())
-		_, err := batch.CreateFile("success.txt", []byte("content"), 0644)
-		if err != nil {
-			t.Fatalf("CreateFile failed: %v", err)
-		}
+		// Use the Simple API instead of removed batch API
+		sfs := synthfs.New()
+		ctx := context.Background()
+		op := sfs.CreateFile("success.txt", []byte("content"), 0644)
 
-		result, err := batch.Run()
+		result, err := synthfs.Run(ctx, helper.FileSystem(), op)
 		if err != nil {
 			t.Fatalf("Run failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
+		if !result.Success {
 			t.Errorf("Expected successful run")
 		}
 	})
@@ -267,11 +265,13 @@ func TestTestHelper(t *testing.T) {
 	t.Run("ExecuteAndExpectError", func(t *testing.T) {
 		helper := testutil.NewTestHelper(t)
 
-		// Use the new Batch API with invalid operation to cause error
-		fs := testutil.NewTestFileSystem()
-		batch := synthfs.NewBatch(fs).WithFileSystem(helper.FileSystem())
-		_, err := batch.CreateFile("", []byte("content"), 0644) // Empty path should fail validation
-		if err == nil {
+		// Use the Simple API with invalid operation to cause error
+		sfs := synthfs.New()
+		ctx := context.Background()
+		op := sfs.CreateFile("", []byte("content"), 0644) // Empty path should fail validation
+
+		result, err := synthfs.Run(ctx, helper.FileSystem(), op)
+		if err == nil && result.Success {
 			t.Fatal("Expected validation error for empty path")
 		}
 

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+# Script to show git diff --stat for Go files (excluding test files) against a branch
+# Usage: stat-diff-gocode [branch]
+# If no branch is specified, defaults to 'main'
+
+set -e
+
+# Default branch to compare against
+BRANCH="${1:-main}"
+
+# Run git diff --stat for Go files, excluding test files
+git --no-pager diff --stat "$BRANCH" -- '*.go' ':!*_test.go' ':!*test.go'

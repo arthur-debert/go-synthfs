@@ -8,6 +8,7 @@ import (
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/validation"
 )
 
 // CopyOperation represents a file/directory copy operation.
@@ -112,7 +113,9 @@ func (op *CopyOperation) execute(ctx context.Context, fsys filesystem.FileSystem
 			return fmt.Errorf("failed to write destination file: %w", err)
 		}
 
-		// TODO: Compute and store checksum for the copied file
+		// Compute and store checksum for the source file
+		_ = op.computeAndStoreChecksum(fsys, src)
+		// Ignore checksum errors - checksums are nice-to-have, not critical
 	} else {
 		// TODO: Handle directory copy
 		return fmt.Errorf("directory copy not yet implemented")
@@ -172,6 +175,21 @@ func (op *CopyOperation) Rollback(ctx context.Context, fsys filesystem.FileSyste
 	return nil
 }
 
+// computeAndStoreChecksum computes checksum for a file and stores it in the operation
+func (op *CopyOperation) computeAndStoreChecksum(fsys filesystem.FileSystem, filePath string) error {
+	checksum, err := validation.ComputeFileChecksum(fsys, filePath)
+	if err != nil {
+		return err
+	}
+	if checksum != nil {
+		// Store checksum in operation
+		op.SetChecksum(filePath, checksum)
+		// Also add to description details
+		op.SetDescriptionDetail("source_checksum", checksum.MD5)
+	}
+	return nil
+}
+
 // MoveOperation represents a file/directory move operation.
 type MoveOperation struct {
 	*BaseOperation
@@ -225,6 +243,10 @@ func (op *MoveOperation) execute(ctx context.Context, fsys filesystem.FileSystem
 	if src == "" || dst == "" {
 		return fmt.Errorf("move operation requires both source and destination paths")
 	}
+
+	// Compute checksum for source file before moving
+	_ = op.computeAndStoreChecksum(fsys, src)
+	// Ignore checksum errors - checksums are nice-to-have, not critical
 
 	// Try rename first (most efficient)
 	if err := fsys.Rename(src, dst); err == nil {
@@ -286,6 +308,21 @@ func (op *MoveOperation) Rollback(ctx context.Context, fsys filesystem.FileSyste
 		return fmt.Errorf("rollback failed during delete: %w", err)
 	}
 
+	return nil
+}
+
+// computeAndStoreChecksum computes checksum for a file and stores it in the operation
+func (op *MoveOperation) computeAndStoreChecksum(fsys filesystem.FileSystem, filePath string) error {
+	checksum, err := validation.ComputeFileChecksum(fsys, filePath)
+	if err != nil {
+		return err
+	}
+	if checksum != nil {
+		// Store checksum in operation
+		op.SetChecksum(filePath, checksum)
+		// Also add to description details
+		op.SetDescriptionDetail("source_checksum", checksum.MD5)
+	}
 	return nil
 }
 

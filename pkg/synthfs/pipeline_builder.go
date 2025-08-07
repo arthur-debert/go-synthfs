@@ -104,12 +104,12 @@ func (pb *PipelineBuilder) ExecuteWith(ctx context.Context, fs FileSystem, execu
 	result := executor.Run(ctx, pb.pipeline, fs)
 
 	// Check for errors (same as Execute)
-	for i, opResult := range result.GetOperations() {
-		if opRes, ok := opResult.(OperationResult); ok && opRes.Error != nil {
+	for i, opResult := range result.Operations {
+		if opResult.Error != nil {
 			var successfulOps []OperationID
 			for j := 0; j < i; j++ {
-				if prevRes, ok := result.GetOperations()[j].(OperationResult); ok && prevRes.Error == nil {
-					successfulOps = append(successfulOps, prevRes.OperationID)
+				if result.Operations[j].Error == nil {
+					successfulOps = append(successfulOps, result.Operations[j].OperationID)
 				}
 			}
 
@@ -119,11 +119,11 @@ func (pb *PipelineBuilder) ExecuteWith(ctx context.Context, fs FileSystem, execu
 					FailedOp:      ops[i],
 					FailedIndex:   i + 1,
 					TotalOps:      len(ops),
-					Err:           opRes.Error,
+					Err:           opResult.Error,
 					SuccessfulOps: successfulOps,
 				}
 			}
-			return result, opRes.Error
+			return result, opResult.Error
 		}
 	}
 
@@ -150,12 +150,12 @@ func (pe *PipelineExecutor) Execute(ctx context.Context, fs FileSystem) (*Result
 	result := executor.RunWithOptions(ctx, pe.pipeline, fs, pe.options)
 
 	// Check for errors
-	for i, opResult := range result.GetOperations() {
-		if opRes, ok := opResult.(OperationResult); ok && opRes.Error != nil {
+	for i, opResult := range result.Operations {
+		if opResult.Error != nil {
 			var successfulOps []OperationID
 			for j := 0; j < i; j++ {
-				if prevRes, ok := result.GetOperations()[j].(OperationResult); ok && prevRes.Error == nil {
-					successfulOps = append(successfulOps, prevRes.OperationID)
+				if result.Operations[j].Error == nil {
+					successfulOps = append(successfulOps, result.Operations[j].OperationID)
 				}
 			}
 
@@ -165,11 +165,11 @@ func (pe *PipelineExecutor) Execute(ctx context.Context, fs FileSystem) (*Result
 					FailedOp:      ops[i],
 					FailedIndex:   i + 1,
 					TotalOps:      len(ops),
-					Err:           opRes.Error,
+					Err:           opResult.Error,
 					SuccessfulOps: successfulOps,
 				}
 			}
-			return result, opRes.Error
+			return result, opResult.Error
 		}
 	}
 

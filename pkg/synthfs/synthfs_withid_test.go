@@ -256,8 +256,8 @@ func TestSynthFS_WithIDInPipeline(t *testing.T) {
 	
 	// Note: Can't access private Success field
 	
-	if len(result.operations) != 4 {
-		t.Errorf("expected 4 operation results but got %d", len(result.operations))
+	if len(result.Operations) != 4 {
+		t.Errorf("expected 4 operation results but got %d", len(result.Operations))
 	}
 	
 	// Check that explicit IDs are preserved in results
@@ -330,6 +330,6 @@ func TestSynthFS_WithIDCollisionHandling(t *testing.T) {
 	if err != nil {
 		t.Logf("pipeline with duplicate IDs failed (which may be expected): %v", err)
 	} else if result != nil {
-		t.Logf("pipeline with duplicate IDs succeeded with %d operations", len(result.operations))
+		t.Logf("pipeline with duplicate IDs succeeded with %d operations", len(result.Operations))
 	}
 }

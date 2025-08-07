@@ -208,8 +208,12 @@ func TestCustomOperation_InPipeline(t *testing.T) {
 			t.Fatalf("Pipeline execution failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Errorf("Pipeline did not succeed: %v", result.GetError())
+		if !result.Success {
+			var errMsg string
+			if len(result.Errors) > 0 {
+				errMsg = result.Errors[0].Error()
+			}
+			t.Errorf("Pipeline did not succeed: %v", errMsg)
 		}
 
 		// Verify custom operation executed
@@ -270,8 +274,12 @@ func TestCustomOperation_InPipeline(t *testing.T) {
 		executor := synthfs.NewExecutor()
 		result := executor.Run(context.Background(), pipeline, fs)
 
-		if !result.IsSuccess() {
-			t.Errorf("Pipeline execution failed: %v", result.GetError())
+		if !result.Success {
+			var errMsg string
+			if len(result.Errors) > 0 {
+				errMsg = result.Errors[0].Error()
+			}
+			t.Errorf("Pipeline execution failed: %v", errMsg)
 		}
 
 		// Verify output file contains processed data
@@ -340,7 +348,7 @@ func TestCustomOperation_ErrorHandling(t *testing.T) {
 			t.Error("Expected error from failed operation")
 		}
 
-		if result.IsSuccess() {
+		if result.Success {
 			t.Error("Expected pipeline to fail")
 		}
 
@@ -437,8 +445,12 @@ func TestCustomOperation_RealWorldExample(t *testing.T) {
 			t.Fatalf("Workflow failed during build: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Errorf("Workflow did not succeed: %v", result.GetError())
+		if !result.Success {
+			var errMsg string
+			if len(result.Errors) > 0 {
+				errMsg = result.Errors[0].Error()
+			}
+			t.Errorf("Workflow did not succeed: %v", errMsg)
 		}
 
 		// Verify build output
@@ -533,8 +545,12 @@ func TestCustomOperation_RealWorldExample(t *testing.T) {
 		executor := synthfs.NewExecutor()
 		result := executor.Run(context.Background(), pipeline, fs)
 
-		if !result.IsSuccess() {
-			t.Errorf("Migration pipeline failed: %v", result.GetError())
+		if !result.Success {
+			var errMsg string
+			if len(result.Errors) > 0 {
+				errMsg = result.Errors[0].Error()
+			}
+			t.Errorf("Migration pipeline failed: %v", errMsg)
 		}
 
 		// Verify both migrations were applied

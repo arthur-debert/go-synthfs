@@ -34,6 +34,8 @@ type FsItem interface {
 type OperationID = core.OperationID
 type OperationDesc = core.OperationDesc
 type BackupData = core.BackupData
+type Result = core.Result
+type OperationResult = core.OperationResult
 
 // ChecksumRecord is now defined in the validation package
 type ChecksumRecord = validation.ChecksumRecord

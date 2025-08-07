@@ -360,36 +360,28 @@ func TestBatchUnarchive(t *testing.T) {
 			t.Fatalf("Failed to write test archive: %v", err)
 		}
 
-		// Create a new batch with the file already in the filesystem
-		batch := NewBatch(fs).WithFileSystem(fs)
+		// Create unarchive operation using Simple API
+		sfs := New()
+		ctx := context.Background()
+		op := sfs.Unarchive(archivePath, "batch_extracted/")
 
-		// Add unarchive operation
-		op, err := batch.Unarchive(archivePath, "batch_extracted/")
-		if err != nil {
-			t.Fatalf("Failed to add unarchive operation: %v", err)
+		desc := op.Describe()
+		if desc.Type != "unarchive" {
+			t.Errorf("Expected operation type 'unarchive', got '%s'", desc.Type)
 		}
 
-		if op == nil {
-			t.Fatal("Unarchive returned nil operation")
-		}
-
-		if opTyped, ok := op.(Operation); ok {
-			desc := opTyped.Describe()
-			if desc.Type != "unarchive" {
-				t.Errorf("Expected operation type 'unarchive', got '%s'", desc.Type)
-			}
-		} else {
-			t.Error("Expected operation to be of type Operation")
-		}
-
-		// Execute batch
-		result, err := batch.Run()
+		// Execute using Simple API
+		result, err := Run(ctx, fs, op)
 		if err != nil {
 			t.Fatalf("Batch execution failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Fatalf("Batch execution was not successful: %v", result.GetError())
+		if !result.Success {
+			var errMsg string
+			if len(result.Errors) > 0 {
+				errMsg = result.Errors[0].Error()
+			}
+			t.Fatalf("Batch execution was not successful: %v", errMsg)
 		}
 
 		// Verify extraction
@@ -417,23 +409,24 @@ func TestBatchUnarchive(t *testing.T) {
 		}
 
 		// Create new batch for this test
-		batch := NewBatch(fs).WithFileSystem(fs)
-
-		// Add unarchive operation with patterns
+		// Create unarchive operation with patterns using Simple API
 		patterns := []string{"*.txt", "docs/**"}
-		_, err := batch.UnarchiveWithPatterns(archivePath, "pattern_extracted/", patterns)
-		if err != nil {
-			t.Fatalf("Failed to add unarchive operation with patterns: %v", err)
-		}
+		sfs := New()
+		ctx := context.Background()
+		op := sfs.UnarchiveWithPatterns(archivePath, "pattern_extracted/", patterns)
 
-		// Execute batch
-		result, err := batch.Run()
+		// Execute using Simple API
+		result, err := Run(ctx, fs, op)
 		if err != nil {
 			t.Fatalf("Batch execution failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Fatalf("Batch execution was not successful: %v", result.GetError())
+		if !result.Success {
+			var errMsg string
+			if len(result.Errors) > 0 {
+				errMsg = result.Errors[0].Error()
+			}
+			t.Fatalf("Batch execution was not successful: %v", errMsg)
 		}
 
 		// Verify only matching files were extracted

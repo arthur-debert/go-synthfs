@@ -3,6 +3,7 @@ package synthfs
 import (
 	"context"
 
+	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
@@ -58,9 +59,9 @@ func RunWithOptions(ctx context.Context, fs filesystem.FileSystem, options Pipel
 
 	if len(ops) == 0 {
 		return &Result{
-			success:    true,
-			operations: []interface{}{},
-			duration:   0,
+			Success:    true,
+			Operations: []core.OperationResult{},
+			Duration:   0,
 		}, nil
 	}
 
@@ -74,20 +75,20 @@ func RunWithOptions(ctx context.Context, fs filesystem.FileSystem, options Pipel
 		if err := op.Validate(ctx, nil, projectedFS); err != nil {
 			// Return a failed result with the error
 			return &Result{
-				success:    false,
-				operations: []interface{}{},
-				duration:   0,
-				err:        err,
+				Success:    false,
+				Operations: []core.OperationResult{},
+				Duration:   0,
+				Errors:     []error{err},
 			}, err
 		}
 		// Update projected state to reflect this operation
 		if err := projectedFS.UpdateProjectedState(op); err != nil {
 			// Return a failed result with the error
 			return &Result{
-				success:    false,
-				operations: []interface{}{},
-				duration:   0,
-				err:        err,
+				Success:    false,
+				Operations: []core.OperationResult{},
+				Duration:   0,
+				Errors:     []error{err},
 			}, err
 		}
 	}
@@ -111,8 +112,10 @@ func RunWithOptions(ctx context.Context, fs filesystem.FileSystem, options Pipel
 	// The executor's result is already in the desired format.
 	// We just need to extract the top-level error for the return signature.
 	var err error
-	if !result.IsSuccess() {
-		err = result.GetError()
+	if !result.Success {
+		if len(result.Errors) > 0 {
+			err = result.Errors[0]
+		}
 	}
 
 	return result, err

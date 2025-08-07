@@ -14,6 +14,7 @@ import (
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/validation"
 )
 
 // CreateArchiveOperation represents an archive creation operation.
@@ -107,6 +108,9 @@ func (op *CreateArchiveOperation) execute(ctx context.Context, fsys filesystem.F
 	// For now, we'll need to use the OS filesystem for archive creation
 	// This is a limitation we'll address in future iterations
 	archivePath := op.description.Path
+
+	// Compute checksums for all source files before creating archive
+	op.computeAndStoreChecksums(fsys, sources)
 
 	// Determine archive type based on format or file extension
 	formatStr := fmt.Sprintf("%v", format)
@@ -317,6 +321,23 @@ func (op *CreateArchiveOperation) Rollback(ctx context.Context, fsys filesystem.
 	// Remove the archive
 	_ = fsys.Remove(op.description.Path) // Ignore error - might not exist
 	return nil
+}
+
+// computeAndStoreChecksums computes checksums for all source files and stores them in the operation
+func (op *CreateArchiveOperation) computeAndStoreChecksums(fsys filesystem.FileSystem, sources []string) {
+	checksummedCount := 0
+	for _, source := range sources {
+		if checksum, err := validation.ComputeFileChecksum(fsys, source); err == nil && checksum != nil {
+			// Store checksum for this source file
+			op.SetChecksum(source, checksum)
+			checksummedCount++
+		}
+		// Ignore checksum errors - checksums are nice-to-have, not critical
+	}
+	// Store count of checksummed sources in description details
+	if checksummedCount > 0 {
+		op.SetDescriptionDetail("sources_checksummed", checksummedCount)
+	}
 }
 
 // UnarchiveOperation represents an archive extraction operation.

@@ -3,7 +3,6 @@ package synthfs
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/execution"
@@ -12,16 +11,7 @@ import (
 // PipelineOptions controls how operations are executed
 type PipelineOptions = core.PipelineOptions
 
-// OperationResult holds the outcome of a single operation's execution
-type OperationResult struct {
-	OperationID  OperationID
-	Operation    Operation // The operation that was executed
-	Status       OperationStatus
-	Error        error
-	Duration     time.Duration
-	BackupData   *BackupData
-	BackupSizeMB float64
-}
+// OperationResult is defined as a type alias in types.go
 
 // DefaultPipelineOptions returns a new PipelineOptions with default values.
 func DefaultPipelineOptions() PipelineOptions {
@@ -63,106 +53,9 @@ func (e *Executor) Run(ctx context.Context, pipeline Pipeline, fs FileSystem) *R
 func (e *Executor) RunWithOptions(ctx context.Context, pipeline Pipeline, fs FileSystem, opts PipelineOptions) *Result {
 	// Create pipeline wrapper
 	wrapper := &pipelineWrapper{pipeline: pipeline}
-	coreResult := e.executor.RunWithOptions(ctx, wrapper, fs, opts)
-
-	// Convert core.Result back to main package Result
-	return e.convertResult(coreResult)
+	return e.executor.RunWithOptions(ctx, wrapper, fs, opts)
 }
 
-// convertResult converts core.Result to main package Result
-func (e *Executor) convertResult(coreResult *core.Result) *Result {
-	// Create operations list
-	operations := make([]interface{}, 0, len(coreResult.Operations))
-	for _, coreOpResult := range coreResult.Operations {
-		opResult := OperationResult{
-			OperationID:  coreOpResult.OperationID,
-			Status:       coreOpResult.Status,
-			Error:        coreOpResult.Error,
-			Duration:     coreOpResult.Duration,
-			BackupData:   coreOpResult.BackupData,
-			BackupSizeMB: coreOpResult.BackupSizeMB,
-		}
-
-		// Convert operation from interface{} back to Operation
-		if op, ok := coreOpResult.Operation.(Operation); ok {
-			opResult.Operation = op
-		} else if adapter, ok := coreOpResult.Operation.(*operationInterfaceAdapter); ok {
-			opResult.Operation = adapter.Operation
-		}
-
-		operations = append(operations, opResult)
-	}
-
-	// Convert restore operations
-	restoreOps := make([]interface{}, 0, len(coreResult.RestoreOps))
-	restoreOps = append(restoreOps, coreResult.RestoreOps...)
-
-	// Get first error if any and wrap it appropriately
-	var firstErr error
-	if len(coreResult.Errors) > 0 {
-		firstErr = coreResult.Errors[0]
-
-		// Check if this is a rollback error by type assertion
-		if rollbackErr, ok := firstErr.(*core.RollbackError); ok {
-			// Find which operation failed
-			var failedOp Operation
-			var failedIndex int
-			for i, opResult := range coreResult.Operations {
-				if opResult.Status == StatusFailure {
-					failedIndex = i + 1
-					if op, ok := opResult.Operation.(Operation); ok {
-						failedOp = op
-					} else if adapter, ok := opResult.Operation.(*operationInterfaceAdapter); ok {
-						failedOp = adapter.Operation
-					}
-					break
-				}
-			}
-
-			// Create a rich RollbackError
-			rbErr := &RollbackError{
-				OriginalErr:  rollbackErr.OriginalErr,
-				RollbackErrs: make(map[OperationID]error),
-			}
-			// For now, we don't have per-operation rollback errors, so we just add the aggregate.
-			// This can be improved later if the core executor provides more granular errors.
-			if len(rollbackErr.RollbackErrs) > 0 {
-				rbErr.RollbackErrs["rollback"] = rollbackErr.RollbackErrs[0]
-			}
-
-			// Wrap in PipelineError
-			pipelineErr := &PipelineError{
-				FailedOp:      failedOp,
-				FailedIndex:   failedIndex,
-				TotalOps:      len(coreResult.Operations),
-				Err:           rbErr,
-				SuccessfulOps: make([]OperationID, 0),
-			}
-
-			// Add successful operation IDs
-			for i, opResult := range coreResult.Operations {
-				if i >= failedIndex-1 {
-					break
-				}
-				if opResult.Status == StatusSuccess {
-					pipelineErr.SuccessfulOps = append(pipelineErr.SuccessfulOps, opResult.OperationID)
-				}
-			}
-			firstErr = pipelineErr
-		}
-	}
-
-	// Create the result using the simplified structure
-	return &Result{
-		success:    coreResult.Success,
-		operations: operations,
-		restoreOps: restoreOps,
-		duration:   coreResult.Duration,
-		err:        firstErr,
-		budget:     coreResult.Budget,
-		rollback:   coreResult.Rollback,
-	}
-}
 
 // pipelineWrapper wraps Pipeline to implement execution.PipelineInterface
 type pipelineWrapper struct {
