@@ -112,17 +112,8 @@ func CreateTestDir(t *testing.T, fs synthfs.FileSystem, path string) {
 
 // FileExists checks if a file exists in the filesystem
 func FileExists(t *testing.T, fs synthfs.FileSystem, path string) bool {
-	if statFS, ok := fs.(synthfs.StatFS); ok {
-		_, err := statFS.Stat(path)
-		return err == nil
-	}
-	// Fallback to trying to open the file
-	file, err := fs.Open(path)
-	if err != nil {
-		return false
-	}
-	_ = file.Close()
-	return true
+	_, err := fs.Stat(path)
+	return err == nil
 }
 
 // AssertFileContent verifies that a file has the expected content

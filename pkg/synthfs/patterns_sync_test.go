@@ -416,9 +416,7 @@ func TestSyncPatterns(t *testing.T) {
 		if err := filesys.WriteFile("src/target.txt", []byte("target"), 0644); err != nil {
 			t.Fatal(err)
 		}
-		if fullFS, ok := FileSystem(filesys).(FullFileSystem); ok {
-			_ = fullFS.Symlink("target.txt", "src/link.txt")
-		}
+		_ = FileSystem(filesys).Symlink("target.txt", "src/link.txt")
 
 		// Create destination directory (required for real filesystem)
 		if err := filesys.MkdirAll("dst", 0755); err != nil {
@@ -435,11 +433,9 @@ func TestSyncPatterns(t *testing.T) {
 		// Check if symlink was created
 		if len(result.SymlinksCreated) > 0 {
 			// Verify symlink
-			if fullFS, ok := FileSystem(filesys).(FullFileSystem); ok {
-				target, err := fullFS.Readlink("dst/link.txt")
-				if err == nil && target != "target.txt" {
-					t.Errorf("Symlink has wrong target: %s", target)
-				}
+			target, err := FileSystem(filesys).Readlink("dst/link.txt")
+			if err == nil && target != "target.txt" {
+				t.Errorf("Symlink has wrong target: %s", target)
 			}
 		} else {
 			t.Log("Warning: Symlinks not supported by test filesystem")

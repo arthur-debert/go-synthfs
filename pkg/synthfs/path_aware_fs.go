@@ -81,18 +81,8 @@ func (pfs *PathAwareFileSystem) Stat(name string) (fs.FileInfo, error) {
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
 	}
 
-	// Check if the underlying FS implements StatFS
-	if statFS, ok := pfs.fs.(filesystem.StatFS); ok {
-		return statFS.Stat(resolved)
-	}
-
-	// Fallback to Open + Stat
-	f, err := pfs.fs.Open(resolved)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = f.Close() }()
-	return f.Stat()
+	// Use the underlying FS's Stat method
+	return pfs.fs.Stat(resolved)
 }
 
 // ReadFile implements ReadFS
@@ -180,11 +170,7 @@ func (pfs *PathAwareFileSystem) Rename(oldpath, newpath string) error {
 		return &fs.PathError{Op: "rename", Path: newpath, Err: err}
 	}
 
-	if fullFS, ok := pfs.fs.(filesystem.FullFileSystem); ok {
-		return fullFS.Rename(resolvedOld, resolvedNew)
-	}
-
-	return &fs.PathError{Op: "rename", Path: oldpath, Err: fs.ErrInvalid}
+	return pfs.fs.Rename(resolvedOld, resolvedNew)
 }
 
 // Symlink implements FullFileSystem
@@ -207,11 +193,7 @@ func (pfs *PathAwareFileSystem) Symlink(oldname, newname string) error {
 		}
 	}
 
-	if fullFS, ok := pfs.fs.(filesystem.FullFileSystem); ok {
-		return fullFS.Symlink(targetPath, resolvedNew)
-	}
-
-	return &fs.PathError{Op: "symlink", Path: newname, Err: fs.ErrInvalid}
+	return pfs.fs.Symlink(targetPath, resolvedNew)
 }
 
 // Readlink implements FullFileSystem
@@ -221,11 +203,7 @@ func (pfs *PathAwareFileSystem) Readlink(name string) (string, error) {
 		return "", &fs.PathError{Op: "readlink", Path: name, Err: err}
 	}
 
-	if fullFS, ok := pfs.fs.(filesystem.FullFileSystem); ok {
-		return fullFS.Readlink(resolved)
-	}
-
-	return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrInvalid}
+	return pfs.fs.Readlink(resolved)
 }
 
 // resolvePath handles the path resolution, converting to relative for the underlying FS

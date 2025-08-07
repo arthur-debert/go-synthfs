@@ -202,7 +202,7 @@ func (op *CreateFileOperation) ReverseOps(ctx context.Context, fsys filesystem.F
 		SizeMB:        float64(len(content)) / (1024 * 1024),
 		BackupTime:    time.Now(),
 		Metadata: map[string]interface{}{
-			"mode": info.(fs.FileInfo).Mode(),
+			"mode": info.Mode(),
 		},
 	}
 

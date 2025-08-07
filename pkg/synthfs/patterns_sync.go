@@ -219,13 +219,11 @@ func (op *SyncOperation) Execute(ctx context.Context, fsys FileSystem) error {
 			// Handle symlink
 			if !exists {
 				if !op.options.DryRun {
-					if fullFS, ok := fsys.(FullFileSystem); ok {
-						target, err := fullFS.Readlink(srcPath)
-						if err == nil {
-							if err := fullFS.Symlink(target, dstPath); err != nil {
-								op.result.Errors = append(op.result.Errors, err)
-								continue
-							}
+					target, err := fsys.Readlink(srcPath)
+					if err == nil {
+						if err := fsys.Symlink(target, dstPath); err != nil {
+							op.result.Errors = append(op.result.Errors, err)
+							continue
 						}
 					}
 				}
@@ -407,14 +405,12 @@ func (op *SyncOperation) Validate(ctx context.Context, fsys FileSystem) error {
 	}
 
 	// Check if source exists
-	if statFS, ok := fsys.(StatFS); ok {
-		info, err := statFS.Stat(op.srcDir)
-		if err != nil {
-			return fmt.Errorf("source directory does not exist: %w", err)
-		}
-		if !info.IsDir() {
-			return fmt.Errorf("source is not a directory: %s", op.srcDir)
-		}
+	info, err := fsys.Stat(op.srcDir)
+	if err != nil {
+		return fmt.Errorf("source directory does not exist: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("source is not a directory: %s", op.srcDir)
 	}
 
 	return nil

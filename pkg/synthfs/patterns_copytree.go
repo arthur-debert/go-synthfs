@@ -199,11 +199,7 @@ func (op *CopyTreeOperation) ReverseOps(ctx context.Context, fsys FileSystem, bu
 
 // Execute performs the copy tree operation
 func (op *CopyTreeOperation) Execute(ctx context.Context, fsys FileSystem) error {
-	// Check if filesystem supports full operations
-	fullFS, ok := fsys.(FullFileSystem)
-	if !ok {
-		return fmt.Errorf("filesystem does not support full operations")
-	}
+	// Use the filesystem directly as FullFileSystem
 
 	// We need a way to walk the filesystem
 	// For now, we'll use a simple recursive approach
@@ -246,7 +242,7 @@ func (op *CopyTreeOperation) Execute(ctx context.Context, fsys FileSystem) error
 
 				if entry.IsDir() {
 					// Create directory
-					err = fullFS.MkdirAll(dstPath, info.Mode())
+					err = fsys.MkdirAll(dstPath, info.Mode())
 					if err != nil && !strings.Contains(err.Error(), "exists") {
 						return err
 					}
@@ -257,13 +253,13 @@ func (op *CopyTreeOperation) Execute(ctx context.Context, fsys FileSystem) error
 					}
 				} else if info.Mode()&fs.ModeSymlink != 0 && !op.options.FollowSymlinks {
 					// Read symlink
-					target, err := fullFS.Readlink(srcPath)
+					target, err := fsys.Readlink(srcPath)
 					if err != nil {
 						continue
 					}
 
 					// Create symlink
-					_ = fullFS.Symlink(target, dstPath)
+					_ = fsys.Symlink(target, dstPath)
 				} else {
 					// Copy file
 					content, err := fs.ReadFile(fsys, srcPath)
@@ -276,7 +272,7 @@ func (op *CopyTreeOperation) Execute(ctx context.Context, fsys FileSystem) error
 						mode = info.Mode()
 					}
 
-					err = fullFS.WriteFile(dstPath, content, mode)
+					err = fsys.WriteFile(dstPath, content, mode)
 					if err != nil && !op.options.Overwrite {
 						return err
 					}
@@ -288,7 +284,7 @@ func (op *CopyTreeOperation) Execute(ctx context.Context, fsys FileSystem) error
 	}
 
 	// Create destination directory
-	if err := fullFS.MkdirAll(op.dstDir, 0755); err != nil {
+	if err := fsys.MkdirAll(op.dstDir, 0755); err != nil {
 		return err
 	}
 
@@ -298,14 +294,8 @@ func (op *CopyTreeOperation) Execute(ctx context.Context, fsys FileSystem) error
 
 // Validate checks if the operation can be performed
 func (op *CopyTreeOperation) Validate(ctx context.Context, fsys FileSystem) error {
-	// Check if filesystem supports Stat
-	statFS, ok := fsys.(StatFS)
-	if !ok {
-		return fmt.Errorf("filesystem does not support Stat")
-	}
-
 	// Check source exists
-	info, err := statFS.Stat(op.srcDir)
+	info, err := fsys.Stat(op.srcDir)
 	if err != nil {
 		return fmt.Errorf("source directory does not exist: %w", err)
 	}
@@ -315,7 +305,7 @@ func (op *CopyTreeOperation) Validate(ctx context.Context, fsys FileSystem) erro
 	}
 
 	// Check if destination exists
-	if _, err := statFS.Stat(op.dstDir); err == nil && !op.options.Overwrite {
+	if _, err := fsys.Stat(op.dstDir); err == nil && !op.options.Overwrite {
 		return fmt.Errorf("destination already exists: %s", op.dstDir)
 	}
 

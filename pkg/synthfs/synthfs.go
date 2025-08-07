@@ -190,14 +190,10 @@ func (s *SynthFS) ReadFile(path string) Operation {
 // ReadFileWithID creates a file read operation with explicit ID.
 func (s *SynthFS) ReadFileWithID(id string, path string) Operation {
 	op := NewCustomOperationWithOutput(id, func(ctx context.Context, fs filesystem.FileSystem, storeOutput func(string, interface{})) error {
-		// Cast to FullFileSystem to access Stat
-		fullFS, ok := fs.(filesystem.FullFileSystem)
-		if !ok {
-			return fmt.Errorf("filesystem does not support Stat operation")
-		}
+		// Use filesystem directly
 		
 		// Check if file exists and is readable
-		info, err := fullFS.Stat(path)
+		info, err := fs.Stat(path)
 		if err != nil {
 			return fmt.Errorf("failed to stat file %s: %w", path, err)
 		}
@@ -261,14 +257,10 @@ func (s *SynthFS) Checksum(path string, algorithm ChecksumAlgorithm) Operation {
 // ChecksumWithID creates a checksum operation with explicit ID.
 func (s *SynthFS) ChecksumWithID(id string, path string, algorithm ChecksumAlgorithm) Operation {
 	op := NewCustomOperationWithOutput(id, func(ctx context.Context, fs filesystem.FileSystem, storeOutput func(string, interface{})) error {
-		// Cast to FullFileSystem to access Stat
-		fullFS, ok := fs.(filesystem.FullFileSystem)
-		if !ok {
-			return fmt.Errorf("filesystem does not support Stat operation")
-		}
+		// Use filesystem directly
 		
 		// Check if file exists and is readable
-		info, err := fullFS.Stat(path)
+		info, err := fs.Stat(path)
 		if err != nil {
 			return fmt.Errorf("failed to stat file %s: %w", path, err)
 		}

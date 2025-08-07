@@ -90,13 +90,7 @@ func (op *CustomOperation) Execute(ctx context.Context, fsys filesystem.FileSyst
 		return fmt.Errorf("custom operation %s: no execute function defined", op.ID())
 	}
 
-	// Type assert to filesystem.FileSystem
-	fs, ok := fsys.(filesystem.FileSystem)
-	if !ok {
-		return fmt.Errorf("custom operation %s: invalid filesystem type", op.ID())
-	}
-
-	return op.executeFunc(ctx, fs)
+	return op.executeFunc(ctx, fsys)
 }
 
 // Validate runs the custom operation's validation function if defined.
@@ -107,13 +101,7 @@ func (op *CustomOperation) Validate(ctx context.Context, fsys filesystem.FileSys
 		return nil
 	}
 
-	// Type assert to filesystem.FileSystem
-	fs, ok := fsys.(filesystem.FileSystem)
-	if !ok {
-		return fmt.Errorf("custom operation %s: invalid filesystem type", op.ID())
-	}
-
-	return op.validateFunc(ctx, fs)
+	return op.validateFunc(ctx, fsys)
 }
 
 // Rollback runs the custom operation's rollback function if defined.
@@ -124,13 +112,7 @@ func (op *CustomOperation) Rollback(ctx context.Context, fsys filesystem.FileSys
 		return nil
 	}
 
-	// Type assert to filesystem.FileSystem
-	fs, ok := fsys.(filesystem.FileSystem)
-	if !ok {
-		return fmt.Errorf("custom operation %s: invalid filesystem type", op.ID())
-	}
-
-	return op.rollbackFunc(ctx, fs)
+	return op.rollbackFunc(ctx, fsys)
 }
 
 // ExecuteV2 implements the V2 execution interface

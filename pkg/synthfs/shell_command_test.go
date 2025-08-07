@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
@@ -23,7 +22,7 @@ func TestShellCommand_Basic(t *testing.T) {
 	t.Run("execute simple command", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create a test file
@@ -52,7 +51,7 @@ func TestShellCommand_Basic(t *testing.T) {
 	t.Run("command with working directory", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create directory structure
@@ -89,7 +88,7 @@ func TestShellCommand_Basic(t *testing.T) {
 	t.Run("command with environment variables", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Execute command that uses environment variable
@@ -132,7 +131,7 @@ func TestShellCommand_Basic(t *testing.T) {
 	t.Run("command with timeout", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Command that would take too long
@@ -159,7 +158,7 @@ func TestShellCommand_ErrorHandling(t *testing.T) {
 	t.Run("command fails with error", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Command that will fail
@@ -180,7 +179,7 @@ func TestShellCommand_ErrorHandling(t *testing.T) {
 	t.Run("command with rollback", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Command that creates a file with rollback that removes it
@@ -223,7 +222,7 @@ func TestShellCommand_InPipeline(t *testing.T) {
 	t.Run("shell command with filesystem operations", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Mixed pipeline
@@ -254,7 +253,7 @@ func TestShellCommand_InPipeline(t *testing.T) {
 	t.Run("shell command with dependencies", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create operations
@@ -294,7 +293,7 @@ func TestShellCommand_RealWorldExamples(t *testing.T) {
 	t.Run("build and test workflow", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create a simple Go project
@@ -353,7 +352,7 @@ func TestAdd(t *testing.T) {
 	t.Run("git workflow simulation", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Check if git is available
@@ -393,7 +392,7 @@ func TestAdd(t *testing.T) {
 	t.Run("data processing pipeline", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create sample data
@@ -471,7 +470,7 @@ func TestShellCommand_CustomShell(t *testing.T) {
 	t.Run("use bash shell", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Check if bash is available
@@ -528,7 +527,7 @@ func TestShellCommand_EdgeCases(t *testing.T) {
 	t.Run("empty command", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		op := sfs.ShellCommand("", synthfs.WithWorkDir(tempDir))
@@ -547,7 +546,7 @@ func TestShellCommand_EdgeCases(t *testing.T) {
 	t.Run("command with special characters", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Command with quotes and special chars
@@ -571,7 +570,7 @@ func TestShellCommand_EdgeCases(t *testing.T) {
 	t.Run("very long command", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Generate a long command

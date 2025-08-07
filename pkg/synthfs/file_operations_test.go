@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
@@ -18,7 +17,7 @@ func TestReadFile_Basic(t *testing.T) {
 
 	t.Run("read text file", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test file
@@ -60,7 +59,7 @@ func TestReadFile_Basic(t *testing.T) {
 
 	t.Run("read empty file", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create empty file
@@ -96,7 +95,7 @@ func TestReadFile_Basic(t *testing.T) {
 
 	t.Run("read with explicit ID", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test file
@@ -138,7 +137,7 @@ func TestReadFile_ErrorHandling(t *testing.T) {
 
 	t.Run("nonexistent file", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Try to read nonexistent file
@@ -156,7 +155,7 @@ func TestReadFile_ErrorHandling(t *testing.T) {
 
 	t.Run("try to read directory", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create directory
@@ -191,7 +190,7 @@ func TestChecksum_Basic(t *testing.T) {
 
 	t.Run("md5 checksum", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test file with known content
@@ -240,7 +239,7 @@ func TestChecksum_Basic(t *testing.T) {
 
 	t.Run("sha1 checksum", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test file
@@ -278,7 +277,7 @@ func TestChecksum_Basic(t *testing.T) {
 
 	t.Run("sha256 checksum", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test file
@@ -310,7 +309,7 @@ func TestChecksum_Basic(t *testing.T) {
 
 	t.Run("sha512 checksum", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test file
@@ -347,7 +346,7 @@ func TestChecksum_Basic(t *testing.T) {
 
 	t.Run("checksum with explicit ID", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test file
@@ -389,7 +388,7 @@ func TestChecksum_ErrorHandling(t *testing.T) {
 
 	t.Run("nonexistent file", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Try to checksum nonexistent file
@@ -407,7 +406,7 @@ func TestChecksum_ErrorHandling(t *testing.T) {
 
 	t.Run("try to checksum directory", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create directory
@@ -442,7 +441,7 @@ func TestFileOperations_InPipeline(t *testing.T) {
 
 	t.Run("read and checksum in pipeline", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test content
@@ -495,7 +494,7 @@ func TestFileOperations_InPipeline(t *testing.T) {
 
 	t.Run("multiple checksums of same file", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test file

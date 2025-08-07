@@ -129,11 +129,8 @@ func (a *OperationsPackageAdapter) ReverseOps(ctx context.Context, fsys FileSyst
 	// Convert operations - all operations from operations package need adaptation
 	var result []Operation
 	for _, op := range ops {
-		if opsOp, ok := op.(operations.Operation); ok {
-			result = append(result, NewOperationsPackageAdapter(opsOp))
-		}
-		// Note: operations.Operation and main.Operation interfaces are now incompatible
-		// due to different ExecuteV2 signatures, so we can't cast between them
+		// op is already operations.Operation
+		result = append(result, NewOperationsPackageAdapter(op))
 	}
 
 	// Convert backup data

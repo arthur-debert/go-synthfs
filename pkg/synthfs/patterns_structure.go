@@ -295,12 +295,11 @@ func (op *CreateStructureOperation) Execute(ctx context.Context, fsys FileSystem
 
 		if entry.IsSymlink {
 			// Create symlink
-			if fullFS, ok := fsys.(FullFileSystem); ok {
-				// Ensure parent directory exists
-				parent := filepath.Dir(fullPath)
-				if parent != "." && parent != "/" {
-					_ = writeFS.MkdirAll(parent, 0755)
-				}
+			// Ensure parent directory exists
+			parent := filepath.Dir(fullPath)
+			if parent != "." && parent != "/" {
+				_ = writeFS.MkdirAll(parent, 0755)
+			}
 
 				// Use PathAwareFileSystem if available for secure symlink resolution
 				var resolvedTarget string
@@ -316,12 +315,9 @@ func (op *CreateStructureOperation) Execute(ctx context.Context, fsys FileSystem
 					resolvedTarget = entry.Target
 				}
 
-				if err := fullFS.Symlink(resolvedTarget, fullPath); err != nil {
+				if err := fsys.Symlink(resolvedTarget, fullPath); err != nil {
 					return fmt.Errorf("failed to create symlink %s -> %s: %w", fullPath, resolvedTarget, err)
 				}
-			} else {
-				return fmt.Errorf("filesystem does not support symlinks")
-			}
 		} else if entry.IsDir {
 			// Create directory
 			if err := writeFS.MkdirAll(fullPath, entry.Mode); err != nil {
@@ -369,20 +365,7 @@ func (op *CreateStructureOperation) Validate(ctx context.Context, fsys FileSyste
 		return fmt.Errorf("filesystem does not support write operations")
 	}
 
-	// Check for symlinks if needed
-	hasSymlinks := false
-	for _, entry := range op.entries {
-		if entry.IsSymlink {
-			hasSymlinks = true
-			break
-		}
-	}
-
-	if hasSymlinks {
-		if _, ok := fsys.(FullFileSystem); !ok {
-			return fmt.Errorf("filesystem does not support symlinks")
-		}
-	}
+	// Filesystem supports all required operations including symlinks
 
 	return nil
 }

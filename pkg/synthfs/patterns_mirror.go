@@ -136,11 +136,7 @@ func (op *MirrorWithSymlinksOperation) ReverseOps(ctx context.Context, fsys File
 
 // Execute performs the mirror operation
 func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSystem) error {
-	// Check if filesystem supports full operations
-	fullFS, ok := fsys.(FullFileSystem)
-	if !ok {
-		return fmt.Errorf("filesystem does not support full operations (symlinks)")
-	}
+	// Use the filesystem directly as FullFileSystem
 
 	// Recursive walk function
 	var walk func(string) error
@@ -184,7 +180,7 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 				if entry.IsDir() {
 					if op.options.IncludeDirectories {
 						// Create real directory
-						err = fullFS.MkdirAll(dstPath, info.Mode())
+						err = fsys.MkdirAll(dstPath, info.Mode())
 						if err != nil && !strings.Contains(err.Error(), "exists") {
 							return err
 						}
@@ -197,7 +193,7 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 						// Create parent directory if needed
 						dstParent := filepath.Dir(dstPath)
 						if dstParent != "." && dstParent != "/" {
-							err = fullFS.MkdirAll(dstParent, 0755)
+							err = fsys.MkdirAll(dstParent, 0755)
 							if err != nil && !strings.Contains(err.Error(), "exists") {
 								return err
 							}
@@ -222,10 +218,10 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 
 						// Remove existing if overwrite is enabled
 						if op.options.Overwrite {
-							_ = fullFS.Remove(dstPath)
+							_ = fsys.Remove(dstPath)
 						}
 
-						err = fullFS.Symlink(resolvedTarget, dstPath)
+						err = fsys.Symlink(resolvedTarget, dstPath)
 						if err != nil && !strings.Contains(err.Error(), "exists") {
 							return fmt.Errorf("failed to create symlink %s -> %s: %w", dstPath, resolvedTarget, err)
 						}
@@ -234,7 +230,7 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 					// Create parent directory if needed
 					dstParent := filepath.Dir(dstPath)
 					if dstParent != "." && dstParent != "/" {
-						err = fullFS.MkdirAll(dstParent, 0755)
+						err = fsys.MkdirAll(dstParent, 0755)
 						if err != nil && !strings.Contains(err.Error(), "exists") {
 							return err
 						}
@@ -259,10 +255,10 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 
 					// Remove existing if overwrite is enabled
 					if op.options.Overwrite {
-						_ = fullFS.Remove(dstPath)
+						_ = fsys.Remove(dstPath)
 					}
 
-					err = fullFS.Symlink(resolvedTarget, dstPath)
+					err = fsys.Symlink(resolvedTarget, dstPath)
 					if err != nil && !strings.Contains(err.Error(), "exists") {
 						return fmt.Errorf("failed to create symlink %s -> %s: %w", dstPath, resolvedTarget, err)
 					}
@@ -274,7 +270,7 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 	}
 
 	// Create destination directory
-	if err := fullFS.MkdirAll(op.dstDir, 0755); err != nil {
+	if err := fsys.MkdirAll(op.dstDir, 0755); err != nil {
 		return err
 	}
 
@@ -284,19 +280,10 @@ func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSys
 
 // Validate checks if the operation can be performed
 func (op *MirrorWithSymlinksOperation) Validate(ctx context.Context, fsys FileSystem) error {
-	// Check if filesystem supports Stat
-	statFS, ok := fsys.(StatFS)
-	if !ok {
-		return fmt.Errorf("filesystem does not support Stat")
-	}
-
-	// Check if filesystem supports symlinks
-	if _, ok := fsys.(FullFileSystem); !ok {
-		return fmt.Errorf("filesystem does not support symlinks")
-	}
+	// Filesystem supports all required operations
 
 	// Check source exists
-	info, err := statFS.Stat(op.srcDir)
+	info, err := fsys.Stat(op.srcDir)
 	if err != nil {
 		return fmt.Errorf("source directory does not exist: %w", err)
 	}
@@ -306,7 +293,7 @@ func (op *MirrorWithSymlinksOperation) Validate(ctx context.Context, fsys FileSy
 	}
 
 	// Check if destination exists
-	if _, err := statFS.Stat(op.dstDir); err == nil && !op.options.Overwrite {
+	if _, err := fsys.Stat(op.dstDir); err == nil && !op.options.Overwrite {
 		return fmt.Errorf("destination already exists: %s", op.dstDir)
 	}
 

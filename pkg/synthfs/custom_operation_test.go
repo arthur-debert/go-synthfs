@@ -120,31 +120,27 @@ func TestCustomOperation_WithFileSystem(t *testing.T) {
 		}
 
 		// Verify file was created
-		if fullFS, ok := fs.(filesystem.FullFileSystem); ok {
-			if _, err := fullFS.Stat(testFile); err != nil {
-				t.Fatalf("Failed to stat created file: %v", err)
+		if _, err := fs.Stat(testFile); err != nil {
+			t.Fatalf("Failed to stat created file: %v", err)
+		}
+		// Read the file to verify content
+		file, err := fs.Open(testFile)
+		if err != nil {
+			t.Fatalf("Failed to open created file: %v", err)
+		}
+		defer func() {
+			if err := file.Close(); err != nil {
+				t.Logf("Failed to close file: %v", err)
 			}
-			// Read the file to verify content
-			file, err := fullFS.Open(testFile)
-			if err != nil {
-				t.Fatalf("Failed to open created file: %v", err)
-			}
-			defer func() {
-				if err := file.Close(); err != nil {
-					t.Logf("Failed to close file: %v", err)
-				}
-			}()
-			
-			var buf [1024]byte
-			n, err := file.Read(buf[:])
-			if err != nil {
-				t.Fatalf("Failed to read file content: %v", err)
-			}
-			if string(buf[:n]) != string(content) {
-				t.Errorf("File content mismatch: expected %q, got %q", string(content), string(buf[:n]))
-			}
-		} else {
-			t.Fatal("Filesystem does not support FullFileSystem interface")
+		}()
+		
+		var buf [1024]byte
+		n, err := file.Read(buf[:])
+		if err != nil {
+			t.Fatalf("Failed to read file content: %v", err)
+		}
+		if string(buf[:n]) != string(content) {
+			t.Errorf("File content mismatch: expected %q, got %q", string(content), string(buf[:n]))
 		}
 	})
 
@@ -164,16 +160,12 @@ func TestCustomOperation_WithFileSystem(t *testing.T) {
 			return fs.WriteFile(testFile, []byte("modified"), 0644)
 		}).WithValidation(func(ctx context.Context, fs filesystem.FileSystem) error {
 			// Validate file exists
-			if statFS, ok := fs.(filesystem.StatFS); ok {
-				info, err := statFS.Stat(testFile)
-				if err != nil {
-					return fmt.Errorf("validation failed: file does not exist")
-				}
-				if info.IsDir() {
-					return fmt.Errorf("validation failed: expected file, got directory")
-				}
-			} else {
-				return fmt.Errorf("filesystem does not support Stat")
+			info, err := fs.Stat(testFile)
+			if err != nil {
+				return fmt.Errorf("validation failed: file does not exist")
+			}
+			if info.IsDir() {
+				return fmt.Errorf("validation failed: expected file, got directory")
 			}
 			return nil
 		})
@@ -202,7 +194,7 @@ func TestCustomOperation_WithFileSystem(t *testing.T) {
 func TestCustomOperation_InPipeline(t *testing.T) {
 	t.Run("custom operation in pipeline", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create a marker file to track execution
@@ -240,7 +232,7 @@ func TestCustomOperation_InPipeline(t *testing.T) {
 
 	t.Run("custom operation with dependencies", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		inputFile := "input.txt"
@@ -316,7 +308,7 @@ func TestCustomOperation_InPipeline(t *testing.T) {
 func TestCustomOperation_ErrorHandling(t *testing.T) {
 	t.Run("rollback on error with custom operation", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		cleanupFile := "cleanup-me.txt"
@@ -378,7 +370,7 @@ func TestCustomOperation_ErrorHandling(t *testing.T) {
 
 	t.Run("validation prevents execution", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 
 		executed := false
 		op := synthfs.NewCustomOperation("validated-op", func(ctx context.Context, fs filesystem.FileSystem) error {
@@ -412,7 +404,7 @@ func TestCustomOperation_ErrorHandling(t *testing.T) {
 func TestCustomOperation_RealWorldExample(t *testing.T) {
 	t.Run("npm build workflow", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create a mock package.json
@@ -430,12 +422,8 @@ func TestCustomOperation_RealWorldExample(t *testing.T) {
 			return fs.WriteFile("dist/output.txt", []byte("Build complete!"), 0644)
 		}).WithValidation(func(ctx context.Context, fs filesystem.FileSystem) error {
 			// Validate package.json exists
-			if fullFS, ok := fs.(filesystem.FullFileSystem); ok {
-				if _, err := fullFS.Stat("package.json"); err != nil {
-					return fmt.Errorf("package.json not found")
-				}
-			} else {
-				return fmt.Errorf("filesystem does not support Stat")
+			if _, err := fs.Stat("package.json"); err != nil {
+				return fmt.Errorf("package.json not found")
 			}
 			return nil
 		})
@@ -484,7 +472,7 @@ func TestCustomOperation_RealWorldExample(t *testing.T) {
 	t.Run("database migration workflow", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 
 		// Track migration state
 		migrationLog := filepath.Join(tempDir, "migrations.log")
@@ -523,10 +511,8 @@ func TestCustomOperation_RealWorldExample(t *testing.T) {
 
 		migration2Op := synthfs.NewCustomOperation("migration-v2", func(ctx context.Context, fs filesystem.FileSystem) error {
 			// v2 requires v1 to be applied - check at execution time
-			if fullFS, ok := fs.(filesystem.FullFileSystem); ok {
-				if _, err := fullFS.Stat("db/v1"); err != nil {
-					return fmt.Errorf("migration v1 must be applied first")
-				}
+			if _, err := fs.Stat("db/v1"); err != nil {
+				return fmt.Errorf("migration v1 must be applied first")
 			}
 			
 			// Simulate another schema change

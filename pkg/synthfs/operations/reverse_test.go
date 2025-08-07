@@ -124,14 +124,8 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 
 		foundRevOps := make(map[string]bool)
 		for _, ro := range reverseOps {
-			// Cast to operations.Operation interface
-			op, ok := ro.(operations.Operation)
-			if !ok {
-				t.Errorf("Reverse operation is not an Operation interface")
-				continue
-			}
-
-			path := op.Describe().Path
+			// ro is already operations.Operation interface
+			path := ro.Describe().Path
 			expectedType, found := expectedRevOps[path]
 			if !found {
 				t.Errorf("Unexpected reverse operation path: %s", path)
@@ -140,8 +134,8 @@ func TestReverseOperations_DeleteDirectory(t *testing.T) {
 
 			foundRevOps[path] = true
 
-			if op.Describe().Type != expectedType {
-				t.Errorf("Reverse op type mismatch for %s. Expected %s, Got %s", path, expectedType, op.Describe().Type)
+			if ro.Describe().Type != expectedType {
+				t.Errorf("Reverse op type mismatch for %s. Expected %s, Got %s", path, expectedType, ro.Describe().Type)
 			}
 		}
 

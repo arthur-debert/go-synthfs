@@ -20,7 +20,7 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 	t.Run("capture stdout", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create a command that produces stdout
@@ -58,7 +58,7 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 	t.Run("capture stderr", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create a command that produces stderr
@@ -92,7 +92,7 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 	t.Run("capture both stdout and stderr", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create a command that produces both stdout and stderr
@@ -124,7 +124,7 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 	t.Run("no capture when option not set", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create a command without capture option
@@ -155,7 +155,7 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 	t.Run("capture multiline output", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create a command with multiline output
@@ -184,7 +184,7 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 func TestCustomOperation_OutputCapture(t *testing.T) {
 	t.Run("custom operation with output", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create custom operation that stores output
@@ -234,7 +234,7 @@ func TestCustomOperation_OutputCapture(t *testing.T) {
 
 	t.Run("custom operation with complex output", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create custom operation that stores complex data
@@ -292,7 +292,7 @@ func TestCustomOperation_OutputCapture(t *testing.T) {
 
 	t.Run("get all outputs", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create custom operation with multiple outputs
@@ -335,7 +335,7 @@ func TestCustomOperation_OutputCapture(t *testing.T) {
 
 	t.Run("custom operation with validation and output", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 
 		// Create the base custom operation with output
 		op := synthfs.NewCustomOperationWithOutput("validated-op",
@@ -375,7 +375,7 @@ func TestOutputCapture_RealWorldExample(t *testing.T) {
 	t.Run("pipeline with mixed output capture", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test data
