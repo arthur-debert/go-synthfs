@@ -43,12 +43,12 @@ func TestEventIntegration(t *testing.T) {
 		}
 
 		// Add some operations
-		_, err := batch.CreateFile("test.txt", []byte("test content"))
+		_, err := batch.CreateFile("test.txt", []byte("test content"), 0644)
 		if err != nil {
 			t.Fatalf("Failed to add CreateFile operation: %v", err)
 		}
 
-		_, err = batch.CreateDir("testdir")
+		_, err = batch.CreateDir("testdir", 0755)
 		if err != nil {
 			t.Fatalf("Failed to add CreateDir operation: %v", err)
 		}
@@ -157,7 +157,7 @@ func TestEventIntegration(t *testing.T) {
 
 		// Create a file with an invalid path that will fail during WriteFile execution
 		// The path "../invalid" should fail fs.ValidPath check
-		_, err := batch.CreateFile("../invalid", []byte("content"))
+		_, err := batch.CreateFile("../invalid", []byte("content"), 0644)
 		if err != nil {
 			t.Fatalf("Failed to add CreateFile operation with invalid path: %v", err)
 		}

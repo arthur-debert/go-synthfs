@@ -30,12 +30,12 @@ func TestPhase3_CompleteWorkflow(t *testing.T) {
 	b := batch.NewBatch(fs, registry).WithContext(ctx)
 
 	// Add various operations to test different reverse operation types
-	_, err := b.CreateDir("new-dir")
+	_, err := b.CreateDir("new-dir", 0755)
 	if err != nil {
 		t.Fatalf("Failed to add CreateDir: %v", err)
 	}
 
-	_, err = b.CreateFile("new-file.txt", []byte("new content"))
+	_, err = b.CreateFile("new-file.txt", []byte("new content"), 0644)
 	if err != nil {
 		t.Fatalf("Failed to add CreateFile: %v", err)
 	}

@@ -20,12 +20,12 @@ func TestBatchExecution(t *testing.T) {
 
 	t.Run("Execute simple operations", func(t *testing.T) {
 		// Add some operations to the batch
-		_, err := batch.CreateDir("test-dir")
+		_, err := batch.CreateDir("test-dir", 0755)
 		if err != nil {
 			t.Fatalf("Failed to add CreateDir operation: %v", err)
 		}
 
-		_, err = batch.CreateFile("test-dir/file.txt", []byte("test content"))
+		_, err = batch.CreateFile("test-dir/file.txt", []byte("test content"), 0644)
 		if err != nil {
 			t.Fatalf("Failed to add CreateFile operation: %v", err)
 		}
@@ -94,7 +94,7 @@ func TestBatchExecution(t *testing.T) {
 		newBatch := synthfs.NewBatch(fs).WithFileSystem(testutil.NewTestFileSystem())
 
 		// This should auto-create multiple parent directories
-		_, err := newBatch.CreateFile("deep/nested/path/file.txt", []byte("nested content"))
+		_, err := newBatch.CreateFile("deep/nested/path/file.txt", []byte("nested content"), 0644)
 		if err != nil {
 			t.Fatalf("Failed to add nested CreateFile operation: %v", err)
 		}

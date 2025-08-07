@@ -420,7 +420,8 @@ func TestBatchUnarchive(t *testing.T) {
 		batch := NewBatch(fs).WithFileSystem(fs)
 
 		// Add unarchive operation with patterns
-		_, err := batch.UnarchiveWithPatterns(archivePath, "pattern_extracted/", "*.txt", "docs/**")
+		patterns := []string{"*.txt", "docs/**"}
+		_, err := batch.UnarchiveWithPatterns(archivePath, "pattern_extracted/", patterns)
 		if err != nil {
 			t.Fatalf("Failed to add unarchive operation with patterns: %v", err)
 		}

@@ -16,7 +16,7 @@ func TestBatchRollback(t *testing.T) {
 	b := batch.NewBatch(fs, registry).WithFileSystem(testFS)
 
 	// Add some operations
-	_, err := b.CreateDir("rollback-test")
+	_, err := b.CreateDir("rollback-test", 0755)
 	if err != nil {
 		t.Fatalf("Failed to add operation: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestBatchOperationCounts(t *testing.T) {
 	expectedCount := 0
 
 	// Add CreateDir
-	_, err := b.CreateDir("dir1")
+	_, err := b.CreateDir("dir1", 0755)
 	if err != nil {
 		t.Fatalf("CreateDir failed: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestBatchOperationCounts(t *testing.T) {
 	}
 
 	// Add CreateFile with nested path (should auto-create parent)
-	_, err = b.CreateFile("auto-dir/file.txt", []byte("content"))
+	_, err = b.CreateFile("auto-dir/file.txt", []byte("content"), 0644)
 	if err != nil {
 		t.Fatalf("CreateFile failed: %v", err)
 	}

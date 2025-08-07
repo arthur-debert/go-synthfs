@@ -121,7 +121,7 @@ func TestBatchChecksumming(t *testing.T) {
 		batch := synthfs.NewBatch(fs).WithFileSystem(testFS)
 
 		// Archive operation should compute checksums for all sources
-		op, err := batch.CreateArchive("backup.tar.gz", synthfs.ArchiveFormatTarGz, "file1.txt", "file2.txt", "file3.txt")
+		op, err := batch.CreateArchive("backup.tar.gz", synthfs.ArchiveFormatTarGz, []string{"file1.txt", "file2.txt", "file3.txt"})
 		if err != nil {
 			t.Fatalf("CreateArchive operation failed: %v", err)
 		}

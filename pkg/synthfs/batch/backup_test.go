@@ -167,7 +167,7 @@ func TestBatch_RunRestorable(t *testing.T) {
 	b := batch.NewBatch(fs, registry).WithFileSystem(fs).WithContext(ctx)
 
 	// Add a simple operation
-	_, err := b.CreateFile("test.txt", []byte("content"))
+	_, err := b.CreateFile("test.txt", []byte("content"), 0644)
 	if err != nil {
 		t.Fatalf("Failed to add operation to batch: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestBatch_RunRestorableWithBudget(t *testing.T) {
 	b := batch.NewBatch(fs, registry).WithFileSystem(fs).WithContext(ctx)
 
 	// Add a simple operation
-	_, err := b.CreateFile("test.txt", []byte("content"))
+	_, err := b.CreateFile("test.txt", []byte("content"), 0644)
 	if err != nil {
 		t.Fatalf("Failed to add operation to batch: %v", err)
 	}
