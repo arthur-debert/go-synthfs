@@ -58,8 +58,7 @@ type Executable interface {
 // Operation is the main interface that composes all operation capabilities
 type Operation interface {
 	core.OperationMetadata // ID(), Describe()
-	Executable             // Execute(), Validate()
-	core.ExecutableV2      // ExecuteV2(), ValidateV2() - new methods
+	core.Executable        // ExecutionContext-aware Execute(), Validate()
 	Prerequisites() []core.Prerequisite
 	Rollback(ctx context.Context, fsys FileSystem) error
 	GetItem() FsItem

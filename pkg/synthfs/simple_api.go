@@ -71,7 +71,7 @@ func RunWithOptions(ctx context.Context, fs filesystem.FileSystem, options Pipel
 	// First, validate all operations with projected state
 	for _, op := range ops {
 		// Validate against projected filesystem state
-		if err := op.Validate(ctx, projectedFS); err != nil {
+		if err := op.Validate(ctx, nil, projectedFS); err != nil {
 			// Return a failed result with the error
 			return &Result{
 				success:    false,

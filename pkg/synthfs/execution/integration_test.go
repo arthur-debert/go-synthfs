@@ -64,12 +64,12 @@ func (ow *operationWrapper) AddDependency(depID core.OperationID) {
 	}
 }
 
-func (ow *operationWrapper) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (ow *operationWrapper) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	// Not needed for this test
 	return nil
 }
 
-func (ow *operationWrapper) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (ow *operationWrapper) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	// Not needed for this test
 	return nil
 }

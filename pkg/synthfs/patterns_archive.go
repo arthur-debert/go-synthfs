@@ -119,13 +119,13 @@ func (s *SynthFS) ExtractArchiveWithPatterns(archivePath, extractPath string, pa
 // Archive provides direct archive creation with execution
 func Archive(ctx context.Context, fs FileSystem, archivePath string, sources ...string) error {
 	op := New().CreateArchive(archivePath, sources...)
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }
 
 // Extract provides direct archive extraction with execution
 func Extract(ctx context.Context, fs FileSystem, archivePath, extractPath string) error {
 	op := New().ExtractArchive(archivePath, extractPath)
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }
 
 // ArchiveBuilder provides a fluent interface for creating archives
@@ -202,7 +202,7 @@ func (ab *ArchiveBuilder) Build() Operation {
 // Execute creates and executes the archive operation
 func (ab *ArchiveBuilder) Execute(ctx context.Context, fs FileSystem) error {
 	op := ab.Build()
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }
 
 // ExtractBuilder provides a fluent interface for extracting archives
@@ -256,5 +256,5 @@ func (eb *ExtractBuilder) Build() Operation {
 // Execute creates and executes the extract operation
 func (eb *ExtractBuilder) Execute(ctx context.Context, fs FileSystem) error {
 	op := eb.Build()
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }

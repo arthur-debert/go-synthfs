@@ -228,11 +228,11 @@ func createShellCommand(id, command string, options ...ShellCommandOption) *Cust
 func (s *SynthFS) ShellCommand(command string, options ...ShellCommandOption) Operation {
 	id := s.idGen("shell_command", command)
 	op := createShellCommand(string(id), command, options...)
-	return NewCustomOperationAdapter(op)
+	return op
 }
 
 // ShellCommandWithID creates a shell command operation with explicit ID
 func (s *SynthFS) ShellCommandWithID(id, command string, options ...ShellCommandOption) Operation {
 	op := createShellCommand(id, command, options...)
-	return NewCustomOperationAdapter(op)
+	return op
 }

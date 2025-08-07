@@ -238,14 +238,14 @@ func (op *CreateStructureOperation) GetAllChecksums() map[string]*ChecksumRecord
 	return nil
 }
 
-// ExecuteV2 is not implemented
-func (op *CreateStructureOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return fmt.Errorf("ExecuteV2 not implemented for CreateStructureOperation")
+// Execute is not implemented
+func (op *CreateStructureOperation) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return fmt.Errorf("Execute not implemented for CreateStructureOperation")
 }
 
-// ValidateV2 is not implemented
-func (op *CreateStructureOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return fmt.Errorf("ValidateV2 not implemented for CreateStructureOperation")
+// Validate is not implemented
+func (op *CreateStructureOperation) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return fmt.Errorf("Validate not implemented for CreateStructureOperation")
 }
 
 // Rollback is not implemented yet
@@ -260,115 +260,7 @@ func (op *CreateStructureOperation) ReverseOps(ctx context.Context, fsys FileSys
 	return nil, nil, fmt.Errorf("reverse ops not implemented for CreateStructureOperation")
 }
 
-// Execute performs the structure creation
-func (op *CreateStructureOperation) Execute(ctx context.Context, fsys FileSystem) error {
-	writeFS, ok := fsys.(WriteFS)
-	if !ok {
-		return fmt.Errorf("filesystem does not support write operations")
-	}
 
-	// Sort entries: directories first, then files, then symlinks
-	// This ensures targets exist before symlinks are created
-	sortedEntries := make([]StructureEntry, len(op.entries))
-	copy(sortedEntries, op.entries)
-
-	// Custom sort
-	for i := 0; i < len(sortedEntries)-1; i++ {
-		for j := i + 1; j < len(sortedEntries); j++ {
-			// Directories come first
-			if sortedEntries[j].IsDir && !sortedEntries[i].IsDir && !sortedEntries[i].IsSymlink {
-				sortedEntries[i], sortedEntries[j] = sortedEntries[j], sortedEntries[i]
-			}
-			// Files come before symlinks
-			if !sortedEntries[j].IsSymlink && sortedEntries[i].IsSymlink {
-				sortedEntries[i], sortedEntries[j] = sortedEntries[j], sortedEntries[i]
-			}
-		}
-	}
-
-	// Create entries
-	for _, entry := range sortedEntries {
-		fullPath := entry.Path
-		if op.baseDir != "" && op.baseDir != "." {
-			fullPath = filepath.Join(op.baseDir, entry.Path)
-		}
-
-		if entry.IsSymlink {
-			// Create symlink
-			// Ensure parent directory exists
-			parent := filepath.Dir(fullPath)
-			if parent != "." && parent != "/" {
-				_ = writeFS.MkdirAll(parent, 0755)
-			}
-
-				// Use PathAwareFileSystem if available for secure symlink resolution
-				var resolvedTarget string
-				if pafs, ok := fsys.(*PathAwareFileSystem); ok {
-					// Use centralized security-aware symlink resolution
-					resolved, err := pafs.ResolveSymlinkTarget(fullPath, entry.Target)
-					if err != nil {
-						return fmt.Errorf("failed to resolve symlink target for %s -> %s: %w", fullPath, entry.Target, err)
-					}
-					resolvedTarget = resolved
-				} else {
-					// Fallback for non-PathAwareFileSystem (should not happen in practice)
-					resolvedTarget = entry.Target
-				}
-
-				if err := fsys.Symlink(resolvedTarget, fullPath); err != nil {
-					return fmt.Errorf("failed to create symlink %s -> %s: %w", fullPath, resolvedTarget, err)
-				}
-		} else if entry.IsDir {
-			// Create directory
-			if err := writeFS.MkdirAll(fullPath, entry.Mode); err != nil {
-				return fmt.Errorf("failed to create directory %s: %w", fullPath, err)
-			}
-		} else {
-			// Create file
-			// Ensure parent directory exists
-			parent := filepath.Dir(fullPath)
-			if parent != "." && parent != "/" {
-				_ = writeFS.MkdirAll(parent, 0755)
-			}
-
-			// Get content if provided
-			content := entry.Content
-			// Try to find content by various path formats
-			if customContent, ok := op.fileContent[entry.Path]; ok {
-				content = customContent
-			} else if customContent, ok := op.fileContent[fullPath]; ok {
-				content = customContent
-			} else {
-				// Try relative path without the root directory
-				relPath := entry.Path
-				if idx := strings.Index(relPath, "/"); idx > 0 {
-					relPath = relPath[idx+1:]
-					if customContent, ok := op.fileContent[relPath]; ok {
-						content = customContent
-					}
-				}
-			}
-
-			if err := writeFS.WriteFile(fullPath, content, entry.Mode); err != nil {
-				return fmt.Errorf("failed to create file %s: %w", fullPath, err)
-			}
-		}
-	}
-
-	return nil
-}
-
-// Validate checks if the operation can be performed
-func (op *CreateStructureOperation) Validate(ctx context.Context, fsys FileSystem) error {
-	// Check if filesystem supports required operations
-	if _, ok := fsys.(WriteFS); !ok {
-		return fmt.Errorf("filesystem does not support write operations")
-	}
-
-	// Filesystem supports all required operations including symlinks
-
-	return nil
-}
 
 // CreateStructure creates a directory structure from a string definition
 func (s *SynthFS) CreateStructure(structure string) (Operation, error) {
@@ -438,5 +330,5 @@ func (sb *StructureBuilder) Execute(ctx context.Context, fs FileSystem) error {
 	if err != nil {
 		return err
 	}
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }

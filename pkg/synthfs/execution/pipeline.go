@@ -268,7 +268,7 @@ func (mp *memPipeline) Validate(ctx context.Context, fs interface{}) error {
 			Str("path", op.Describe().Path).
 			Msg("validating individual operation")
 
-		if err := op.ValidateV2(ctx, &core.ExecutionContext{Logger: mp.logger}, fs); err != nil {
+		if err := op.Validate(ctx, &core.ExecutionContext{Logger: mp.logger}, fs); err != nil {
 			mp.logger.Debug().
 				Str("op_id", string(op.ID())).
 				Str("op_type", op.Describe().Type).

@@ -32,7 +32,7 @@ func TestUnarchiveValidation(t *testing.T) {
 			t.Fatalf("Failed to set item: %v", err)
 		}
 
-		err = op.(Operation).Validate(ctx, fs)
+		err = op.(Operation).Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected validation error for empty archive path")
 		}
@@ -54,7 +54,7 @@ func TestUnarchiveValidation(t *testing.T) {
 			t.Fatalf("Failed to set item: %v", err)
 		}
 
-		err = op.(Operation).Validate(ctx, fs)
+		err = op.(Operation).Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected validation error for empty extract path")
 		}
@@ -75,7 +75,7 @@ func TestUnarchiveValidation(t *testing.T) {
 			t.Fatalf("Failed to set item: %v", err)
 		}
 
-		err = op.(Operation).Validate(ctx, fs)
+		err = op.(Operation).Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected validation error for unsupported format")
 		}
@@ -110,7 +110,7 @@ func TestUnarchiveValidation(t *testing.T) {
 				t.Fatalf("Failed to set item: %v", err)
 			}
 
-			err = op.(Operation).Validate(ctx, testFS)
+			err = op.(Operation).Validate(ctx, nil, testFS)
 			if err != nil {
 				t.Errorf("Expected no validation error for %s, got: %v", format, err)
 			}
@@ -128,7 +128,7 @@ func TestUnarchiveValidation(t *testing.T) {
 			t.Fatalf("Failed to set item: %v", err)
 		}
 
-		err = op.(Operation).Validate(ctx, fs)
+		err = op.(Operation).Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected validation error for wrong item type")
 		}
@@ -177,7 +177,7 @@ func TestUnarchiveIntegration(t *testing.T) {
 		}
 
 		// Execute unarchive
-		err = op.(Operation).Execute(ctx, fs)
+		err = op.(Operation).Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Unarchive failed: %v", err)
 		}
@@ -252,7 +252,7 @@ func TestUnarchiveIntegration(t *testing.T) {
 		}
 
 		// Execute unarchive
-		err = op.(Operation).Execute(ctx, fs)
+		err = op.(Operation).Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Unarchive failed: %v", err)
 		}
@@ -318,7 +318,7 @@ func TestUnarchiveIntegration(t *testing.T) {
 		}
 
 		// Execute unarchive
-		err = op.(Operation).Execute(ctx, fs)
+		err = op.(Operation).Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Unarchive with patterns failed: %v", err)
 		}

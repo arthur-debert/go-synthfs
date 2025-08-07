@@ -383,7 +383,7 @@ func TestSyncPatterns(t *testing.T) {
 
 		// Non-existent source
 		op := sfs.Sync("nonexistent", "dst")
-		err := op.Validate(ctx, filesys)
+		err := op.Validate(ctx, nil, filesys)
 		if err == nil {
 			t.Error("Should fail validation with non-existent source")
 		}
@@ -393,7 +393,7 @@ func TestSyncPatterns(t *testing.T) {
 			t.Fatal(err)
 		}
 		op = sfs.Sync("notdir", "dst")
-		err = op.Validate(ctx, filesys)
+		err = op.Validate(ctx, nil, filesys)
 		if err == nil {
 			t.Error("Should fail validation when source is not a directory")
 		}

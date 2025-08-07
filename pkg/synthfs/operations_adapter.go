@@ -39,42 +39,32 @@ func (a *OperationsPackageAdapter) Prerequisites() []core.Prerequisite {
 	return a.opsOperation.Prerequisites()
 }
 
-// Execute performs the operation.
-func (a *OperationsPackageAdapter) Execute(ctx context.Context, fsys FileSystem) error {
-	// Convert FileSystem to filesystem.FileSystem and call with nil ExecutionContext
-	return a.opsOperation.Execute(ctx, nil, fsys)
-}
-
-// Validate checks if the operation can be performed.
-func (a *OperationsPackageAdapter) Validate(ctx context.Context, fsys FileSystem) error {
-	// Convert FileSystem to filesystem.FileSystem and call with nil ExecutionContext
-	return a.opsOperation.Validate(ctx, nil, fsys)
-}
-
-// ExecuteV2 performs the operation using ExecutionContext.
-func (a *OperationsPackageAdapter) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Convert interfaces and delegate to unified Execute method
+// Execute performs the operation with interface{} signature for core.Executable compatibility
+func (a *OperationsPackageAdapter) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Convert interfaces and delegate to operations package
 	contextObj, ok := ctx.(context.Context)
 	if !ok {
-		return fmt.Errorf("invalid context type")
+		return fmt.Errorf("expected context.Context, got %T", ctx)
 	}
-	if fs, ok := fsys.(filesystem.FileSystem); ok {
-		return a.opsOperation.Execute(contextObj, execCtx, fs)
+	fsysObj, ok := fsys.(filesystem.FileSystem)
+	if !ok {
+		return fmt.Errorf("expected filesystem.FileSystem, got %T", fsys)
 	}
-	return a.opsOperation.Execute(contextObj, execCtx, fsys.(filesystem.FileSystem))
+	return a.opsOperation.Execute(contextObj, execCtx, fsysObj)
 }
 
-// ValidateV2 checks if the operation can be performed using ExecutionContext.
-func (a *OperationsPackageAdapter) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Convert interfaces and delegate to unified Validate method
+// Validate checks if the operation can be performed with interface{} signature for core.Executable compatibility
+func (a *OperationsPackageAdapter) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Convert interfaces and delegate to operations package
 	contextObj, ok := ctx.(context.Context)
 	if !ok {
-		return fmt.Errorf("invalid context type")
+		return fmt.Errorf("expected context.Context, got %T", ctx)
 	}
-	if fs, ok := fsys.(filesystem.FileSystem); ok {
-		return a.opsOperation.Validate(contextObj, execCtx, fs)
+	fsysObj, ok := fsys.(filesystem.FileSystem)
+	if !ok {
+		return fmt.Errorf("expected filesystem.FileSystem, got %T", fsys)
 	}
-	return a.opsOperation.Validate(contextObj, execCtx, fsys.(filesystem.FileSystem))
+	return a.opsOperation.Validate(contextObj, execCtx, fsysObj)
 }
 
 // Rollback undoes the operation.

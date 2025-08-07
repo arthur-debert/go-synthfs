@@ -229,7 +229,7 @@ func (ow *operationWrapper) Prerequisites() []core.Prerequisite {
 	return []core.Prerequisite{}
 }
 
-func (ow *operationWrapper) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (ow *operationWrapper) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	// Delegate to the original operation's ExecuteV2 if available, otherwise Execute
 	if execV2Op, ok := ow.op.(interface {
 		ExecuteV2(interface{}, *core.ExecutionContext, interface{}) error
@@ -240,13 +240,13 @@ func (ow *operationWrapper) ExecuteV2(ctx interface{}, execCtx *core.ExecutionCo
 	// Fallback to original Execute method
 	if contextOp, ok := ctx.(context.Context); ok {
 		if fsysOp, ok := fsys.(FileSystem); ok {
-			return ow.op.Execute(contextOp, fsysOp)
+			return ow.op.Execute(contextOp, nil, fsysOp)
 		}
 	}
 	return nil
 }
 
-func (ow *operationWrapper) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (ow *operationWrapper) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	// Delegate to the original operation's ValidateV2 if available, otherwise Validate
 	if validateV2Op, ok := ow.op.(interface {
 		ValidateV2(interface{}, *core.ExecutionContext, interface{}) error
@@ -257,7 +257,7 @@ func (ow *operationWrapper) ValidateV2(ctx interface{}, execCtx *core.ExecutionC
 	// Fallback to original Validate method
 	if contextOp, ok := ctx.(context.Context); ok {
 		if fsysOp, ok := fsys.(FileSystem); ok {
-			return ow.op.Validate(contextOp, fsysOp)
+			return ow.op.Validate(contextOp, nil, fsysOp)
 		}
 	}
 	return nil

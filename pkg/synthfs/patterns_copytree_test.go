@@ -111,7 +111,7 @@ func TestCopyTreePatterns(t *testing.T) {
 
 		// Test with non-existent source
 		op := sfs.NewCopyTreeOperation("nonexistent", "dest")
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Should fail validation with non-existent source")
 		}
@@ -120,7 +120,7 @@ func TestCopyTreePatterns(t *testing.T) {
 		_ = fs.WriteFile("file.txt", []byte("content"), 0644)
 
 		op = sfs.NewCopyTreeOperation("file.txt", "dest")
-		err = op.Validate(ctx, fs)
+		err = op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Should fail validation when source is not a directory")
 		}
@@ -131,14 +131,14 @@ func TestCopyTreePatterns(t *testing.T) {
 
 		// Test without overwrite
 		op = sfs.NewCopyTreeOperation("source", "existing")
-		err = op.Validate(ctx, fs)
+		err = op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Should fail validation when destination exists without overwrite")
 		}
 
 		// Test with overwrite
 		op = sfs.NewCopyTreeOperation("source", "existing", CopyTreeOptions{Overwrite: true})
-		err = op.Validate(ctx, fs)
+		err = op.Validate(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Should pass validation with overwrite: %v", err)
 		}

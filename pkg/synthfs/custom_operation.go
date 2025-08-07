@@ -84,15 +84,15 @@ func (op *CustomOperation) StoreOutput(key string, value interface{}) {
 	op.SetDescriptionDetail(key, value)
 }
 
-// Execute runs the custom operation's execute function with event handling.
-func (op *CustomOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
+// executeInternal runs the custom operation's execute function with event handling.
+func (op *CustomOperation) executeInternal(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	if op.executeFunc == nil {
 		return fmt.Errorf("custom operation %s: no execute function defined", op.ID())
 	}
 
 	// Execute with event handling if ExecutionContext is provided
 	if execCtx != nil {
-		return operations.ExecuteWithEvents(op, ctx, execCtx, fsys, func(ctx context.Context, fsys filesystem.FileSystem) error {
+		return operations.ExecuteWithEvents(op.BaseOperation, ctx, execCtx, fsys, func(ctx context.Context, fsys filesystem.FileSystem) error {
 			return op.executeFunc(ctx, fsys)
 		})
 	}
@@ -101,15 +101,41 @@ func (op *CustomOperation) Execute(ctx context.Context, execCtx *core.ExecutionC
 	return op.executeFunc(ctx, fsys)
 }
 
-// Validate runs the custom operation's validation function if defined.
+// Execute with interface{} signature for both interfaces  
+func (op *CustomOperation) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	contextObj, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("expected context.Context, got %T", ctx)
+	}
+	fsysObj, ok := fsys.(filesystem.FileSystem)
+	if !ok {
+		return fmt.Errorf("expected filesystem.FileSystem, got %T", fsys)
+	}
+	return op.executeInternal(contextObj, execCtx, fsysObj)
+}
+
+// validateInternal runs the custom operation's validation function if defined.
 // If no validation function is set, it returns nil (assumes valid).
-func (op *CustomOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
+func (op *CustomOperation) validateInternal(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	if op.validateFunc == nil {
 		// No validation function means operation is always valid
 		return nil
 	}
 
 	return op.validateFunc(ctx, fsys)
+}
+
+// Validate with interface{} signature for synthfs.Operation compatibility
+func (op *CustomOperation) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	contextObj, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("expected context.Context, got %T", ctx)
+	}
+	fsysObj, ok := fsys.(filesystem.FileSystem)
+	if !ok {
+		return fmt.Errorf("expected filesystem.FileSystem, got %T", fsys)
+	}
+	return op.validateInternal(contextObj, execCtx, fsysObj)
 }
 
 // Rollback runs the custom operation's rollback function if defined.
@@ -124,12 +150,29 @@ func (op *CustomOperation) Rollback(ctx context.Context, fsys filesystem.FileSys
 }
 
 
-// ReverseOps returns the operations needed to reverse this custom operation.
-// For custom operations, this creates a single operation that runs the rollback function.
-func (op *CustomOperation) ReverseOps(ctx context.Context, fsys filesystem.FileSystem, budget interface{}) ([]operations.Operation, interface{}, error) {
+
+// Additional methods to implement synthfs.Operation interface directly
+
+// GetItem returns nil for custom operations (they don't have filesystem items)
+func (op *CustomOperation) GetItem() FsItem {
+	return nil
+}
+
+// GetChecksum returns nil for custom operations (they don't manage checksums)  
+func (op *CustomOperation) GetChecksum(path string) *ChecksumRecord {
+	return nil
+}
+
+// GetAllChecksums returns nil for custom operations (they don't manage checksums)
+func (op *CustomOperation) GetAllChecksums() map[string]*ChecksumRecord {
+	return nil
+}
+
+// ReverseOps returns the operations needed to reverse this custom operation
+func (op *CustomOperation) ReverseOps(ctx context.Context, fsys FileSystem, budget *BackupBudget) ([]Operation, *BackupData, error) {
 	if op.rollbackFunc == nil {
 		// No rollback means no reverse operations
-		return []operations.Operation{}, nil, nil
+		return []Operation{}, nil, nil
 	}
 
 	// Create a reverse custom operation that runs the rollback function
@@ -138,8 +181,26 @@ func (op *CustomOperation) ReverseOps(ctx context.Context, fsys filesystem.FileS
 		op.rollbackFunc,
 	).WithDescription(fmt.Sprintf("Reverse of %s", op.ID()))
 
-	return []operations.Operation{reverseOp}, nil, nil
+	return []Operation{reverseOp}, nil, nil
 }
 
-// Ensure CustomOperation implements the Operation interface
-var _ operations.Operation = (*CustomOperation)(nil)
+// Core interface methods with proper signatures
+
+// AddDependency for both interfaces - uses OperationID which is an alias for core.OperationID
+func (op *CustomOperation) AddDependency(depID OperationID) {
+	op.BaseOperation.AddDependency(core.OperationID(depID))
+}
+
+// ID returns the operation ID - uses OperationID which is an alias for core.OperationID
+func (op *CustomOperation) ID() OperationID {
+	return OperationID(op.BaseOperation.ID())
+}
+
+// Describe returns the operation description - uses OperationDesc which is an alias for core.OperationDesc
+func (op *CustomOperation) Describe() OperationDesc {
+	desc := op.BaseOperation.Describe()
+	return OperationDesc(desc)
+}
+
+// Ensure CustomOperation implements synthfs.Operation interface
+var _ Operation = (*CustomOperation)(nil)

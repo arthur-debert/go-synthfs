@@ -136,7 +136,7 @@ func TestMirrorPatterns(t *testing.T) {
 
 		// Test with non-existent source
 		op := sfs.NewMirrorWithSymlinksOperation("nonexistent", "dest")
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Should fail validation with non-existent source")
 		}
@@ -145,7 +145,7 @@ func TestMirrorPatterns(t *testing.T) {
 		_ = fs.WriteFile("file.txt", []byte("content"), 0644)
 
 		op = sfs.NewMirrorWithSymlinksOperation("file.txt", "dest")
-		err = op.Validate(ctx, fs)
+		err = op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Should fail validation when source is not a directory")
 		}
@@ -156,14 +156,14 @@ func TestMirrorPatterns(t *testing.T) {
 
 		// Test without overwrite
 		op = sfs.NewMirrorWithSymlinksOperation("source", "existing")
-		err = op.Validate(ctx, fs)
+		err = op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Should fail validation when destination exists without overwrite")
 		}
 
 		// Test with overwrite
 		op = sfs.NewMirrorWithSymlinksOperation("source", "existing", MirrorOptions{Overwrite: true})
-		err = op.Validate(ctx, fs)
+		err = op.Validate(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Should pass validation with overwrite: %v", err)
 		}

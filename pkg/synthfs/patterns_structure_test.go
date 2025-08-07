@@ -78,7 +78,7 @@ app/
 			t.Fatalf("Failed to create structure operation: %v", err)
 		}
 
-		err = op.Execute(ctx, filesys)
+		err = op.Execute(ctx, nil, filesys)
 		if err != nil {
 			t.Fatalf("Failed to execute structure creation: %v", err)
 		}
@@ -129,7 +129,7 @@ myapp/
 			t.Fatalf("Failed to create structure: %v", err)
 		}
 
-		err = op.Execute(ctx, filesys)
+		err = op.Execute(ctx, nil, filesys)
 		if err != nil {
 			t.Fatalf("Failed to execute: %v", err)
 		}
@@ -232,7 +232,7 @@ project/
 			structOp.WithFileContent("build/app", []byte("#!/bin/sh\necho 'App'"))
 		}
 
-		err = op.Execute(ctx, filesys)
+		err = op.Execute(ctx, nil, filesys)
 		if err != nil {
 			// Real filesystem (OSFileSystem) rejects relative path symlinks for security
 			// This exposes a design limitation in structure creation that TestFileSystem didn't catch
@@ -303,7 +303,7 @@ webapp/
 			t.Fatalf("Failed to create structure: %v", err)
 		}
 
-		err = op.Execute(ctx, filesys)
+		err = op.Execute(ctx, nil, filesys)
 		if err != nil {
 			t.Fatalf("Failed to execute: %v", err)
 		}

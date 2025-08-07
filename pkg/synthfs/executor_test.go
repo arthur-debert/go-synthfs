@@ -462,19 +462,11 @@ func (m *MockMainOperation) Describe() synthfs.OperationDesc {
 }
 func (m *MockMainOperation) AddDependency(depID synthfs.OperationID) { /* no-op for mock */ }
 
-func (m *MockMainOperation) Execute(ctx context.Context, fs synthfs.FileSystem) error {
+func (m *MockMainOperation) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	return m.executeError
 }
 
-func (m *MockMainOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return m.executeError
-}
-
-func (m *MockMainOperation) Validate(ctx context.Context, fs synthfs.FileSystem) error {
-	return m.validateError
-}
-
-func (m *MockMainOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (m *MockMainOperation) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	return m.validateError
 }
 

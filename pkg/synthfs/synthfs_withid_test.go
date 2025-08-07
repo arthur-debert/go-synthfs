@@ -96,7 +96,7 @@ func TestSynthFS_WithIDMethods(t *testing.T) {
 				}
 			}
 			
-			err := op.Validate(context.Background(), testFS)
+			err := op.Validate(context.Background(), nil, testFS)
 			// Some operations may fail validation due to missing dependencies, but they shouldn't panic
 			if err != nil {
 				// This is acceptable - we're testing ID assignment, not full validation
@@ -168,7 +168,7 @@ func TestSynthFS_WithIDValidation(t *testing.T) {
 			}
 
 			// Test validation
-			err := op.Validate(context.Background(), testFS)
+			err := op.Validate(context.Background(), nil, testFS)
 			
 			if tt.expectError {
 				if err == nil {
@@ -282,7 +282,7 @@ func TestSynthFS_WithIDErrorReporting(t *testing.T) {
 	// Create operation that will fail validation (copy from non-existent source)
 	op := sfs.CopyWithID("my-failing-copy-op", "nonexistent.txt", "dest.txt")
 	
-	err := op.Validate(context.Background(), testFS)
+	err := op.Validate(context.Background(), nil, testFS)
 	if err == nil {
 		t.Error("expected validation error for copy from non-existent file")
 		return

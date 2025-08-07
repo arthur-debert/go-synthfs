@@ -161,6 +161,53 @@ func (op *BaseOperation) ReverseOps(ctx context.Context, fsys filesystem.FileSys
 }
 
 // Additional methods to satisfy the main package Operation interface
-// Note: GetItem, GetChecksum, and GetAllChecksums are already defined above
+// These shadow the existing methods with proper return types
+
+// GetItemSynthFS returns the item as FsItem interface (overrides GetItem for synthfs compatibility)
+func (op *BaseOperation) GetItemSynthFS() interface{} {
+	// Return as interface{} for now - the actual FsItem will be set correctly by the operation
+	return op.item
+}
+
+// GetChecksumSynthFS returns checksum as *ChecksumRecord (overrides GetChecksum for synthfs compatibility)  
+func (op *BaseOperation) GetChecksumSynthFS(path string) interface{} {
+	// Return the checksum as interface{} - type assertion will be done by caller
+	return op.GetChecksum(path)
+}
+
+// GetAllChecksumsSynthFS returns all checksums with proper types (overrides GetAllChecksums for synthfs compatibility)
+func (op *BaseOperation) GetAllChecksumsSynthFS() map[string]interface{} {
+	// Return as map[string]interface{} which matches the checksum storage
+	return op.checksums
+}
+
+// ReverseOpsSynthFS returns reverse operations with proper types (overrides ReverseOps for synthfs compatibility)
+func (op *BaseOperation) ReverseOpsSynthFS(ctx context.Context, fsys interface{}, budget interface{}) ([]interface{}, interface{}, error) {
+	// Convert the filesystem interface to the expected type
+	if fs, ok := fsys.(filesystem.FileSystem); ok {
+		operations, backupData, err := op.ReverseOps(ctx, fs, budget)
+		if err != nil {
+			return nil, nil, err
+		}
+		
+		// Convert []Operation to []interface{}
+		result := make([]interface{}, len(operations))
+		for i, operation := range operations {
+			result[i] = operation
+		}
+		
+		return result, backupData, nil
+	}
+	return nil, nil, fmt.Errorf("invalid filesystem type")
+}
+
+// RollbackSynthFS adapts Rollback to accept interface{} filesystem (overrides Rollback for synthfs compatibility)
+func (op *BaseOperation) RollbackSynthFS(ctx context.Context, fsys interface{}) error {
+	// Convert interface{} filesystem to concrete type
+	if fs, ok := fsys.(filesystem.FileSystem); ok {
+		return op.Rollback(ctx, fs)
+	}
+	return fmt.Errorf("invalid filesystem type for rollback")
+}
 
 

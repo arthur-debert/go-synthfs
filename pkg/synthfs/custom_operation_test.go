@@ -24,8 +24,7 @@ func TestCustomOperation_Basic(t *testing.T) {
 			return nil
 		})
 
-		adapter := synthfs.NewCustomOperationAdapter(op)
-		err := adapter.Execute(context.Background(), fs)
+		err := op.Execute(context.Background(), nil, fs)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -44,8 +43,7 @@ func TestCustomOperation_Basic(t *testing.T) {
 			return expectedErr
 		})
 
-		adapter := synthfs.NewCustomOperationAdapter(op)
-		err := adapter.Execute(context.Background(), fs)
+		err := op.Execute(context.Background(), nil, fs)
 		if err == nil {
 			t.Fatal("Expected error but got nil")
 		}
@@ -66,8 +64,7 @@ func TestCustomOperation_Basic(t *testing.T) {
 			return nil
 		})
 
-		adapter := synthfs.NewCustomOperationAdapter(op)
-		err := adapter.Validate(context.Background(), fs)
+		err := op.Validate(context.Background(), nil, fs)
 		if err != nil {
 			t.Fatalf("Validate failed: %v", err)
 		}
@@ -89,8 +86,7 @@ func TestCustomOperation_Basic(t *testing.T) {
 			return nil
 		})
 
-		adapter := synthfs.NewCustomOperationAdapter(op)
-		err := adapter.Rollback(context.Background(), fs)
+		err := op.Rollback(context.Background(), fs)
 		if err != nil {
 			t.Fatalf("Rollback failed: %v", err)
 		}
@@ -113,8 +109,7 @@ func TestCustomOperation_WithFileSystem(t *testing.T) {
 			return fs.WriteFile(testFile, content, 0644)
 		})
 
-		adapter := synthfs.NewCustomOperationAdapter(op)
-		err := adapter.Execute(context.Background(), fs)
+		err := op.Execute(context.Background(), nil, fs)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -170,10 +165,8 @@ func TestCustomOperation_WithFileSystem(t *testing.T) {
 			return nil
 		})
 
-		adapter := synthfs.NewCustomOperationAdapter(op)
-		
 		// Validation should pass
-		err = adapter.Validate(context.Background(), fs)
+		err = op.Validate(context.Background(), nil, fs)
 		if err != nil {
 			t.Fatalf("Validation failed unexpectedly: %v", err)
 		}
@@ -184,7 +177,7 @@ func TestCustomOperation_WithFileSystem(t *testing.T) {
 			t.Fatalf("Failed to remove test file: %v", err)
 		}
 
-		err = adapter.Validate(context.Background(), fs)
+		err = op.Validate(context.Background(), nil, fs)
 		if err == nil {
 			t.Error("Expected validation to fail for missing file")
 		}
@@ -322,8 +315,8 @@ func TestCustomOperation_ErrorHandling(t *testing.T) {
 			return fs.Remove(cleanupFile)
 		})
 
-		// Create adapter for the custom operation
-		customOp := synthfs.NewCustomOperationAdapter(op)
+		// Use the custom operation directly
+		customOp := op
 
 		// Operation that will fail
 		failOp := sfs.CustomOperation("fail-op", func(ctx context.Context, fs filesystem.FileSystem) error {
@@ -380,7 +373,7 @@ func TestCustomOperation_ErrorHandling(t *testing.T) {
 			return errors.New("validation failed")
 		})
 
-		customOp := synthfs.NewCustomOperationAdapter(op)
+		customOp := op
 
 		// Build and validate pipeline
 		builder := synthfs.NewPipelineBuilder()
@@ -439,7 +432,7 @@ func TestCustomOperation_RealWorldExample(t *testing.T) {
 		}
 
 		// Now, run the build operation.
-		result, err := synthfs.Run(context.Background(), fs, synthfs.NewCustomOperationAdapter(npmBuildOp))
+		result, err := synthfs.Run(context.Background(), fs, npmBuildOp)
 		if err != nil {
 			t.Fatalf("Workflow failed during build: %v", err)
 		}
@@ -507,7 +500,7 @@ func TestCustomOperation_RealWorldExample(t *testing.T) {
 			}
 			return logMigration("rollback-v1")
 		})
-		migration1 := synthfs.NewCustomOperationAdapter(migration1Op)
+		migration1 := migration1Op
 
 		migration2Op := synthfs.NewCustomOperation("migration-v2", func(ctx context.Context, fs filesystem.FileSystem) error {
 			// v2 requires v1 to be applied - check at execution time
@@ -527,7 +520,7 @@ func TestCustomOperation_RealWorldExample(t *testing.T) {
 			}
 			return logMigration("rollback-v2")
 		})
-		migration2 := synthfs.NewCustomOperationAdapter(migration2Op)
+		migration2 := migration2Op
 
 		// Build pipeline with dependencies
 		builder := synthfs.NewPipelineBuilder()

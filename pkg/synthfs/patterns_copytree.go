@@ -175,14 +175,14 @@ func (op *CopyTreeOperation) GetAllChecksums() map[string]*ChecksumRecord {
 	return nil
 }
 
-// ExecuteV2 is not implemented
-func (op *CopyTreeOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return fmt.Errorf("ExecuteV2 not implemented for CopyTreeOperation")
+// Execute is not implemented
+func (op *CopyTreeOperation) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return fmt.Errorf("Execute not implemented for CopyTreeOperation")
 }
 
-// ValidateV2 is not implemented
-func (op *CopyTreeOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return fmt.Errorf("ValidateV2 not implemented for CopyTreeOperation")
+// Validate is not implemented
+func (op *CopyTreeOperation) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return fmt.Errorf("Validate not implemented for CopyTreeOperation")
 }
 
 // Rollback is not implemented yet
@@ -197,120 +197,7 @@ func (op *CopyTreeOperation) ReverseOps(ctx context.Context, fsys FileSystem, bu
 	return nil, nil, fmt.Errorf("reverse ops not implemented for CopyTreeOperation")
 }
 
-// Execute performs the copy tree operation
-func (op *CopyTreeOperation) Execute(ctx context.Context, fsys FileSystem) error {
-	// Use the filesystem directly (unified FileSystem interface)
 
-	// We need a way to walk the filesystem
-	// For now, we'll use a simple recursive approach
-	var walk func(string) error
-	walk = func(dir string) error {
-		// Open directory
-		f, err := fsys.Open(dir)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = f.Close() }()
-
-		// Read directory entries
-		if dirReader, ok := f.(interface {
-			ReadDir(int) ([]fs.DirEntry, error)
-		}); ok {
-			entries, err := dirReader.ReadDir(-1)
-			if err != nil {
-				return err
-			}
-
-			for _, entry := range entries {
-				srcPath := filepath.Join(dir, entry.Name())
-				info, err := entry.Info()
-				if err != nil {
-					continue
-				}
-
-				// Apply filter
-				if !op.options.Filter(srcPath, info) {
-					continue
-				}
-
-				relPath, err := filepath.Rel(op.srcDir, srcPath)
-				if err != nil {
-					continue
-				}
-
-				dstPath := filepath.Join(op.dstDir, relPath)
-
-				if entry.IsDir() {
-					// Create directory
-					err = fsys.MkdirAll(dstPath, info.Mode())
-					if err != nil && !strings.Contains(err.Error(), "exists") {
-						return err
-					}
-
-					// Recurse
-					if err := walk(srcPath); err != nil {
-						return err
-					}
-				} else if info.Mode()&fs.ModeSymlink != 0 && !op.options.FollowSymlinks {
-					// Read symlink
-					target, err := fsys.Readlink(srcPath)
-					if err != nil {
-						continue
-					}
-
-					// Create symlink
-					_ = fsys.Symlink(target, dstPath)
-				} else {
-					// Copy file
-					content, err := fs.ReadFile(fsys, srcPath)
-					if err != nil {
-						continue
-					}
-
-					mode := fs.FileMode(0644)
-					if op.options.PreservePermissions {
-						mode = info.Mode()
-					}
-
-					err = fsys.WriteFile(dstPath, content, mode)
-					if err != nil && !op.options.Overwrite {
-						return err
-					}
-				}
-			}
-		}
-
-		return nil
-	}
-
-	// Create destination directory
-	if err := fsys.MkdirAll(op.dstDir, 0755); err != nil {
-		return err
-	}
-
-	// Start walking from source
-	return walk(op.srcDir)
-}
-
-// Validate checks if the operation can be performed
-func (op *CopyTreeOperation) Validate(ctx context.Context, fsys FileSystem) error {
-	// Check source exists
-	info, err := fsys.Stat(op.srcDir)
-	if err != nil {
-		return fmt.Errorf("source directory does not exist: %w", err)
-	}
-
-	if !info.IsDir() {
-		return fmt.Errorf("source is not a directory: %s", op.srcDir)
-	}
-
-	// Check if destination exists
-	if _, err := fsys.Stat(op.dstDir); err == nil && !op.options.Overwrite {
-		return fmt.Errorf("destination already exists: %s", op.dstDir)
-	}
-
-	return nil
-}
 
 // CopyTreeBuilder provides a fluent interface for configuring tree copies
 type CopyTreeBuilder struct {
@@ -394,11 +281,11 @@ func (b *CopyTreeBuilder) Build() Operation {
 // Execute builds and executes the operation
 func (b *CopyTreeBuilder) Execute(ctx context.Context, fs FileSystem) error {
 	op := b.Build()
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }
 
 // CopyTreeFunc is a convenience function for copying directory trees
 func CopyTreeFunc(ctx context.Context, fs FileSystem, srcDir, dstDir string) error {
 	op := New().NewCopyTreeOperation(srcDir, dstDir)
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }

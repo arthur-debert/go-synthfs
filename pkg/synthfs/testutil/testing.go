@@ -48,13 +48,13 @@ func RunOperationTest(t *testing.T, name string, test func(t *testing.T, fs synt
 // ValidateOperation validates an operation and returns any error
 func ValidateOperation(t *testing.T, op synthfs.Operation, fs synthfs.FileSystem) error {
 	ctx := context.Background()
-	return op.Validate(ctx, fs)
+	return op.Validate(ctx, nil, fs)
 }
 
 // ExecuteOperation executes an operation and returns any error
 func ExecuteOperation(t *testing.T, op synthfs.Operation, fs synthfs.FileSystem) error {
 	ctx := context.Background()
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }
 
 // RunPipelineTest runs a test for a pipeline of operations
@@ -70,11 +70,11 @@ func RunPipelineTest(t *testing.T, name string, test func(t *testing.T, p synthf
 // AssertOperation is a helper to assert that an operation succeeds
 func AssertOperation(t *testing.T, op synthfs.Operation, fs synthfs.FileSystem, msg string) {
 	ctx := context.Background()
-	if err := op.Validate(ctx, fs); err != nil {
+	if err := op.Validate(ctx, nil, fs); err != nil {
 		t.Errorf("%s: validation failed: %v", msg, err)
 		return
 	}
-	if err := op.Execute(ctx, fs); err != nil {
+	if err := op.Execute(ctx, nil, fs); err != nil {
 		t.Errorf("%s: execution failed: %v", msg, err)
 	}
 }
@@ -84,11 +84,11 @@ func AssertOperationFails(t *testing.T, op synthfs.Operation, fs synthfs.FileSys
 	ctx := context.Background()
 	switch stage {
 	case "validate":
-		if err := op.Validate(ctx, fs); err == nil {
+		if err := op.Validate(ctx, nil, fs); err == nil {
 			t.Errorf("%s: expected validation to fail", msg)
 		}
 	case "execute":
-		if err := op.Execute(ctx, fs); err == nil {
+		if err := op.Execute(ctx, nil, fs); err == nil {
 			t.Errorf("%s: expected execution to fail", msg)
 		}
 	default:

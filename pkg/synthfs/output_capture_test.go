@@ -350,17 +350,14 @@ func TestCustomOperation_OutputCapture(t *testing.T) {
 			return nil
 		})
 
-		// Create adapter
-		adapter := synthfs.NewCustomOperationAdapter(op)
-
 		// Execute directly
-		err := adapter.Execute(context.Background(), fs)
+		err := op.Execute(context.Background(), nil, fs)
 		if err != nil {
 			t.Fatalf("Operation failed: %v", err)
 		}
 
 		// Check output was stored
-		status := synthfs.GetOperationOutput(adapter, "status")
+		status := synthfs.GetOperationOutput(op, "status")
 		if status != "executed" {
 			t.Errorf("Expected status 'executed', got %q", status)
 		}

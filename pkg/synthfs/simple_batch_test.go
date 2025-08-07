@@ -330,7 +330,7 @@ func TestSimpleBatchWithRollback(t *testing.T) {
 			// Try to delete but simulate failure
 			return errors.New("rollback failed: file locked")
 		})
-		op1Adapter := NewCustomOperationAdapter(op1)
+		op1Adapter := op1
 
 		op2 := sfs.CreateFileWithID("op2", "file2.txt", []byte("content2"), 0644)
 

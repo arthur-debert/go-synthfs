@@ -114,14 +114,14 @@ func (op *MirrorWithSymlinksOperation) GetAllChecksums() map[string]*ChecksumRec
 	return nil
 }
 
-// ExecuteV2 is not implemented
-func (op *MirrorWithSymlinksOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return fmt.Errorf("ExecuteV2 not implemented for MirrorWithSymlinksOperation")
+// Execute is not implemented
+func (op *MirrorWithSymlinksOperation) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return fmt.Errorf("Execute not implemented for MirrorWithSymlinksOperation")
 }
 
-// ValidateV2 is not implemented
-func (op *MirrorWithSymlinksOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return fmt.Errorf("ValidateV2 not implemented for MirrorWithSymlinksOperation")
+// Validate is not implemented
+func (op *MirrorWithSymlinksOperation) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	return fmt.Errorf("Validate not implemented for MirrorWithSymlinksOperation")
 }
 
 // Rollback is not implemented yet
@@ -134,171 +134,7 @@ func (op *MirrorWithSymlinksOperation) ReverseOps(ctx context.Context, fsys File
 	return nil, nil, fmt.Errorf("reverse ops not implemented for MirrorWithSymlinksOperation")
 }
 
-// Execute performs the mirror operation
-func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSystem) error {
-	// Use the filesystem directly (unified FileSystem interface)
 
-	// Recursive walk function
-	var walk func(string) error
-	walk = func(dir string) error {
-		// Open directory
-		f, err := fsys.Open(dir)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = f.Close() }()
-
-		// Read directory entries
-		if dirReader, ok := f.(interface {
-			ReadDir(int) ([]fs.DirEntry, error)
-		}); ok {
-			entries, err := dirReader.ReadDir(-1)
-			if err != nil {
-				return err
-			}
-
-			for _, entry := range entries {
-				srcPath := filepath.Join(dir, entry.Name())
-				info, err := entry.Info()
-				if err != nil {
-					continue
-				}
-
-				// Apply filter
-				if !op.options.Filter(srcPath, info) {
-					continue
-				}
-
-				// Calculate relative and destination paths
-				relPath, err := filepath.Rel(op.srcDir, srcPath)
-				if err != nil {
-					continue
-				}
-
-				dstPath := filepath.Join(op.dstDir, relPath)
-
-				if entry.IsDir() {
-					if op.options.IncludeDirectories {
-						// Create real directory
-						err = fsys.MkdirAll(dstPath, info.Mode())
-						if err != nil && !strings.Contains(err.Error(), "exists") {
-							return err
-						}
-
-						// Recurse into directory
-						if err := walk(srcPath); err != nil {
-							return err
-						}
-					} else {
-						// Create parent directory if needed
-						dstParent := filepath.Dir(dstPath)
-						if dstParent != "." && dstParent != "/" {
-							err = fsys.MkdirAll(dstParent, 0755)
-							if err != nil && !strings.Contains(err.Error(), "exists") {
-								return err
-							}
-						}
-
-						// Calculate relative path from destination to source
-						relTarget, _ := filepath.Rel(filepath.Dir(dstPath), srcPath)
-						
-						// Use PathAwareFileSystem if available for secure symlink resolution
-						var resolvedTarget string
-						if pafs, ok := fsys.(*PathAwareFileSystem); ok {
-							// Use centralized security-aware symlink resolution
-							resolved, err := pafs.ResolveSymlinkTarget(dstPath, relTarget)
-							if err != nil {
-								return fmt.Errorf("failed to resolve symlink target for %s -> %s: %w", dstPath, relTarget, err)
-							}
-							resolvedTarget = resolved
-						} else {
-							// Fallback for non-PathAwareFileSystem (should not happen in practice)
-							resolvedTarget = srcPath
-						}
-
-						// Remove existing if overwrite is enabled
-						if op.options.Overwrite {
-							_ = fsys.Remove(dstPath)
-						}
-
-						err = fsys.Symlink(resolvedTarget, dstPath)
-						if err != nil && !strings.Contains(err.Error(), "exists") {
-							return fmt.Errorf("failed to create symlink %s -> %s: %w", dstPath, resolvedTarget, err)
-						}
-					}
-				} else {
-					// Create parent directory if needed
-					dstParent := filepath.Dir(dstPath)
-					if dstParent != "." && dstParent != "/" {
-						err = fsys.MkdirAll(dstParent, 0755)
-						if err != nil && !strings.Contains(err.Error(), "exists") {
-							return err
-						}
-					}
-
-					// Calculate relative path from destination to source
-					relTarget, _ := filepath.Rel(filepath.Dir(dstPath), srcPath)
-					
-					// Use PathAwareFileSystem if available for secure symlink resolution
-					var resolvedTarget string
-					if pafs, ok := fsys.(*PathAwareFileSystem); ok {
-						// Use centralized security-aware symlink resolution
-						resolved, err := pafs.ResolveSymlinkTarget(dstPath, relTarget)
-						if err != nil {
-							return fmt.Errorf("failed to resolve symlink target for %s -> %s: %w", dstPath, relTarget, err)
-						}
-						resolvedTarget = resolved
-					} else {
-						// Fallback for non-PathAwareFileSystem (should not happen in practice)
-						resolvedTarget = srcPath
-					}
-
-					// Remove existing if overwrite is enabled
-					if op.options.Overwrite {
-						_ = fsys.Remove(dstPath)
-					}
-
-					err = fsys.Symlink(resolvedTarget, dstPath)
-					if err != nil && !strings.Contains(err.Error(), "exists") {
-						return fmt.Errorf("failed to create symlink %s -> %s: %w", dstPath, resolvedTarget, err)
-					}
-				}
-			}
-		}
-
-		return nil
-	}
-
-	// Create destination directory
-	if err := fsys.MkdirAll(op.dstDir, 0755); err != nil {
-		return err
-	}
-
-	// Start walking from source
-	return walk(op.srcDir)
-}
-
-// Validate checks if the operation can be performed
-func (op *MirrorWithSymlinksOperation) Validate(ctx context.Context, fsys FileSystem) error {
-	// Filesystem supports all required operations
-
-	// Check source exists
-	info, err := fsys.Stat(op.srcDir)
-	if err != nil {
-		return fmt.Errorf("source directory does not exist: %w", err)
-	}
-
-	if !info.IsDir() {
-		return fmt.Errorf("source is not a directory: %s", op.srcDir)
-	}
-
-	// Check if destination exists
-	if _, err := fsys.Stat(op.dstDir); err == nil && !op.options.Overwrite {
-		return fmt.Errorf("destination already exists: %s", op.dstDir)
-	}
-
-	return nil
-}
 
 // MirrorBuilder provides a fluent interface for creating mirror operations
 type MirrorBuilder struct {
@@ -357,11 +193,11 @@ func (b *MirrorBuilder) Build() Operation {
 // Execute builds and executes the operation
 func (b *MirrorBuilder) Execute(ctx context.Context, fs FileSystem) error {
 	op := b.Build()
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }
 
 // MirrorWithSymlinks is a convenience function
 func MirrorWithSymlinks(ctx context.Context, fs FileSystem, srcDir, dstDir string) error {
 	op := New().NewMirrorWithSymlinksOperation(srcDir, dstDir)
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }

@@ -141,14 +141,14 @@ func (s *SynthFS) CreateSymlinkWithID(id string, target, linkPath string) Operat
 func (s *SynthFS) CustomOperation(name string, executeFunc CustomOperationFunc) Operation {
 	id := s.idGen("custom", name)
 	op := NewCustomOperation(string(id), executeFunc)
-	return NewCustomOperationAdapter(op)
+	return op
 }
 
 // CustomOperationWithID creates a custom operation with an explicit ID.
 // This allows users to define their own operations with a specific ID for dependency management.
 func (s *SynthFS) CustomOperationWithID(id string, executeFunc CustomOperationFunc) Operation {
 	op := NewCustomOperation(id, executeFunc)
-	return NewCustomOperationAdapter(op)
+	return op
 }
 
 // CustomOperationWithOutput creates a custom operation that can store output.
@@ -166,13 +166,13 @@ func (s *SynthFS) CustomOperationWithID(id string, executeFunc CustomOperationFu
 func (s *SynthFS) CustomOperationWithOutput(name string, executeFunc CustomOperationWithOutputFunc) Operation {
 	id := s.idGen("custom", name)
 	op := NewCustomOperationWithOutput(string(id), executeFunc)
-	return NewCustomOperationAdapter(op)
+	return op
 }
 
 // CustomOperationWithOutputAndID creates a custom operation with explicit ID that can store output.
 func (s *SynthFS) CustomOperationWithOutputAndID(id string, executeFunc CustomOperationWithOutputFunc) Operation {
 	op := NewCustomOperationWithOutput(id, executeFunc)
-	return NewCustomOperationAdapter(op)
+	return op
 }
 
 // ReadFile creates a file read operation with auto-generated ID.
@@ -228,7 +228,7 @@ func (s *SynthFS) ReadFileWithID(id string, path string) Operation {
 	})
 	
 	op = op.WithDescription(fmt.Sprintf("Read file: %s", path))
-	return NewCustomOperationAdapter(op)
+	return op
 }
 
 // ChecksumAlgorithm represents supported checksum algorithms
@@ -313,5 +313,5 @@ func (s *SynthFS) ChecksumWithID(id string, path string, algorithm ChecksumAlgor
 	})
 	
 	op = op.WithDescription(fmt.Sprintf("Calculate %s checksum: %s", algorithm, path))
-	return NewCustomOperationAdapter(op)
+	return op
 }

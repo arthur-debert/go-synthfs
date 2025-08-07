@@ -98,24 +98,24 @@ func (op *WriteTemplateOperation) GetAllChecksums() map[string]*ChecksumRecord {
 	return nil
 }
 
-// ExecuteV2 is not implemented
-func (op *WriteTemplateOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+// Execute with ExecutionContext support
+func (op *WriteTemplateOperation) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	if contextOp, ok := ctx.(context.Context); ok {
 		if fsysOp, ok := fsys.(FileSystem); ok {
-			return op.Execute(contextOp, fsysOp)
+			return op.execute(contextOp, fsysOp)
 		}
 	}
-	return fmt.Errorf("ExecuteV2 not implemented for WriteTemplateOperation")
+	return fmt.Errorf("Execute not implemented for WriteTemplateOperation")
 }
 
-// ValidateV2 is not implemented
-func (op *WriteTemplateOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+// Validate with ExecutionContext support
+func (op *WriteTemplateOperation) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	if contextOp, ok := ctx.(context.Context); ok {
 		if fsysOp, ok := fsys.(FileSystem); ok {
-			return op.Validate(contextOp, fsysOp)
+			return op.validate(contextOp, fsysOp)
 		}
 	}
-	return fmt.Errorf("ValidateV2 not implemented for WriteTemplateOperation")
+	return fmt.Errorf("Validate not implemented for WriteTemplateOperation")
 }
 
 // Rollback removes the created file
@@ -133,8 +133,8 @@ func (op *WriteTemplateOperation) ReverseOps(ctx context.Context, fsys FileSyste
 	return []Operation{deleteOp}, nil, nil
 }
 
-// Execute performs the template write operation
-func (op *WriteTemplateOperation) Execute(ctx context.Context, fsys FileSystem) error {
+// execute performs the template write operation
+func (op *WriteTemplateOperation) execute(ctx context.Context, fsys FileSystem) error {
 	// Parse and execute template
 	tmpl, err := template.New("file").Parse(op.template)
 	if err != nil {
@@ -154,8 +154,8 @@ func (op *WriteTemplateOperation) Execute(ctx context.Context, fsys FileSystem) 
 	return fmt.Errorf("filesystem does not support WriteFile")
 }
 
-// Validate checks if the operation can be performed
-func (op *WriteTemplateOperation) Validate(ctx context.Context, fsys FileSystem) error {
+// validate checks if the operation can be performed
+func (op *WriteTemplateOperation) validate(ctx context.Context, fsys FileSystem) error {
 	// Validate template syntax
 	if _, err := template.New("validate").Parse(op.template); err != nil {
 		return fmt.Errorf("invalid template syntax: %w", err)
@@ -182,7 +182,7 @@ func (s *SynthFS) WriteTemplateWithMode(path, templateContent string, data Templ
 // WriteTemplateFile is a convenience function that writes a template directly
 func WriteTemplateFile(ctx context.Context, fs filesystem.FileSystem, path, templateContent string, data TemplateData) error {
 	op := New().WriteTemplate(path, templateContent, data)
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }
 
 // TemplateBuilder provides a fluent interface for template operations
@@ -234,7 +234,7 @@ func (tb *TemplateBuilder) Build() Operation {
 // Execute builds and executes the operation
 func (tb *TemplateBuilder) Execute(ctx context.Context, fs filesystem.FileSystem) error {
 	op := tb.Build()
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }
 
 // BatchTemplateWriter helps write multiple templates
