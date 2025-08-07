@@ -97,21 +97,22 @@ func (b *BatchImpl) add(op interface{}) error {
 
 // validateOperation validates an operation
 func (b *BatchImpl) validateOperation(op interface{}) error {
-	// Try Validate with ExecutionContext first
-	type validatorWithExecCtx interface {
-		Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
+	// Check if it's an operations.Operation (new interface)
+	type operationsValidator interface {
+		Validate(ctx context.Context, fsys filesystem.FileSystem) error
 	}
 
-	if v, ok := op.(validatorWithExecCtx); ok {
-		// Create a minimal ExecutionContext for validation
-		execCtx := &core.ExecutionContext{}
-		if err := v.Validate(b.ctx, execCtx, b.fs); err != nil {
-			return err
+	if v, ok := op.(operationsValidator); ok {
+		// Convert the legacy FileSystem to filesystem.FileSystem if needed
+		if fsys, ok := b.fs.(filesystem.FileSystem); ok {
+			if err := v.Validate(b.ctx, fsys); err != nil {
+				return err
+			}
+			return nil
 		}
-		return nil
 	}
 
-	// Fallback to basic Validate method
+	// Fallback to legacy interface for compatibility
 	type validator interface {
 		Validate(ctx context.Context, fsys interface{}) error
 	}
