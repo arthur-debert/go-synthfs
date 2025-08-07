@@ -272,3 +272,21 @@ func (a *operationInterfaceAdapter) Rollback(ctx context.Context, fsys interface
 func (a *operationInterfaceAdapter) GetItem() interface{} {
 	return a.Operation.GetItem()
 }
+
+// GetSrcPath returns the source path for copy/move operations
+func (a *operationInterfaceAdapter) GetSrcPath() string {
+	if adapter, ok := a.Operation.(*OperationsPackageAdapter); ok {
+		src, _ := adapter.opsOperation.GetPaths()
+		return src
+	}
+	return ""
+}
+
+// GetDstPath returns the destination path for copy/move operations
+func (a *operationInterfaceAdapter) GetDstPath() string {
+	if adapter, ok := a.Operation.(*OperationsPackageAdapter); ok {
+		_, dst := adapter.opsOperation.GetPaths()
+		return dst
+	}
+	return ""
+}
