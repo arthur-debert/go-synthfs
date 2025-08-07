@@ -116,22 +116,8 @@ func RunWithOptions(ctx context.Context, fs filesystem.FileSystem, options Pipel
 
 // wrapExecutionError wraps execution errors to match original batch API behavior
 func wrapExecutionError(execErr error, result *Result, ops []Operation) error {
-	if coreRollbackErr, ok := execErr.(*core.RollbackError); ok {
-		// Convert core.RollbackError to synthfs.RollbackError
-		rollbackErr := &RollbackError{
-			OriginalErr:  coreRollbackErr.OriginalErr,
-			RollbackErrs: make(map[core.OperationID]error),
-		}
-		
-		// Convert rollback errors slice to map
-		// We need to associate errors with operation IDs somehow
-		// For now, use operation order as a fallback
-		for i, err := range coreRollbackErr.RollbackErrs {
-			if i < len(ops) {
-				rollbackErr.RollbackErrs[ops[i].ID()] = err
-			}
-		}
-		
+	// RollbackError should be wrapped in PipelineError to maintain expected API
+	if rollbackErr, ok := execErr.(*core.RollbackError); ok {
 		// Find which operation failed to create PipelineError context
 		failedIndex := -1
 		var failedOp Operation
@@ -158,7 +144,7 @@ func wrapExecutionError(execErr error, result *Result, ops []Operation) error {
 		}
 	}
 	
-	// For other error types, return as-is for now
+	// For other error types, return as-is
 	return execErr
 }
 
@@ -295,9 +281,18 @@ func executeOperationsDirect(ctx context.Context, fs filesystem.FileSystem, opti
 		// If rollback had errors, wrap them
 		if len(rollbackErrors) > 0 {
 			originalErr := result.Errors[0] // Get the first (main) error
+			
+			// Build map from operation ID to rollback error
+			rollbackErrMap := make(map[core.OperationID]error)
+			for i, rollbackErr := range rollbackErrors {
+				if i < len(successfulOps) {
+					rollbackErrMap[successfulOps[len(successfulOps)-1-i].ID()] = rollbackErr
+				}
+			}
+			
 			rollbackErr := &core.RollbackError{
 				OriginalErr:  originalErr,
-				RollbackErrs: rollbackErrors,
+				RollbackErrs: rollbackErrMap,
 			}
 			// Replace the first error with the rollback error
 			result.Errors[0] = rollbackErr

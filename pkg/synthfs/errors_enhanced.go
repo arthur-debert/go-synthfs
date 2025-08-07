@@ -78,30 +78,8 @@ func (e *PipelineError) Unwrap() error {
 	return e.Err
 }
 
-// RollbackError represents failures during rollback
-type RollbackError struct {
-	OriginalErr  error                      // The original operation error
-	RollbackErrs map[core.OperationID]error // Rollback errors by operation ID
-}
-
-// Error returns a formatted rollback error message
-func (e *RollbackError) Error() string {
-	msg := fmt.Sprintf("Operation failed: %v", e.OriginalErr)
-
-	if len(e.RollbackErrs) > 0 {
-		msg += "\n\nRollback also failed:"
-		for id, err := range e.RollbackErrs {
-			msg += fmt.Sprintf("\n  - %s: %v", id, err)
-		}
-	}
-
-	return msg
-}
-
-// Unwrap returns the original error
-func (e *RollbackError) Unwrap() error {
-	return e.OriginalErr
-}
+// RollbackError is now defined in core package to avoid duplication
+type RollbackError = core.RollbackError
 
 // WrapOperationError wraps an error with operation context
 func WrapOperationError(op Operation, action string, err error) error {
