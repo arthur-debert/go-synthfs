@@ -17,14 +17,14 @@ func TestBatchRealOperations(t *testing.T) {
 
 	t.Run("Real file and directory creation", func(t *testing.T) {
 		// Create a directory
-		_, err := batch.CreateDir("project")
+		_, err := batch.CreateDir("project", 0755)
 		if err != nil {
 			t.Fatalf("CreateDir failed: %v", err)
 		}
 
 		// Create a file with content
 		content := []byte("Hello, World!")
-		_, err = batch.CreateFile("project/hello.txt", content)
+		_, err = batch.CreateFile("project/hello.txt", content, 0644)
 		if err != nil {
 			t.Fatalf("CreateFile failed: %v", err)
 		}
@@ -74,7 +74,7 @@ func TestBatchRealOperations(t *testing.T) {
 
 		// Create source file
 		sourceContent := []byte("Source file content")
-		_, err := newBatch.CreateFile("source.txt", sourceContent)
+		_, err := newBatch.CreateFile("source.txt", sourceContent, 0644)
 		if err != nil {
 			t.Fatalf("CreateFile for source failed: %v", err)
 		}
@@ -123,7 +123,7 @@ func TestBatchRealOperations(t *testing.T) {
 
 		// Create source file
 		sourceContent := []byte("File to move")
-		_, err := newBatch.CreateFile("old-location.txt", sourceContent)
+		_, err := newBatch.CreateFile("old-location.txt", sourceContent, 0644)
 		if err != nil {
 			t.Fatalf("CreateFile for move source failed: %v", err)
 		}
@@ -171,7 +171,7 @@ func TestBatchRealOperations(t *testing.T) {
 
 		// Create target file
 		targetContent := []byte("Symlink target")
-		_, err := newBatch.CreateFile("target.txt", targetContent)
+		_, err := newBatch.CreateFile("target.txt", targetContent, 0644)
 		if err != nil {
 			t.Fatalf("CreateFile for symlink target failed: %v", err)
 		}
@@ -181,7 +181,7 @@ func TestBatchRealOperations(t *testing.T) {
 		batch := synthfs.NewBatch(fs).WithFileSystem(testutil.NewTestFileSystem())
 
 		// Create both target and symlink
-		_, err = batch.CreateFile("target.txt", targetContent)
+		_, err = batch.CreateFile("target.txt", targetContent, 0644)
 		if err != nil {
 			t.Fatalf("CreateFile failed: %v", err)
 		}
@@ -196,7 +196,7 @@ func TestBatchRealOperations(t *testing.T) {
 		setupBatch := synthfs.NewBatch(fs).WithFileSystem(testFS)
 
 		// Create file to delete in a setup batch
-		_, err := setupBatch.CreateFile("to-delete.txt", []byte("Delete me"))
+		_, err := setupBatch.CreateFile("to-delete.txt", []byte("Delete me"), 0644)
 		if err != nil {
 			t.Fatalf("CreateFile for delete target failed: %v", err)
 		}
@@ -251,7 +251,7 @@ func TestBatchRealOperations(t *testing.T) {
 		newBatch := synthfs.NewBatch(fs).WithFileSystem(testutil.NewTestFileSystem())
 
 		// Create a file
-		_, err := newBatch.CreateFile("rollback-test.txt", []byte("Test rollback"))
+		_, err := newBatch.CreateFile("rollback-test.txt", []byte("Test rollback"), 0644)
 		if err != nil {
 			t.Fatalf("CreateFile failed: %v", err)
 		}
@@ -291,13 +291,13 @@ func TestBatchValidation(t *testing.T) {
 		batch := synthfs.NewBatch(fs).WithFileSystem(testutil.NewTestFileSystem())
 
 		// Try to create file with empty path (should fail validation)
-		_, err := batch.CreateFile("", []byte("content"))
+		_, err := batch.CreateFile("", []byte("content"), 0644)
 		if err == nil {
 			t.Error("Expected validation error for empty file path")
 		}
 
 		// Try to create directory with empty path
-		_, err = batch.CreateDir("")
+		_, err = batch.CreateDir("", 0755)
 		if err == nil {
 			t.Error("Expected validation error for empty directory path")
 		}

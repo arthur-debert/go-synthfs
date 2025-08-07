@@ -17,7 +17,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 
 	t.Run("CreateSymlink operation", func(t *testing.T) {
 		// Create target file first
-		_, err := batch.CreateFile("target.txt", []byte("I am the target"))
+		_, err := batch.CreateFile("target.txt", []byte("I am the target"), 0644)
 		if err != nil {
 			t.Fatalf("CreateFile failed: %v", err)
 		}
@@ -69,17 +69,17 @@ func TestBatchCompleteAPI(t *testing.T) {
 		setupBatch := synthfs.NewBatch(fileSystem).WithFileSystem(testFS)
 
 		// Create some files to archive
-		_, err := setupBatch.CreateDir("archive-test")
+		_, err := setupBatch.CreateDir("archive-test", 0755)
 		if err != nil {
 			t.Fatalf("CreateDir failed: %v", err)
 		}
 
-		_, err = setupBatch.CreateFile("archive-test/file1.txt", []byte("File 1 content"))
+		_, err = setupBatch.CreateFile("archive-test/file1.txt", []byte("File 1 content"), 0644)
 		if err != nil {
 			t.Fatalf("CreateFile failed: %v", err)
 		}
 
-		_, err = setupBatch.CreateFile("archive-test/file2.txt", []byte("File 2 content"))
+		_, err = setupBatch.CreateFile("archive-test/file2.txt", []byte("File 2 content"), 0644)
 		if err != nil {
 			t.Fatalf("CreateFile failed: %v", err)
 		}
@@ -94,13 +94,13 @@ func TestBatchCompleteAPI(t *testing.T) {
 		archiveBatch := synthfs.NewBatch(fileSystem).WithFileSystem(testFS)
 
 		// Create tar.gz archive
-		_, err = archiveBatch.CreateArchive("backup.tar.gz", synthfs.ArchiveFormatTarGz, "archive-test/file1.txt", "archive-test/file2.txt")
+		_, err = archiveBatch.CreateArchive("backup.tar.gz", synthfs.ArchiveFormatTarGz, []string{"archive-test/file1.txt", "archive-test/file2.txt"})
 		if err != nil {
 			t.Fatalf("CreateArchive tar.gz failed: %v", err)
 		}
 
 		// Create zip archive
-		_, err = archiveBatch.CreateArchive("backup.zip", synthfs.ArchiveFormatZip, "archive-test/file1.txt", "archive-test/file2.txt")
+		_, err = archiveBatch.CreateArchive("backup.zip", synthfs.ArchiveFormatZip, []string{"archive-test/file1.txt", "archive-test/file2.txt"})
 		if err != nil {
 			t.Fatalf("CreateArchive zip failed: %v", err)
 		}
@@ -147,15 +147,15 @@ func TestBatchCompleteAPI(t *testing.T) {
 		// --- Setup Phase ---
 		// Create initial files and directories first.
 		setupBatch := synthfs.NewBatch(fileSystem).WithFileSystem(testFS)
-		_, err := setupBatch.CreateDir("project")
+		_, err := setupBatch.CreateDir("project", 0755)
 		if err != nil {
 			t.Fatalf("CreateDir failed: %v", err)
 		}
-		_, err = setupBatch.CreateFile("project/main.go", []byte("package main"))
+		_, err = setupBatch.CreateFile("project/main.go", []byte("package main"), 0644)
 		if err != nil {
 			t.Fatalf("CreateFile failed: %v", err)
 		}
-		_, err = setupBatch.CreateFile("README.md", []byte("# Project"))
+		_, err = setupBatch.CreateFile("README.md", []byte("# Project"), 0644)
 		if err != nil {
 			t.Fatalf("CreateFile failed: %v", err)
 		}
@@ -181,7 +181,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 		}
 
 		// Move file to new location
-		_, err = fullBatch.CreateDir("backup")
+		_, err = fullBatch.CreateDir("backup", 0755)
 		if err != nil {
 			t.Fatalf("CreateDir for backup failed: %v", err)
 		}
@@ -192,7 +192,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 		}
 
 		// Create archive with existing files
-		_, err = fullBatch.CreateArchive("project.tar.gz", synthfs.ArchiveFormatTarGz, "project/main.go")
+		_, err = fullBatch.CreateArchive("project.tar.gz", synthfs.ArchiveFormatTarGz, []string{"project/main.go"})
 		if err != nil {
 			t.Fatalf("CreateArchive failed: %v", err)
 		}
@@ -237,7 +237,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 
 		// --- Setup Phase ---
 		setupBatch := synthfs.NewBatch(fileSystem).WithFileSystem(testFS)
-		_, err := setupBatch.CreateFile("inspect.txt", []byte("inspection content"))
+		_, err := setupBatch.CreateFile("inspect.txt", []byte("inspection content"), 0644)
 		if err != nil {
 			t.Fatalf("CreateFile for setup failed: %v", err)
 		}
@@ -251,7 +251,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 
 		// This operation is now invalid because the file already exists.
 		// We'll test symlink and archive on the existing file.
-		fileOp, err := inspectBatch.CreateFile("newfile.txt", []byte("new content"))
+		fileOp, err := inspectBatch.CreateFile("newfile.txt", []byte("new content"), 0644)
 		if err != nil {
 			t.Fatalf("CreateFile failed: %v", err)
 		}
@@ -261,7 +261,7 @@ func TestBatchCompleteAPI(t *testing.T) {
 			t.Fatalf("CreateSymlink failed: %v", err)
 		}
 
-		archiveOp, err := inspectBatch.CreateArchive("inspect.tar.gz", synthfs.ArchiveFormatTarGz, "inspect.txt")
+		archiveOp, err := inspectBatch.CreateArchive("inspect.tar.gz", synthfs.ArchiveFormatTarGz, []string{"inspect.txt"})
 		if err != nil {
 			t.Fatalf("CreateArchive failed: %v", err)
 		}

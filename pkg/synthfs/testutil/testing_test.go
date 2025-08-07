@@ -249,7 +249,7 @@ func TestTestHelper(t *testing.T) {
 		// Use the new Batch API instead of old ops
 		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs).WithFileSystem(helper.FileSystem())
-		_, err := batch.CreateFile("success.txt", []byte("content"))
+		_, err := batch.CreateFile("success.txt", []byte("content"), 0644)
 		if err != nil {
 			t.Fatalf("CreateFile failed: %v", err)
 		}
@@ -270,7 +270,7 @@ func TestTestHelper(t *testing.T) {
 		// Use the new Batch API with invalid operation to cause error
 		fs := testutil.NewTestFileSystem()
 		batch := synthfs.NewBatch(fs).WithFileSystem(helper.FileSystem())
-		_, err := batch.CreateFile("", []byte("content")) // Empty path should fail validation
+		_, err := batch.CreateFile("", []byte("content"), 0644) // Empty path should fail validation
 		if err == nil {
 			t.Fatal("Expected validation error for empty path")
 		}

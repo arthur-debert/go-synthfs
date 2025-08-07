@@ -26,7 +26,7 @@ func TestBatchBasicUsage(t *testing.T) {
 	}
 
 	t.Run("CreateDir", func(t *testing.T) {
-		op, err := batch.CreateDir("test-batch-dir")
+		op, err := batch.CreateDir("test-batch-dir", 0755)
 		if err != nil {
 			t.Fatalf("CreateDir failed: %v", err)
 		}
@@ -47,7 +47,7 @@ func TestBatchBasicUsage(t *testing.T) {
 
 	t.Run("CreateFile", func(t *testing.T) {
 		content := []byte("Hello, Batch API!")
-		op, err := batch.CreateFile("test-batch-file.txt", content)
+		op, err := batch.CreateFile("test-batch-file.txt", content, 0644)
 		if err != nil {
 			t.Fatalf("CreateFile failed: %v", err)
 		}
@@ -142,7 +142,7 @@ func TestBatchWithTestFileSystem(t *testing.T) {
 
 	t.Run("CreateFile with parent directory auto-creation", func(t *testing.T) {
 		// This should auto-create the "auto-dir" directory
-		_, err := batch.CreateFile("auto-dir/nested-file.txt", []byte("nested content"))
+		_, err := batch.CreateFile("auto-dir/nested-file.txt", []byte("nested content"), 0644)
 		if err != nil {
 			t.Fatalf("CreateFile with nested path failed: %v", err)
 		}
@@ -178,15 +178,15 @@ func TestBatchIDGeneration(t *testing.T) {
 	batch := synthfs.NewBatch(fs).WithFileSystem(testFS)
 
 	// Create multiple operations and check ID uniqueness
-	op1, err := batch.CreateDir("dir1")
+	op1, err := batch.CreateDir("dir1", 0755)
 	if err != nil {
 		t.Fatalf("Failed to create dir1: %v", err)
 	}
-	op2, err := batch.CreateDir("dir2")
+	op2, err := batch.CreateDir("dir2", 0755)
 	if err != nil {
 		t.Fatalf("Failed to create dir2: %v", err)
 	}
-	op3, err := batch.CreateFile("file1.txt", []byte("content"))
+	op3, err := batch.CreateFile("file1.txt", []byte("content"), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create file1.txt: %v", err)
 	}
