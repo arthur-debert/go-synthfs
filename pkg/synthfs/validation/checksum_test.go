@@ -49,16 +49,15 @@ func TestBatchChecksumming(t *testing.T) {
 			if cr.Size != int64(len(sourceContent)) {
 				t.Errorf("Expected checksum size %d, got %d", len(sourceContent), cr.Size)
 			}
-		}
-
-		// Check that checksum is in operation description
-		desc := operation.Describe()
-		if sourceChecksum, exists := desc.Details["source_checksum"]; !exists {
-			t.Error("Expected source_checksum in operation details")
-		} else {
-			cr, _ := checksum.(*validation.ChecksumRecord)
-			if sourceChecksum != cr.MD5 {
-				t.Errorf("Expected source_checksum %s, got %v", cr.MD5, sourceChecksum)
+			
+			// Check that checksum is in operation description
+			desc := operation.Describe()
+			if sourceChecksum, exists := desc.Details["source_checksum"]; !exists {
+				t.Error("Expected source_checksum in operation details")
+			} else {
+				if sourceChecksum != cr.MD5 {
+					t.Errorf("Expected source_checksum %s, got %v", cr.MD5, sourceChecksum)
+				}
 			}
 		}
 	})
