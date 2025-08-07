@@ -1,0 +1,90 @@
+Parallel Execution in SynthFS
+
+	The go-synthfs library is designed with two primary layers: a high-level Simple API for ease of use, and a low-level Core API for power and performance. A key feature of the Core API is its ability to execute independent filesystem operations in parallel, which can dramatically improve performance for I/O-heavy tasks.
+
+	This document explains how parallel execution works and the safety mechanisms that make it possible.
+
+
+1. The Goal: Performance Through Parallelism
+
+	For many applications, such as scaffolding a new project or running a complex build process, many filesystem operations are not dependent on one another.
+
+	- Creating `module-A/src/` does not depend on creating `module-B/src/`.
+	- Copying source files to a build directory can happen at the same time as downloading dependencies to a vendor directory.
+
+	Executing these independent operations concurrently, rather than sequentially, can lead to significant speed improvements. The Core API is designed to identify and capitalize on these opportunities automatically.
+
+
+2. How It Works: The Dependency and Conflict Graph
+
+	The Core API's Executor does not simply run a list of operations. It first builds a dependency graph to understand the relationships between all the operations in a pipeline. This graph has two critical components that ensure safety.
+
+	2.1. Dependencies: Enforcing Order
+
+		When building a pipeline, you can explicitly state that one operation must complete before another begins. This is a hard dependency.
+
+		Example: An operation to create the file `dir/file.txt` must declare a dependency on the operation to create the directory `dir`. The Executor will always respect this, running the directory creation first.
+
+	2.2. Conflicts: Preventing Race Conditions
+
+		You can also declare that two operations conflict, meaning they cannot be run at the same time. This is essential for preventing race conditions, such as two operations trying to write to the same file simultaneously.
+
+		The Executor will see this conflict and ensure that one operation finishes completely before the other one starts.
+
+
+3. The Safety Net: Automatic Conflict Detection
+
+	The most powerful safety feature is that the Executor does not rely solely on the user to declare conflicts. It automatically detects potential conflicts based on the file paths involved.
+
+	Before execution, the Executor:
+	1. Collects all source and destination paths for every operation in the pipeline.
+	2. Identifies any path that is touched by more than one operation.
+	3. Automatically creates an implicit conflict between all operations that share a path.
+
+	This means that even if you schedule two operations to write to the same file and forget to mark them as conflicting, the Executor will force them to run sequentially, preventing data corruption.
+
+
+4. The Two-Phase Process: Validate then Execute
+
+	To combine the safety of sequential validation with the speed of parallel execution, the Executor operates in two distinct phases.
+
+	4.1. Phase 1: The Validation Pass (Simulated and Sequential)
+
+		This phase uses the `ProjectedFileSystem` to safely simulate the entire sequence of operations before touching the real filesystem.
+
+		1. A single, shared `ProjectedFileSystem` instance is created.
+		2. The Executor walks the dependency graph in a valid sequential order.
+		3. As each operation is validated, the `ProjectedFileSystem` is updated to reflect the change.
+		4. Subsequent operations are validated against this evolving, in-memory state.
+
+		This allows the system to confirm that the entire batch of operations is valid (e.g., no files are created without their parent directory) before proceeding. If any validation fails, the entire process stops.
+
+	4.2. Phase 2: The Execution Pass (Real and Parallel)
+
+		Only after the entire pipeline is successfully validated does execution begin.
+
+		1. The `ProjectedFileSystem` is discarded. All operations now run against the real filesystem.
+		2. The Executor, armed with the validated dependency and conflict graph, knows which operations are safe to run in parallel.
+		3. It dispatches all non-conflicting, independent operations to a pool of worker goroutines.
+		4. As operations complete, new operations that are no longer blocked by dependencies are dispatched.
+
+		This ensures that only operations that are guaranteed not to interfere with each other are run concurrently.
+
+
+5. Goroutines, Not Processes: The Shared Memory Advantage
+
+	It is important to note that `go-synthfs` uses goroutines (lightweight threads) for parallelism, not separate processes. Goroutines run within the same process and share the same memory space.
+
+	This is what makes the `ProjectedFileSystem` possible during the validation phase. A single, central Executor can manage the shared, in-memory filesystem state and coordinate all the worker goroutines.
+
+
+6. Summary: The Air Traffic Controller Model
+
+	Think of the Executor as an air traffic controller for your filesystem operations.
+
+	- The Operations are airplanes.
+	- The File Paths are the runways.
+
+	The controller first reviews every flight plan to ensure the entire sequence is logical and safe (Validation). Then, it clears planes to land on different runways simultaneously (Parallel Execution) but forces any planes destined for the same runway to land one at a time (Conflict Resolution).
+
+	This model provides the best of both worlds: the performance of parallelism for independent operations and the safety of sequential execution for any operations that could possibly interfere with one another.
