@@ -65,17 +65,54 @@ func (sp *simplePipeline) Operations() []Operation {
 
 // Resolve performs dependency resolution using topological sorting.
 func (sp *simplePipeline) Resolve() error {
-	// For now, we just return operations in the order they were added
-	// Since the Operation interface doesn't expose Dependencies(), 
-	// we skip dependency resolution to maintain compatibility
+	if sp.resolved {
+		return nil
+	}
+	
+	// Simple dependency resolution based on operation type and paths
+	// This maintains compatibility without requiring the Dependencies() method
+	resolved := make([]Operation, 0, len(sp.operations))
+	
+	// Group operations by type - creates before operations that need them
+	var creates []Operation
+	var others []Operation
+	
+	for _, op := range sp.operations {
+		desc := op.Describe()
+		opType := desc.Type
+		
+		if opType == "create_file" || opType == "create_directory" || opType == "create_symlink" || opType == "mkdir" {
+			creates = append(creates, op)
+		} else {
+			others = append(others, op)
+		}
+	}
+	
+	// Add creates first, then others
+	resolved = append(resolved, creates...)
+	resolved = append(resolved, others...)
+	
+	sp.operations = resolved
 	sp.resolved = true
 	return nil
 }
 
 // Validate checks if all operations in the pipeline are valid.
 func (sp *simplePipeline) Validate(ctx context.Context, fs FileSystem) error {
+	// First resolve dependencies to ensure proper order
+	if err := sp.Resolve(); err != nil {
+		return err
+	}
+	
+	// Create execution context for validation
+	logger := DefaultLogger()
+	execCtx := &core.ExecutionContext{
+		Logger:   NewLoggerAdapter(&logger),
+		EventBus: core.NewMemoryEventBus(NewLoggerAdapter(&logger)),
+	}
+	
 	for _, op := range sp.operations {
-		if err := op.Validate(ctx, &core.ExecutionContext{}, fs); err != nil {
+		if err := op.Validate(ctx, execCtx, fs); err != nil {
 			return err
 		}
 	}

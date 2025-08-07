@@ -50,6 +50,26 @@ func (e *Executor) Run(ctx context.Context, pipeline Pipeline, fs FileSystem) *R
 
 // RunWithOptions runs all operations in the pipeline with specified options.
 func (e *Executor) RunWithOptions(ctx context.Context, pipeline Pipeline, fs FileSystem, opts PipelineOptions) *Result {
+	// Resolve pipeline dependencies (maintaining executor contract)
+	if err := pipeline.Resolve(); err != nil {
+		return &Result{
+			Success:    false,
+			Operations: []core.OperationResult{},
+			Errors:     []error{err},
+			Duration:   0,
+		}
+	}
+
+	// Validate pipeline (maintaining executor contract)
+	if err := pipeline.Validate(ctx, fs); err != nil {
+		return &Result{
+			Success:    false,
+			Operations: []core.OperationResult{},
+			Errors:     []error{err},
+			Duration:   0,
+		}
+	}
+
 	// Use direct execution instead of adapters
 	ops := pipeline.Operations()
 	result, err := RunWithOptions(ctx, fs, opts, ops...)
