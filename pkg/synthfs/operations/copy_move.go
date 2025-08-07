@@ -110,18 +110,6 @@ func (op *CopyOperation) Execute(ctx context.Context, fsys filesystem.FileSystem
 	return nil
 }
 
-// ExecuteV2 performs the copy with execution context support.
-func (op *CopyOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Convert context
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
-
-	// Call the operation's Execute method with proper event handling
-	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
-}
-
 // Validate checks if the copy operation can be performed.
 func (op *CopyOperation) Validate(ctx context.Context, fsys filesystem.FileSystem) error {
 	// First do base validation
@@ -157,11 +145,6 @@ func (op *CopyOperation) Validate(ctx context.Context, fsys filesystem.FileSyste
 	}
 
 	return nil
-}
-
-// ValidateV2 checks if the copy operation can be performed using ExecutionContext.
-func (op *CopyOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	return validateV2Helper(op, ctx, execCtx, fsys)
 }
 
 // Rollback removes the copied file/directory.
@@ -243,28 +226,11 @@ func (op *MoveOperation) Execute(ctx context.Context, fsys filesystem.FileSystem
 	return nil
 }
 
-// ExecuteV2 performs the move with execution context support.
-func (op *MoveOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Convert context
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
-
-	// Call the operation's Execute method with proper event handling
-	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
-}
-
 // Validate checks if the move operation can be performed.
 func (op *MoveOperation) Validate(ctx context.Context, fsys filesystem.FileSystem) error {
 	// Use same validation as copy
 	copyOp := &CopyOperation{BaseOperation: op.BaseOperation}
 	return copyOp.Validate(ctx, fsys)
-}
-
-// ValidateV2 checks if the move operation can be performed using ExecutionContext.
-func (op *MoveOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	return validateV2Helper(op, ctx, execCtx, fsys)
 }
 
 // Rollback attempts to restore the moved file to its original location.

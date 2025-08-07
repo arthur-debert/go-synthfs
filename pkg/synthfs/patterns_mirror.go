@@ -114,15 +114,7 @@ func (op *MirrorWithSymlinksOperation) GetAllChecksums() map[string]*ChecksumRec
 	return nil
 }
 
-// ExecuteV2 is not implemented
-func (op *MirrorWithSymlinksOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return fmt.Errorf("ExecuteV2 not implemented for MirrorWithSymlinksOperation")
-}
 
-// ValidateV2 is not implemented
-func (op *MirrorWithSymlinksOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return fmt.Errorf("ValidateV2 not implemented for MirrorWithSymlinksOperation")
-}
 
 // Rollback is not implemented yet
 func (op *MirrorWithSymlinksOperation) Rollback(ctx context.Context, fsys FileSystem) error {

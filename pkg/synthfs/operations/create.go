@@ -85,23 +85,6 @@ func (op *CreateFileOperation) Execute(ctx context.Context, fsys filesystem.File
 	return nil
 }
 
-// ExecuteV2 performs the file creation with execution context support.
-func (op *CreateFileOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Convert context
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
-
-	// Call the operation's Execute method with proper event handling
-	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
-}
-
-// ValidateV2 checks if the create file operation can be performed using ExecutionContext.
-func (op *CreateFileOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	return validateV2Helper(op, ctx, execCtx, fsys)
-}
-
 // Validate checks if the file can be created.
 func (op *CreateFileOperation) Validate(ctx context.Context, fsys filesystem.FileSystem) error {
 	// First do base validation

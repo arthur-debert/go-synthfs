@@ -922,11 +922,11 @@ func (m *MockOperation) Conflicts() []core.OperationID        { return []core.Op
 func (m *MockOperation) Prerequisites() []core.Prerequisite   { return []core.Prerequisite{} }
 func (m *MockOperation) AddDependency(depID core.OperationID) { /* no-op for mock */ }
 
-func (m *MockOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (m *MockOperation) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	return m.executeError
 }
 
-func (m *MockOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (m *MockOperation) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	return m.validateError
 }
 

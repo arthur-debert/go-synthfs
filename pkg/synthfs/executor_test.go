@@ -466,17 +466,11 @@ func (m *MockMainOperation) Execute(ctx context.Context, fs synthfs.FileSystem) 
 	return m.executeError
 }
 
-func (m *MockMainOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return m.executeError
-}
 
 func (m *MockMainOperation) Validate(ctx context.Context, fs synthfs.FileSystem) error {
 	return m.validateError
 }
 
-func (m *MockMainOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return m.validateError
-}
 
 func (m *MockMainOperation) ReverseOps(ctx context.Context, fs synthfs.FileSystem, budget *synthfs.BackupBudget) ([]synthfs.Operation, *synthfs.BackupData, error) {
 	if m.reverseOpsError != nil {

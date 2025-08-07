@@ -737,11 +737,11 @@ func (m *MockPipelineOperation) AddDependency(depID core.OperationID) {
 	// No-op: dependency tracking has been removed
 }
 
-func (m *MockPipelineOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (m *MockPipelineOperation) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	return nil
 }
 
-func (m *MockPipelineOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (m *MockPipelineOperation) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	return m.validateError
 }
 

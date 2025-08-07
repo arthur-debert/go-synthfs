@@ -10,11 +10,6 @@ type OperationMetadata interface {
 // Note: Executable interface will be defined in the main synthfs package
 // because it depends on filesystem.FileSystem which would create a circular dependency
 
-// ExecutableV2 defines execution capabilities using ExecutionContext
-type ExecutableV2 interface {
-	ExecuteV2(ctx interface{}, execCtx *ExecutionContext, fsys interface{}) error
-	ValidateV2(ctx interface{}, execCtx *ExecutionContext, fsys interface{}) error
-}
 
 // OperationFactory creates operations based on type and item
 // Note: The actual Operation interface is defined in the main synthfs package
@@ -26,9 +21,10 @@ type OperationFactory interface {
 // BatchOperationInterface defines the core operation interface for the batch package
 type BatchOperationInterface interface {
 	OperationMetadata
-	ExecutableV2
-	// Additional methods needed by batch
+	// Execution methods - using interface{} to avoid circular dependencies
+	Execute(ctx interface{}, fsys interface{}) error
 	Validate(ctx interface{}, fsys interface{}) error
+	// Additional methods needed by batch
 	SetDescriptionDetail(key string, value interface{})
 	AddDependency(depID OperationID)
 	SetPaths(src, dst string)

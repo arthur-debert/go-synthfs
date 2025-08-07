@@ -133,23 +133,7 @@ func (op *CustomOperation) Rollback(ctx context.Context, fsys filesystem.FileSys
 	return op.rollbackFunc(ctx, fs)
 }
 
-// ExecuteV2 implements the V2 execution interface
-func (op *CustomOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Delegate to Execute with context type assertion
-	if contextOp, ok := ctx.(context.Context); ok {
-		return op.Execute(contextOp, fsys)
-	}
-	return fmt.Errorf("custom operation %s: invalid context type", op.ID())
-}
 
-// ValidateV2 implements the V2 validation interface
-func (op *CustomOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Delegate to Validate with context type assertion
-	if contextOp, ok := ctx.(context.Context); ok {
-		return op.Validate(contextOp, fsys)
-	}
-	return fmt.Errorf("custom operation %s: invalid context type", op.ID())
-}
 
 // ReverseOps returns the operations needed to reverse this custom operation.
 // For custom operations, this creates a single operation that runs the rollback function.

@@ -139,15 +139,7 @@ func (op *SyncOperation) GetAllChecksums() map[string]*ChecksumRecord {
 	return nil
 }
 
-// ExecuteV2 is not implemented
-func (op *SyncOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return fmt.Errorf("ExecuteV2 not implemented for SyncOperation")
-}
 
-// ValidateV2 is not implemented
-func (op *SyncOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return fmt.Errorf("ValidateV2 not implemented for SyncOperation")
-}
 
 // Rollback is not implemented yet
 func (op *SyncOperation) Rollback(ctx context.Context, fsys FileSystem) error {

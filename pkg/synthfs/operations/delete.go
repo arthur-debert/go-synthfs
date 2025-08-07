@@ -65,23 +65,6 @@ func (op *DeleteOperation) Execute(ctx context.Context, fsys filesystem.FileSyst
 	return nil
 }
 
-// ExecuteV2 performs the deletion with execution context support.
-func (op *DeleteOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Convert context
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
-
-	// Call the operation's Execute method with proper event handling
-	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
-}
-
-// ValidateV2 checks if the delete operation can be performed using ExecutionContext.
-func (op *DeleteOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	return validateV2Helper(op, ctx, execCtx, fsys)
-}
-
 // Validate checks if the deletion can be performed.
 func (op *DeleteOperation) Validate(ctx context.Context, fsys filesystem.FileSystem) error {
 	// First do base validation

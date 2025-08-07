@@ -97,15 +97,15 @@ func (b *BatchImpl) add(op interface{}) error {
 
 // validateOperation validates an operation
 func (b *BatchImpl) validateOperation(op interface{}) error {
-	// Try ValidateV2 first
-	type validatorV2 interface {
-		ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
+	// Try Validate with ExecutionContext first
+	type validatorWithExecCtx interface {
+		Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
 	}
 
-	if v, ok := op.(validatorV2); ok {
+	if v, ok := op.(validatorWithExecCtx); ok {
 		// Create a minimal ExecutionContext for validation
 		execCtx := &core.ExecutionContext{}
-		if err := v.ValidateV2(b.ctx, execCtx, b.fs); err != nil {
+		if err := v.Validate(b.ctx, execCtx, b.fs); err != nil {
 			return err
 		}
 		return nil
@@ -842,40 +842,44 @@ func (oa *operationAdapter) AddDependency(dep core.OperationID) {
 	}
 }
 
-func (oa *operationAdapter) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Try ExecuteV2 first
+func (oa *operationAdapter) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Try Execute with ExecutionContext first
 	if op, ok := oa.op.(interface {
-		ExecuteV2(interface{}, *core.ExecutionContext, interface{}) error
+		Execute(interface{}, *core.ExecutionContext, interface{}) error
 	}); ok {
-		return op.ExecuteV2(ctx, execCtx, fsys)
+		return op.Execute(ctx, execCtx, fsys)
 	}
 
-	// Fallback to Execute if available
+	// Fallback to legacy Execute method
 	if op, ok := oa.op.(interface {
-		Execute(context.Context, interface{}) error
+		Execute(context.Context, filesystem.FileSystem) error
 	}); ok {
 		if ctxTyped, ok := ctx.(context.Context); ok {
-			return op.Execute(ctxTyped, fsys)
+			if fsTyped, ok := fsys.(filesystem.FileSystem); ok {
+				return op.Execute(ctxTyped, fsTyped)
+			}
 		}
 	}
 
-	return fmt.Errorf("operation does not implement ExecuteV2 or Execute methods")
+	return fmt.Errorf("operation does not implement Execute methods")
 }
 
-func (oa *operationAdapter) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Try ValidateV2 first
+func (oa *operationAdapter) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	// Try Validate with ExecutionContext first
 	if op, ok := oa.op.(interface {
-		ValidateV2(interface{}, *core.ExecutionContext, interface{}) error
+		Validate(interface{}, *core.ExecutionContext, interface{}) error
 	}); ok {
-		return op.ValidateV2(ctx, execCtx, fsys)
+		return op.Validate(ctx, execCtx, fsys)
 	}
 
-	// Fallback to Validate if available
+	// Fallback to legacy Validate method
 	if op, ok := oa.op.(interface {
-		Validate(context.Context, interface{}) error
+		Validate(context.Context, filesystem.FileSystem) error
 	}); ok {
 		if ctxTyped, ok := ctx.(context.Context); ok {
-			return op.Validate(ctxTyped, fsys)
+			if fsTyped, ok := fsys.(filesystem.FileSystem); ok {
+				return op.Validate(ctxTyped, fsTyped)
+			}
 		}
 	}
 

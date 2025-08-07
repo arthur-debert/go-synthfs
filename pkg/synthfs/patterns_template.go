@@ -98,25 +98,7 @@ func (op *WriteTemplateOperation) GetAllChecksums() map[string]*ChecksumRecord {
 	return nil
 }
 
-// ExecuteV2 is not implemented
-func (op *WriteTemplateOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	if contextOp, ok := ctx.(context.Context); ok {
-		if fsysOp, ok := fsys.(FileSystem); ok {
-			return op.Execute(contextOp, fsysOp)
-		}
-	}
-	return fmt.Errorf("ExecuteV2 not implemented for WriteTemplateOperation")
-}
 
-// ValidateV2 is not implemented
-func (op *WriteTemplateOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	if contextOp, ok := ctx.(context.Context); ok {
-		if fsysOp, ok := fsys.(FileSystem); ok {
-			return op.Validate(contextOp, fsysOp)
-		}
-	}
-	return fmt.Errorf("ValidateV2 not implemented for WriteTemplateOperation")
-}
 
 // Rollback removes the created file
 func (op *WriteTemplateOperation) Rollback(ctx context.Context, fsys FileSystem) error {

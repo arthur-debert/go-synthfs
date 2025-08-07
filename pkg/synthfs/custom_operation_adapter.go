@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 // CustomOperationAdapter adapts CustomOperation to implement the synthfs.Operation interface
@@ -41,21 +40,7 @@ func (a *CustomOperationAdapter) Validate(ctx context.Context, fsys FileSystem) 
 	return a.CustomOperation.Validate(ctx, fsys)
 }
 
-func (a *CustomOperationAdapter) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Convert interface{} to filesystem.FileSystem
-	if fs, ok := fsys.(filesystem.FileSystem); ok {
-		return a.CustomOperation.ExecuteV2(ctx, execCtx, fs)
-	}
-	return a.CustomOperation.ExecuteV2(ctx, execCtx, fsys.(filesystem.FileSystem))
-}
 
-func (a *CustomOperationAdapter) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Convert interface{} to filesystem.FileSystem
-	if fs, ok := fsys.(filesystem.FileSystem); ok {
-		return a.CustomOperation.ValidateV2(ctx, execCtx, fs)
-	}
-	return a.CustomOperation.ValidateV2(ctx, execCtx, fsys.(filesystem.FileSystem))
-}
 
 func (a *CustomOperationAdapter) Rollback(ctx context.Context, fsys FileSystem) error {
 	return a.CustomOperation.Rollback(ctx, fsys)

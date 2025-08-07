@@ -255,23 +255,6 @@ func (op *CreateArchiveOperation) createTarArchive(archivePath string, sources [
 	return fsys.WriteFile(archivePath, buf.Bytes(), 0644)
 }
 
-// ExecuteV2 performs the archive creation with execution context support.
-func (op *CreateArchiveOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Convert context
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
-
-	// Call the operation's Execute method with proper event handling
-	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
-}
-
-// ValidateV2 checks if the archive can be created using ExecutionContext.
-func (op *CreateArchiveOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	return validateV2Helper(op, ctx, execCtx, fsys)
-}
-
 // Validate checks if the archive can be created.
 func (op *CreateArchiveOperation) Validate(ctx context.Context, fsys filesystem.FileSystem) error {
 	// First do base validation
@@ -555,23 +538,6 @@ func matchesPatterns(name string, patterns []string) bool {
 	}
 
 	return false
-}
-
-// ExecuteV2 performs the unarchive with execution context support.
-func (op *UnarchiveOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Convert context
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
-
-	// Call the operation's Execute method with proper event handling
-	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
-}
-
-// ValidateV2 checks if the unarchive operation can be performed using ExecutionContext.
-func (op *UnarchiveOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	return validateV2Helper(op, ctx, execCtx, fsys)
 }
 
 // Validate checks if the unarchive operation can be performed.

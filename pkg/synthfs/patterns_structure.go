@@ -238,15 +238,7 @@ func (op *CreateStructureOperation) GetAllChecksums() map[string]*ChecksumRecord
 	return nil
 }
 
-// ExecuteV2 is not implemented
-func (op *CreateStructureOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return fmt.Errorf("ExecuteV2 not implemented for CreateStructureOperation")
-}
 
-// ValidateV2 is not implemented
-func (op *CreateStructureOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return fmt.Errorf("ValidateV2 not implemented for CreateStructureOperation")
-}
 
 // Rollback is not implemented yet
 func (op *CreateStructureOperation) Rollback(ctx context.Context, fsys FileSystem) error {

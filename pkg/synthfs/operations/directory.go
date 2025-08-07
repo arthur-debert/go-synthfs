@@ -66,23 +66,6 @@ func (op *CreateDirectoryOperation) Execute(ctx context.Context, fsys filesystem
 	return nil
 }
 
-// ExecuteV2 performs the directory creation with execution context support.
-func (op *CreateDirectoryOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Convert context
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
-
-	// Call the operation's Execute method with proper event handling
-	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
-}
-
-// ValidateV2 checks if the directory creation can be performed using ExecutionContext.
-func (op *CreateDirectoryOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	return validateV2Helper(op, ctx, execCtx, fsys)
-}
-
 // Validate checks if the directory can be created.
 func (op *CreateDirectoryOperation) Validate(ctx context.Context, fsys filesystem.FileSystem) error {
 	// First do base validation

@@ -175,15 +175,7 @@ func (op *CopyTreeOperation) GetAllChecksums() map[string]*ChecksumRecord {
 	return nil
 }
 
-// ExecuteV2 is not implemented
-func (op *CopyTreeOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return fmt.Errorf("ExecuteV2 not implemented for CopyTreeOperation")
-}
 
-// ValidateV2 is not implemented
-func (op *CopyTreeOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return fmt.Errorf("ValidateV2 not implemented for CopyTreeOperation")
-}
 
 // Rollback is not implemented yet
 func (op *CopyTreeOperation) Rollback(ctx context.Context, fsys FileSystem) error {
