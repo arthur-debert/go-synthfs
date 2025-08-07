@@ -13,8 +13,7 @@ import (
 )
 
 func TestShellCommand_OutputCapture(t *testing.T) {
-	// SKIPPED: Operation interface conversion failure after adapter removal - see issue REFAC:MISSING-BITS
-	t.Skip("Operation output capture needs adapter removal and direct interface implementation")
+	// Testing with direct execution - no more adapter conversions
 	
 	if runtime.GOOS == "windows" {
 		t.Skip("Shell command tests are Unix-specific")
@@ -185,8 +184,7 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 }
 
 func TestCustomOperation_OutputCapture(t *testing.T) {
-	// SKIPPED: Operation interface conversion failure after adapter removal - see issue REFAC:MISSING-BITS
-	t.Skip("Custom operation output capture needs adapter removal and direct interface implementation")
+	// Testing with direct execution - no more adapter conversions
 	
 	t.Run("custom operation with output", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
@@ -371,8 +369,7 @@ func TestCustomOperation_OutputCapture(t *testing.T) {
 }
 
 func TestOutputCapture_RealWorldExample(t *testing.T) {
-	// SKIPPED: Operation interface conversion failure after adapter removal - see issue REFAC:MISSING-BITS
-	t.Skip("Output capture real world example needs adapter removal and direct interface implementation")
+	// Testing with direct execution - no more adapter conversions
 	
 	if runtime.GOOS == "windows" {
 		t.Skip("Shell command tests are Unix-specific")

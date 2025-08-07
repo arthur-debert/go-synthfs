@@ -208,8 +208,7 @@ func TestSimpleBatchAPI(t *testing.T) {
 }
 
 func TestSimpleBatchWithRollback(t *testing.T) {
-	// SKIPPED: Error type mismatch after adapter removal - see issue REFAC:MISSING-BITS
-	t.Skip("Error handling needs to be aligned with original batch implementation")
+	// Testing error handling alignment with expected error types
 	
 	t.Run("Successful rollback", func(t *testing.T) {
 		ResetSequenceCounter()

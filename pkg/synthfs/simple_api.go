@@ -2,6 +2,8 @@ package synthfs
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
@@ -44,13 +46,11 @@ func Run(ctx context.Context, fs filesystem.FileSystem, ops ...Operation) (*Resu
 }
 
 // RunWithOptions executes operations with custom options.
-// It builds a pipeline with the given operations and runs it using the main executor.
-// This ensures that all operations are validated before execution begins.
+// This function directly executes operations without using the pipeline/adapter system,
+// providing a simpler and more direct execution path.
 func RunWithOptions(ctx context.Context, fs filesystem.FileSystem, options PipelineOptions, ops ...Operation) (*Result, error) {
 	// For the simple API, we disable prerequisite resolution by default to allow for the straightforward,
 	// ordered execution of operations without requiring explicit dependency declarations.
-	// For complex workflows with non-linear dependencies, users should use the
-	// BuildPipeline function directly to leverage the full capabilities of the dependency resolution engine.
 	options.ResolvePrerequisites = false
 
 	if options.DryRun {
@@ -63,6 +63,16 @@ func RunWithOptions(ctx context.Context, fs filesystem.FileSystem, options Pipel
 			Operations: []core.OperationResult{},
 			Duration:   0,
 		}, nil
+	}
+
+	// Check for duplicate operation IDs
+	idsSeen := make(map[core.OperationID]bool)
+	for _, op := range ops {
+		id := op.ID()
+		if idsSeen[id] {
+			return nil, fmt.Errorf("operation with ID '%s' already exists", id)
+		}
+		idsSeen[id] = true
 	}
 
 	// For the simple API, we need to validate operations with projected state
@@ -93,30 +103,206 @@ func RunWithOptions(ctx context.Context, fs filesystem.FileSystem, options Pipel
 		}
 	}
 	
-	// Build a pipeline from the operations.
-	pipeline := NewMemPipeline()
-	for _, op := range ops {
-		if err := pipeline.Add(op); err != nil {
-			// This can happen if there are duplicate operation IDs, for example.
-			return nil, err
-		}
-	}
-
-	// Wrap the pipeline to skip validation since we already validated with projected state
-	prevalidatedPipeline := newPrevalidatedPipeline(pipeline)
+	// Execute operations directly
+	result, err := executeOperationsDirect(ctx, fs, options, ops)
 	
-	// Use the main executor to run the pipeline.
-	executor := NewExecutor()
-	result := executor.RunWithOptions(ctx, prevalidatedPipeline, fs, options)
-
-	// The executor's result is already in the desired format.
-	// We just need to extract the top-level error for the return signature.
-	var err error
-	if !result.Success {
-		if len(result.Errors) > 0 {
-			err = result.Errors[0]
-		}
+	// Wrap errors to match original batch API behavior
+	if !result.Success && len(result.Errors) > 0 {
+		err = wrapExecutionError(result.Errors[0], result, ops)
 	}
 
 	return result, err
+}
+
+// wrapExecutionError wraps execution errors to match original batch API behavior
+func wrapExecutionError(execErr error, result *Result, ops []Operation) error {
+	if coreRollbackErr, ok := execErr.(*core.RollbackError); ok {
+		// Convert core.RollbackError to synthfs.RollbackError
+		rollbackErr := &RollbackError{
+			OriginalErr:  coreRollbackErr.OriginalErr,
+			RollbackErrs: make(map[core.OperationID]error),
+		}
+		
+		// Convert rollback errors slice to map
+		// We need to associate errors with operation IDs somehow
+		// For now, use operation order as a fallback
+		for i, err := range coreRollbackErr.RollbackErrs {
+			if i < len(ops) {
+				rollbackErr.RollbackErrs[ops[i].ID()] = err
+			}
+		}
+		
+		// Find which operation failed to create PipelineError context
+		failedIndex := -1
+		var failedOp Operation
+		var successfulOps []core.OperationID
+		
+		// Determine failed operation by examining result
+		for i, op := range ops {
+			if i < len(result.Operations) && result.Operations[i].Status == StatusSuccess {
+				successfulOps = append(successfulOps, op.ID())
+			} else {
+				failedIndex = i + 1 // 1-based index
+				failedOp = op
+				break
+			}
+		}
+		
+		// Wrap in PipelineError
+		return &PipelineError{
+			FailedOp:      failedOp,
+			FailedIndex:   failedIndex,
+			TotalOps:      len(ops),
+			Err:           rollbackErr,
+			SuccessfulOps: successfulOps,
+		}
+	}
+	
+	// For other error types, return as-is for now
+	return execErr
+}
+
+// executeOperationsDirect executes operations directly without pipeline adapters
+func executeOperationsDirect(ctx context.Context, fs filesystem.FileSystem, options PipelineOptions, ops []Operation) (*Result, error) {
+	start := time.Now()
+	
+	result := &Result{
+		Operations: []core.OperationResult{},
+		Errors:     []error{},
+		Success:    true,
+		RestoreOps: []interface{}{},
+	}
+
+	// Initialize backup budget if restorable mode is enabled
+	var budget *core.BackupBudget
+	if options.Restorable {
+		budget = &core.BackupBudget{
+			TotalMB:     float64(options.MaxBackupSizeMB),
+			RemainingMB: float64(options.MaxBackupSizeMB),
+			UsedMB:      0,
+		}
+		result.Budget = budget
+	}
+
+	// Create execution context
+	logger := DefaultLogger()
+	execCtx := &core.ExecutionContext{
+		Logger:   NewLoggerAdapter(&logger),
+		Budget:   budget,
+		EventBus: nil, // We can add this later if needed
+	}
+
+	// Track successful operations for rollback
+	var successfulOps []Operation
+	var reverseOps []interface{}
+
+	// Execute operations
+	for _, op := range ops {
+		// Generate reverse operations if restorable mode is enabled
+		var backupData *core.BackupData
+		var reverseErr error
+
+		if options.Restorable {
+			var opReverseOps []Operation
+			var backupDataInterface interface{}
+			
+			opReverseOps, backupDataInterface, reverseErr = op.ReverseOps(ctx, fs, budget)
+			if reverseErr != nil {
+				// Log warning but continue - backup is nice-to-have
+			} else {
+				// Convert to interface{} slice for result
+				for _, revOp := range opReverseOps {
+					reverseOps = append(reverseOps, revOp)
+				}
+				
+				// Extract backup data if available
+				if backupDataInterface != nil {
+					if bd, ok := backupDataInterface.(*core.BackupData); ok {
+						backupData = bd
+					}
+				}
+			}
+		}
+
+		opStart := time.Now()
+		err := op.Execute(ctx, execCtx, fs)
+		opDuration := time.Since(opStart)
+
+		opResult := core.OperationResult{
+			OperationID:  op.ID(),
+			Operation:    op,
+			Duration:     opDuration,
+			BackupData:   backupData,
+			BackupSizeMB: 0,
+		}
+
+		if backupData != nil {
+			opResult.BackupSizeMB = backupData.SizeMB
+		}
+
+		if err != nil {
+			opResult.Status = core.StatusFailure
+			opResult.Error = err
+			result.Success = false
+			result.Errors = append(result.Errors, fmt.Errorf("operation %s failed: %w", op.ID(), err))
+
+			// Restore budget if operation failed and backup was created
+			if options.Restorable && backupData != nil && budget != nil {
+				budget.RestoreBackup(backupData.SizeMB)
+			}
+		} else {
+			opResult.Status = core.StatusSuccess
+			successfulOps = append(successfulOps, op)
+
+			// Add reverse operations to result if available
+			if options.Restorable && len(reverseOps) > 0 {
+				result.RestoreOps = append(result.RestoreOps, reverseOps...)
+			}
+		}
+
+		result.Operations = append(result.Operations, opResult)
+
+		// Break after recording the failed operation if we should not continue on error
+		if err != nil && !options.ContinueOnError {
+			break
+		}
+	}
+
+	result.Duration = time.Since(start)
+
+	// Create rollback function
+	result.Rollback = func(ctx context.Context) error {
+		// Reverse the order of successful operations for rollback
+		for i := len(successfulOps) - 1; i >= 0; i-- {
+			if rollbackErr := successfulOps[i].Rollback(ctx, fs); rollbackErr != nil {
+				return rollbackErr
+			}
+		}
+		return nil
+	}
+
+	// Execute rollback if needed
+	if !result.Success && options.RollbackOnError && len(successfulOps) > 0 {
+		rollbackErrors := make([]error, 0)
+		
+		// Reverse the order of successful operations for rollback
+		for i := len(successfulOps) - 1; i >= 0; i-- {
+			if rollbackErr := successfulOps[i].Rollback(ctx, fs); rollbackErr != nil {
+				rollbackErrors = append(rollbackErrors, rollbackErr)
+			}
+		}
+
+		// If rollback had errors, wrap them
+		if len(rollbackErrors) > 0 {
+			originalErr := result.Errors[0] // Get the first (main) error
+			rollbackErr := &core.RollbackError{
+				OriginalErr:  originalErr,
+				RollbackErrs: rollbackErrors,
+			}
+			// Replace the first error with the rollback error
+			result.Errors[0] = rollbackErr
+		}
+	}
+
+	return result, nil
 }
