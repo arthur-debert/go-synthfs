@@ -85,7 +85,7 @@ func (op *CustomOperation) StoreOutput(key string, value interface{}) {
 }
 
 // Execute runs the custom operation's execute function.
-func (op *CustomOperation) Execute(ctx context.Context, fsys interface{}) error {
+func (op *CustomOperation) Execute(ctx context.Context, fsys filesystem.FileSystem) error {
 	if op.executeFunc == nil {
 		return fmt.Errorf("custom operation %s: no execute function defined", op.ID())
 	}
@@ -101,7 +101,7 @@ func (op *CustomOperation) Execute(ctx context.Context, fsys interface{}) error 
 
 // Validate runs the custom operation's validation function if defined.
 // If no validation function is set, it returns nil (assumes valid).
-func (op *CustomOperation) Validate(ctx context.Context, fsys interface{}) error {
+func (op *CustomOperation) Validate(ctx context.Context, fsys filesystem.FileSystem) error {
 	if op.validateFunc == nil {
 		// No validation function means operation is always valid
 		return nil
@@ -118,7 +118,7 @@ func (op *CustomOperation) Validate(ctx context.Context, fsys interface{}) error
 
 // Rollback runs the custom operation's rollback function if defined.
 // If no rollback function is set, it returns nil (no-op rollback).
-func (op *CustomOperation) Rollback(ctx context.Context, fsys interface{}) error {
+func (op *CustomOperation) Rollback(ctx context.Context, fsys filesystem.FileSystem) error {
 	if op.rollbackFunc == nil {
 		// No rollback function means nothing to rollback
 		return nil
@@ -134,7 +134,7 @@ func (op *CustomOperation) Rollback(ctx context.Context, fsys interface{}) error
 }
 
 // ExecuteV2 implements the V2 execution interface
-func (op *CustomOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (op *CustomOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	// Delegate to Execute with context type assertion
 	if contextOp, ok := ctx.(context.Context); ok {
 		return op.Execute(contextOp, fsys)
@@ -143,7 +143,7 @@ func (op *CustomOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionCon
 }
 
 // ValidateV2 implements the V2 validation interface
-func (op *CustomOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (op *CustomOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	// Delegate to Validate with context type assertion
 	if contextOp, ok := ctx.(context.Context); ok {
 		return op.Validate(contextOp, fsys)
@@ -153,10 +153,10 @@ func (op *CustomOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionCo
 
 // ReverseOps returns the operations needed to reverse this custom operation.
 // For custom operations, this creates a single operation that runs the rollback function.
-func (op *CustomOperation) ReverseOps(ctx context.Context, fsys interface{}, budget interface{}) ([]interface{}, interface{}, error) {
+func (op *CustomOperation) ReverseOps(ctx context.Context, fsys filesystem.FileSystem, budget interface{}) ([]operations.Operation, interface{}, error) {
 	if op.rollbackFunc == nil {
 		// No rollback means no reverse operations
-		return []interface{}{}, nil, nil
+		return []operations.Operation{}, nil, nil
 	}
 
 	// Create a reverse custom operation that runs the rollback function
@@ -165,7 +165,7 @@ func (op *CustomOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 		op.rollbackFunc,
 	).WithDescription(fmt.Sprintf("Reverse of %s", op.ID()))
 
-	return []interface{}{reverseOp}, nil, nil
+	return []operations.Operation{reverseOp}, nil, nil
 }
 
 // Ensure CustomOperation implements the Operation interface

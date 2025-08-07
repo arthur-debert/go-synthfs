@@ -1,13 +1,19 @@
 package operations_test
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"io/fs"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
 )
+
+var helpersErrNotExist = fs.ErrNotExist
 
 // TestFilesystemHelperMethods tests the filesystem interface detection through CreateFileOperation
 func TestFilesystemHelperMethods(t *testing.T) {
@@ -100,8 +106,8 @@ func TestFilesystemHelperMethods(t *testing.T) {
 			t.Error("Expected error for filesystem without WriteFile")
 		}
 
-		if err.Error() != "filesystem does not support WriteFile" {
-			t.Errorf("Expected 'filesystem does not support WriteFile' error, got: %s", err.Error())
+		if !strings.Contains(err.Error(), "filesystem does not support WriteFile") {
+			t.Errorf("Expected error containing 'filesystem does not support WriteFile', got: %s", err.Error())
 		}
 	})
 
@@ -121,8 +127,8 @@ func TestFilesystemHelperMethods(t *testing.T) {
 			t.Error("Expected error for filesystem without MkdirAll")
 		}
 
-		if err.Error() != "filesystem does not support MkdirAll" {
-			t.Errorf("Expected 'filesystem does not support MkdirAll' error, got: %s", err.Error())
+		if !strings.Contains(err.Error(), "filesystem does not support MkdirAll") {
+			t.Errorf("Expected error containing 'filesystem does not support MkdirAll', got: %s", err.Error())
 		}
 	})
 
@@ -184,20 +190,66 @@ func TestFilesystemHelperMethods(t *testing.T) {
 
 // Helper filesystem types for testing interface detection
 
-// FilesystemWithInterfacePerm implements WriteFile/MkdirAll with interface{} perm
+// FilesystemWithInterfacePerm implements WriteFile/MkdirAll with fs.FileMode perm (updated from interface{})
 type FilesystemWithInterfacePerm struct {
 	files map[string][]byte
 	dirs  map[string]bool
 }
 
-func (fs *FilesystemWithInterfacePerm) WriteFile(name string, data []byte, perm interface{}) error {
+func (fs *FilesystemWithInterfacePerm) WriteFile(name string, data []byte, perm fs.FileMode) error {
 	fs.files[name] = data
 	return nil
 }
 
-func (fs *FilesystemWithInterfacePerm) MkdirAll(path string, perm interface{}) error {
+func (fs *FilesystemWithInterfacePerm) MkdirAll(path string, perm fs.FileMode) error {
 	fs.dirs[path] = true
 	return nil
+}
+
+func (fs *FilesystemWithInterfacePerm) Open(name string) (fs.File, error) {
+	if content, ok := fs.files[name]; ok {
+		return &mockFile{Reader: bytes.NewReader(content), content: content, name: name}, nil
+	}
+	return nil, helpersErrNotExist
+}
+
+func (fs *FilesystemWithInterfacePerm) Stat(name string) (fs.FileInfo, error) {
+	if _, ok := fs.files[name]; ok {
+		return &mockFileInfo{name: name, size: int64(len(fs.files[name]))}, nil
+	}
+	if _, ok := fs.dirs[name]; ok {
+		return &mockFileInfo{name: name, isDir: true}, nil
+	}
+	return nil, helpersErrNotExist
+}
+
+func (fs *FilesystemWithInterfacePerm) Remove(name string) error {
+	delete(fs.files, name)
+	delete(fs.dirs, name)
+	return nil
+}
+
+func (fs *FilesystemWithInterfacePerm) RemoveAll(path string) error {
+	delete(fs.files, path)
+	delete(fs.dirs, path)
+	return nil
+}
+
+func (fs *FilesystemWithInterfacePerm) Symlink(oldname, newname string) error {
+	return errors.New("symlink not supported")
+}
+
+func (fs *FilesystemWithInterfacePerm) Readlink(name string) (string, error) {
+	return "", errors.New("readlink not supported")
+}
+
+func (fs *FilesystemWithInterfacePerm) Rename(oldpath, newpath string) error {
+	if content, ok := fs.files[oldpath]; ok {
+		fs.files[newpath] = content
+		delete(fs.files, oldpath)
+		return nil
+	}
+	return helpersErrNotExist
 }
 
 // FilesystemWithFileModePerm implements WriteFile/MkdirAll with fs.FileMode perm
@@ -220,11 +272,89 @@ func (fs *FilesystemWithFileModePerm) MkdirAll(path string, perm fs.FileMode) er
 	return nil
 }
 
+func (fs *FilesystemWithFileModePerm) Open(name string) (fs.File, error) {
+	if content, ok := fs.files[name]; ok {
+		return &mockFile{Reader: bytes.NewReader(content), content: content, name: name}, nil
+	}
+	return nil, helpersErrNotExist
+}
+
+func (fs *FilesystemWithFileModePerm) Stat(name string) (fs.FileInfo, error) {
+	if _, ok := fs.files[name]; ok {
+		return &mockFileInfo{name: name, size: int64(len(fs.files[name]))}, nil
+	}
+	if _, ok := fs.dirs[name]; ok {
+		return &mockFileInfo{name: name, isDir: true}, nil
+	}
+	return nil, helpersErrNotExist
+}
+
+func (fs *FilesystemWithFileModePerm) Remove(name string) error {
+	delete(fs.files, name)
+	delete(fs.dirs, name)
+	return nil
+}
+
+func (fs *FilesystemWithFileModePerm) RemoveAll(path string) error {
+	delete(fs.files, path)
+	delete(fs.dirs, path)
+	return nil
+}
+
+func (fs *FilesystemWithFileModePerm) Symlink(oldname, newname string) error {
+	return errors.New("symlink not supported")
+}
+
+func (fs *FilesystemWithFileModePerm) Readlink(name string) (string, error) {
+	return "", errors.New("readlink not supported")
+}
+
+func (fs *FilesystemWithFileModePerm) Rename(oldpath, newpath string) error {
+	if content, ok := fs.files[oldpath]; ok {
+		fs.files[newpath] = content
+		delete(fs.files, oldpath)
+		return nil
+	}
+	return helpersErrNotExist
+}
+
 // FilesystemWithoutWriteFile has no WriteFile method
 type FilesystemWithoutWriteFile struct{}
 
 func (fs *FilesystemWithoutWriteFile) MkdirAll(path string, perm fs.FileMode) error {
 	return nil
+}
+
+func (fs *FilesystemWithoutWriteFile) Open(name string) (fs.File, error) {
+	return nil, helpersErrNotExist
+}
+
+func (fs *FilesystemWithoutWriteFile) Stat(name string) (fs.FileInfo, error) {
+	return nil, helpersErrNotExist
+}
+
+func (fs *FilesystemWithoutWriteFile) Remove(name string) error {
+	return nil
+}
+
+func (fs *FilesystemWithoutWriteFile) RemoveAll(path string) error {
+	return nil
+}
+
+func (fs *FilesystemWithoutWriteFile) Symlink(oldname, newname string) error {
+	return errors.New("symlink not supported")
+}
+
+func (fs *FilesystemWithoutWriteFile) Readlink(name string) (string, error) {
+	return "", errors.New("readlink not supported")
+}
+
+func (fs *FilesystemWithoutWriteFile) Rename(oldpath, newpath string) error {
+	return helpersErrNotExist
+}
+
+func (fs *FilesystemWithoutWriteFile) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	return errors.New("filesystem does not support WriteFile")
 }
 
 // FilesystemWithoutMkdirAll has no MkdirAll method
@@ -233,3 +363,66 @@ type FilesystemWithoutMkdirAll struct{}
 func (fs *FilesystemWithoutMkdirAll) WriteFile(name string, data []byte, perm fs.FileMode) error {
 	return nil
 }
+
+func (fs *FilesystemWithoutMkdirAll) Open(name string) (fs.File, error) {
+	return nil, helpersErrNotExist
+}
+
+func (fs *FilesystemWithoutMkdirAll) Stat(name string) (fs.FileInfo, error) {
+	return nil, helpersErrNotExist
+}
+
+func (fs *FilesystemWithoutMkdirAll) Remove(name string) error {
+	return nil
+}
+
+func (fs *FilesystemWithoutMkdirAll) RemoveAll(path string) error {
+	return nil
+}
+
+func (fs *FilesystemWithoutMkdirAll) Symlink(oldname, newname string) error {
+	return errors.New("symlink not supported")
+}
+
+func (fs *FilesystemWithoutMkdirAll) Readlink(name string) (string, error) {
+	return "", errors.New("readlink not supported")
+}
+
+func (fs *FilesystemWithoutMkdirAll) Rename(oldpath, newpath string) error {
+	return helpersErrNotExist
+}
+
+func (fs *FilesystemWithoutMkdirAll) MkdirAll(path string, perm fs.FileMode) error {
+	return errors.New("filesystem does not support MkdirAll")
+}
+
+// Helper structs for mock filesystem implementations
+
+type mockFile struct {
+	*bytes.Reader
+	content []byte
+	name    string
+}
+
+func (m *mockFile) Close() error                { return nil }
+func (m *mockFile) Stat() (fs.FileInfo, error) { 
+	return &mockFileInfo{name: m.name, size: int64(len(m.content))}, nil 
+}
+
+type mockFileInfo struct {
+	name  string
+	size  int64
+	isDir bool
+}
+
+func (m *mockFileInfo) Name() string       { return m.name }
+func (m *mockFileInfo) Size() int64        { return m.size }
+func (m *mockFileInfo) Mode() fs.FileMode  { 
+	if m.isDir {
+		return fs.ModeDir | 0755
+	}
+	return 0644
+}
+func (m *mockFileInfo) ModTime() time.Time { return time.Time{} }
+func (m *mockFileInfo) IsDir() bool        { return m.isDir }
+func (m *mockFileInfo) Sys() interface{}   { return nil }

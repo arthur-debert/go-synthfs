@@ -2,6 +2,7 @@ package operations_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -51,7 +52,8 @@ func TestSymlinkOperations(t *testing.T) {
 	})
 
 	t.Run("create symlink execution not supported", func(t *testing.T) {
-		fs := NewMockFilesystem()
+		// Use a filesystem that doesn't support symlinks
+		fs := &noSymlinkFS{NewMockFilesystem()}
 
 		op := operations.NewCreateSymlinkOperation(core.OperationID("test-op"), "test/link")
 		// Set symlink item with target
@@ -114,4 +116,13 @@ func TestSymlinkOperations(t *testing.T) {
 			t.Error("Expected reverse op to be DeleteOperation")
 		}
 	})
+}
+
+// noSymlinkFS wraps a filesystem and always returns an error for Symlink operations
+type noSymlinkFS struct {
+	*MockFilesystem
+}
+
+func (fs *noSymlinkFS) Symlink(oldname, newname string) error {
+	return fmt.Errorf("filesystem does not support Symlink")
 }

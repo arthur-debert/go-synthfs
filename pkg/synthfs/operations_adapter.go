@@ -6,6 +6,7 @@ import (
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 // OperationsPackageAdapter adapts an operations.Operation to implement the main package Operation interface.
@@ -49,12 +50,20 @@ func (a *OperationsPackageAdapter) Validate(ctx context.Context, fsys FileSystem
 
 // ExecuteV2 performs the operation using ExecutionContext.
 func (a *OperationsPackageAdapter) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return a.opsOperation.ExecuteV2(ctx, execCtx, fsys)
+	// Convert interface{} to filesystem.FileSystem
+	if fs, ok := fsys.(filesystem.FileSystem); ok {
+		return a.opsOperation.ExecuteV2(ctx, execCtx, fs)
+	}
+	return a.opsOperation.ExecuteV2(ctx, execCtx, fsys.(filesystem.FileSystem))
 }
 
 // ValidateV2 checks if the operation can be performed using ExecutionContext.
 func (a *OperationsPackageAdapter) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return a.opsOperation.ValidateV2(ctx, execCtx, fsys)
+	// Convert interface{} to filesystem.FileSystem
+	if fs, ok := fsys.(filesystem.FileSystem); ok {
+		return a.opsOperation.ValidateV2(ctx, execCtx, fs)
+	}
+	return a.opsOperation.ValidateV2(ctx, execCtx, fsys.(filesystem.FileSystem))
 }
 
 // Rollback undoes the operation.
@@ -117,14 +126,14 @@ func (a *OperationsPackageAdapter) GetAllChecksums() map[string]*ChecksumRecord 
 func (a *OperationsPackageAdapter) ReverseOps(ctx context.Context, fsys FileSystem, budget *core.BackupBudget) ([]Operation, *core.BackupData, error) {
 	ops, data, err := a.opsOperation.ReverseOps(ctx, fsys, budget)
 
-	// Convert operations
+	// Convert operations - all operations from operations package need adaptation
 	var result []Operation
 	for _, op := range ops {
 		if opsOp, ok := op.(operations.Operation); ok {
 			result = append(result, NewOperationsPackageAdapter(opsOp))
-		} else if mainOp, ok := op.(Operation); ok {
-			result = append(result, mainOp)
 		}
+		// Note: operations.Operation and main.Operation interfaces are now incompatible
+		// due to different ExecuteV2 signatures, so we can't cast between them
 	}
 
 	// Convert backup data

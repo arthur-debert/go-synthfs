@@ -1,14 +1,21 @@
 package operations_test
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
 )
+
+var symlinkErrNotExist = fs.ErrNotExist
+var symlinkModeSymlink = fs.ModeSymlink
 
 // TestSymlinkExecuteErrorPaths tests the untested 52.4% of symlink Execute method
 func TestSymlinkExecuteErrorPaths(t *testing.T) {
@@ -271,9 +278,69 @@ func (fs *MockFilesystemWithSymlink) Symlink(oldname, newname string) error {
 	return nil
 }
 
-func (fs *MockFilesystemWithSymlink) MkdirAll(path string, perm interface{}) error {
+func (fs *MockFilesystemWithSymlink) MkdirAll(path string, perm fs.FileMode) error {
 	fs.dirs[path] = true
 	return nil
+}
+
+func (fs *MockFilesystemWithSymlink) Open(name string) (fs.File, error) {
+	if content, ok := fs.files[name]; ok {
+		return &symlinkMockFile{Reader: bytes.NewReader(content), content: content, name: name}, nil
+	}
+	return nil, symlinkErrNotExist
+}
+
+func (fs *MockFilesystemWithSymlink) Stat(name string) (fs.FileInfo, error) {
+	if _, ok := fs.files[name]; ok {
+		return &symlinkMockFileInfo{name: name, size: int64(len(fs.files[name]))}, nil
+	}
+	if _, ok := fs.dirs[name]; ok {
+		return &symlinkMockFileInfo{name: name, isDir: true}, nil
+	}
+	if _, ok := fs.symlinks[name]; ok {
+		return &symlinkMockFileInfo{name: name, mode: symlinkModeSymlink}, nil
+	}
+	return nil, symlinkErrNotExist
+}
+
+func (fs *MockFilesystemWithSymlink) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	fs.files[name] = data
+	return nil
+}
+
+func (fs *MockFilesystemWithSymlink) Remove(name string) error {
+	delete(fs.files, name)
+	delete(fs.dirs, name)
+	delete(fs.symlinks, name)
+	return nil
+}
+
+func (fs *MockFilesystemWithSymlink) RemoveAll(path string) error {
+	delete(fs.files, path)
+	delete(fs.dirs, path)
+	delete(fs.symlinks, path)
+	return nil
+}
+
+func (fs *MockFilesystemWithSymlink) Readlink(name string) (string, error) {
+	if target, ok := fs.symlinks[name]; ok {
+		return target, nil
+	}
+	return "", errors.New("not a symlink")
+}
+
+func (fs *MockFilesystemWithSymlink) Rename(oldpath, newpath string) error {
+	if content, ok := fs.files[oldpath]; ok {
+		fs.files[newpath] = content
+		delete(fs.files, oldpath)
+		return nil
+	}
+	if target, ok := fs.symlinks[oldpath]; ok {
+		fs.symlinks[newpath] = target
+		delete(fs.symlinks, oldpath)
+		return nil
+	}
+	return symlinkErrNotExist
 }
 
 // FilesystemWithoutSymlink has no Symlink method
@@ -282,9 +349,60 @@ type FilesystemWithoutSymlink struct {
 	dirs  map[string]bool
 }
 
-func (fs *FilesystemWithoutSymlink) MkdirAll(path string, perm interface{}) error {
+func (fs *FilesystemWithoutSymlink) MkdirAll(path string, perm fs.FileMode) error {
 	fs.dirs[path] = true
 	return nil
+}
+
+func (fs *FilesystemWithoutSymlink) Open(name string) (fs.File, error) {
+	if content, ok := fs.files[name]; ok {
+		return &symlinkMockFile{Reader: bytes.NewReader(content), content: content, name: name}, nil
+	}
+	return nil, symlinkErrNotExist
+}
+
+func (fs *FilesystemWithoutSymlink) Stat(name string) (fs.FileInfo, error) {
+	if _, ok := fs.files[name]; ok {
+		return &symlinkMockFileInfo{name: name, size: int64(len(fs.files[name]))}, nil
+	}
+	if _, ok := fs.dirs[name]; ok {
+		return &symlinkMockFileInfo{name: name, isDir: true}, nil
+	}
+	return nil, symlinkErrNotExist
+}
+
+func (fs *FilesystemWithoutSymlink) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	fs.files[name] = data
+	return nil
+}
+
+func (fs *FilesystemWithoutSymlink) Remove(name string) error {
+	delete(fs.files, name)
+	delete(fs.dirs, name)
+	return nil
+}
+
+func (fs *FilesystemWithoutSymlink) RemoveAll(path string) error {
+	delete(fs.files, path)
+	delete(fs.dirs, path)
+	return nil
+}
+
+func (fs *FilesystemWithoutSymlink) Readlink(name string) (string, error) {
+	return "", errors.New("readlink not supported")
+}
+
+func (fs *FilesystemWithoutSymlink) Rename(oldpath, newpath string) error {
+	if content, ok := fs.files[oldpath]; ok {
+		fs.files[newpath] = content
+		delete(fs.files, oldpath)
+		return nil
+	}
+	return symlinkErrNotExist
+}
+
+func (fs *FilesystemWithoutSymlink) Symlink(oldname, newname string) error {
+	return errors.New("filesystem does not support Symlink")
 }
 
 // FilesystemWithSymlinkButNoMkdirAll has Symlink but no MkdirAll
@@ -297,6 +415,51 @@ func (fs *FilesystemWithSymlinkButNoMkdirAll) Symlink(oldname, newname string) e
 	return nil
 }
 
+func (fs *FilesystemWithSymlinkButNoMkdirAll) Open(name string) (fs.File, error) {
+	return nil, symlinkErrNotExist
+}
+
+func (fs *FilesystemWithSymlinkButNoMkdirAll) Stat(name string) (fs.FileInfo, error) {
+	if _, ok := fs.symlinks[name]; ok {
+		return &symlinkMockFileInfo{name: name, mode: symlinkModeSymlink}, nil
+	}
+	return nil, symlinkErrNotExist
+}
+
+func (fs *FilesystemWithSymlinkButNoMkdirAll) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	return errors.New("writefile not supported")
+}
+
+func (fs *FilesystemWithSymlinkButNoMkdirAll) Remove(name string) error {
+	delete(fs.symlinks, name)
+	return nil
+}
+
+func (fs *FilesystemWithSymlinkButNoMkdirAll) RemoveAll(path string) error {
+	delete(fs.symlinks, path)
+	return nil
+}
+
+func (fs *FilesystemWithSymlinkButNoMkdirAll) Readlink(name string) (string, error) {
+	if target, ok := fs.symlinks[name]; ok {
+		return target, nil
+	}
+	return "", errors.New("not a symlink")
+}
+
+func (fs *FilesystemWithSymlinkButNoMkdirAll) Rename(oldpath, newpath string) error {
+	if target, ok := fs.symlinks[oldpath]; ok {
+		fs.symlinks[newpath] = target
+		delete(fs.symlinks, oldpath)
+		return nil
+	}
+	return symlinkErrNotExist
+}
+
+func (fs *FilesystemWithSymlinkButNoMkdirAll) MkdirAll(path string, perm fs.FileMode) error {
+	return errors.New("filesystem does not support MkdirAll")
+}
+
 // FilesystemWithFailingSymlink always fails Symlink calls
 type FilesystemWithFailingSymlink struct {
 	dirs map[string]bool
@@ -306,9 +469,42 @@ func (fs *FilesystemWithFailingSymlink) Symlink(oldname, newname string) error {
 	return fmt.Errorf("symlink creation failed")
 }
 
-func (fs *FilesystemWithFailingSymlink) MkdirAll(path string, perm interface{}) error {
+func (fs *FilesystemWithFailingSymlink) MkdirAll(path string, perm fs.FileMode) error {
 	fs.dirs[path] = true
 	return nil
+}
+
+func (fs *FilesystemWithFailingSymlink) Open(name string) (fs.File, error) {
+	return nil, symlinkErrNotExist
+}
+
+func (fs *FilesystemWithFailingSymlink) Stat(name string) (fs.FileInfo, error) {
+	if _, ok := fs.dirs[name]; ok {
+		return &symlinkMockFileInfo{name: name, isDir: true}, nil
+	}
+	return nil, symlinkErrNotExist
+}
+
+func (fs *FilesystemWithFailingSymlink) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	return errors.New("writefile not supported")
+}
+
+func (fs *FilesystemWithFailingSymlink) Remove(name string) error {
+	delete(fs.dirs, name)
+	return nil
+}
+
+func (fs *FilesystemWithFailingSymlink) RemoveAll(path string) error {
+	delete(fs.dirs, path)
+	return nil
+}
+
+func (fs *FilesystemWithFailingSymlink) Readlink(name string) (string, error) {
+	return "", errors.New("readlink not supported")
+}
+
+func (fs *FilesystemWithFailingSymlink) Rename(oldpath, newpath string) error {
+	return symlinkErrNotExist
 }
 
 // FilesystemWithFailingMkdirAll always fails MkdirAll calls
@@ -321,6 +517,82 @@ func (fs *FilesystemWithFailingMkdirAll) Symlink(oldname, newname string) error 
 	return nil
 }
 
-func (fs *FilesystemWithFailingMkdirAll) MkdirAll(path string, perm interface{}) error {
+func (fs *FilesystemWithFailingMkdirAll) MkdirAll(path string, perm fs.FileMode) error {
 	return fmt.Errorf("mkdir failed")
 }
+
+func (fs *FilesystemWithFailingMkdirAll) Open(name string) (fs.File, error) {
+	return nil, symlinkErrNotExist
+}
+
+func (fs *FilesystemWithFailingMkdirAll) Stat(name string) (fs.FileInfo, error) {
+	if _, ok := fs.symlinks[name]; ok {
+		return &symlinkMockFileInfo{name: name, mode: symlinkModeSymlink}, nil
+	}
+	return nil, symlinkErrNotExist
+}
+
+func (fs *FilesystemWithFailingMkdirAll) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	return errors.New("writefile not supported")
+}
+
+func (fs *FilesystemWithFailingMkdirAll) Remove(name string) error {
+	delete(fs.symlinks, name)
+	return nil
+}
+
+func (fs *FilesystemWithFailingMkdirAll) RemoveAll(path string) error {
+	delete(fs.symlinks, path)
+	return nil
+}
+
+func (fs *FilesystemWithFailingMkdirAll) Readlink(name string) (string, error) {
+	if target, ok := fs.symlinks[name]; ok {
+		return target, nil
+	}
+	return "", errors.New("not a symlink")
+}
+
+func (fs *FilesystemWithFailingMkdirAll) Rename(oldpath, newpath string) error {
+	if target, ok := fs.symlinks[oldpath]; ok {
+		fs.symlinks[newpath] = target
+		delete(fs.symlinks, oldpath)
+		return nil
+	}
+	return symlinkErrNotExist
+}
+
+// Helper structs for symlink test mock filesystem implementations
+
+type symlinkMockFile struct {
+	*bytes.Reader
+	content []byte
+	name    string
+}
+
+func (m *symlinkMockFile) Close() error                { return nil }
+func (m *symlinkMockFile) Stat() (fs.FileInfo, error) { 
+	return &symlinkMockFileInfo{name: m.name, size: int64(len(m.content))}, nil 
+}
+
+type symlinkMockFileInfo struct {
+	name  string
+	size  int64
+	isDir bool
+	mode  fs.FileMode
+}
+
+func (m *symlinkMockFileInfo) Name() string       { return m.name }
+func (m *symlinkMockFileInfo) Size() int64        { return m.size }
+func (m *symlinkMockFileInfo) Mode() fs.FileMode  { 
+	if m.mode != 0 {
+		return m.mode
+	}
+	if m.isDir {
+		return fs.ModeDir | 0755
+	}
+	return 0644
+}
+func (m *symlinkMockFileInfo) ModTime() time.Time { return time.Time{} }
+func (m *symlinkMockFileInfo) IsDir() bool        { return m.isDir }
+func (m *symlinkMockFileInfo) Sys() interface{}   { return nil }

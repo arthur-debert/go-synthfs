@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"os"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 // CreateDirectoryOperation represents a directory creation operation with clean interfaces.
@@ -35,8 +35,8 @@ func (op *CreateDirectoryOperation) Prerequisites() []core.Prerequisite {
 	return prereqs
 }
 
-// Execute creates the directory. The filesystem interface is generic to avoid coupling.
-func (op *CreateDirectoryOperation) Execute(ctx context.Context, fsys interface{}) error {
+// Execute creates the directory.
+func (op *CreateDirectoryOperation) Execute(ctx context.Context, fsys filesystem.FileSystem) error {
 	item := op.GetItem()
 	if item == nil {
 		return fmt.Errorf("create_directory operation requires an item")
@@ -48,11 +48,7 @@ func (op *CreateDirectoryOperation) Execute(ctx context.Context, fsys interface{
 		return fmt.Errorf("item does not implement ItemInterface")
 	}
 
-	// Get filesystem methods through interface assertions
-	mkdirAll, ok := getMkdirAllMethod(fsys)
-	if !ok {
-		return fmt.Errorf("filesystem does not support MkdirAll")
-	}
+	// Create the directory with all parent directories
 
 	// Get mode from item or use default
 	var mode interface{} = fs.FileMode(0755) // Default for directories
@@ -63,7 +59,7 @@ func (op *CreateDirectoryOperation) Execute(ctx context.Context, fsys interface{
 	}
 
 	// Create the directory with all parent directories
-	if err := mkdirAll(dirItem.Path(), mode); err != nil {
+	if err := fsys.MkdirAll(dirItem.Path(), mode.(fs.FileMode)); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
@@ -71,7 +67,7 @@ func (op *CreateDirectoryOperation) Execute(ctx context.Context, fsys interface{
 }
 
 // ExecuteV2 performs the directory creation with execution context support.
-func (op *CreateDirectoryOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (op *CreateDirectoryOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	// Convert context
 	context, ok := ctx.(context.Context)
 	if !ok {
@@ -83,12 +79,12 @@ func (op *CreateDirectoryOperation) ExecuteV2(ctx interface{}, execCtx *core.Exe
 }
 
 // ValidateV2 checks if the directory creation can be performed using ExecutionContext.
-func (op *CreateDirectoryOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (op *CreateDirectoryOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	return validateV2Helper(op, ctx, execCtx, fsys)
 }
 
 // Validate checks if the directory can be created.
-func (op *CreateDirectoryOperation) Validate(ctx context.Context, fsys interface{}) error {
+func (op *CreateDirectoryOperation) Validate(ctx context.Context, fsys filesystem.FileSystem) error {
 	// First do base validation
 	if err := op.BaseOperation.Validate(ctx, fsys); err != nil {
 		return err
@@ -126,18 +122,15 @@ func (op *CreateDirectoryOperation) Validate(ctx context.Context, fsys interface
 	}
 
 	// Check if path already exists
-	stat, ok := getStatMethod(fsys)
-	if ok {
-		if info, err := stat(op.description.Path); err == nil {
-			if isDir, ok := info.(interface{ IsDir() bool }); ok && isDir.IsDir() {
-				// Directory already exists - this is okay (idempotent)
-				return nil
-			} else {
-				return &core.ValidationError{
-					OperationID:   op.ID(),
-					OperationDesc: op.Describe(),
-					Reason:        "path exists but is not a directory",
-				}
+	if info, err := fsys.Stat(op.description.Path); err == nil {
+		if info.IsDir() {
+			// Directory already exists - this is okay (idempotent)
+			return nil
+		} else {
+			return &core.ValidationError{
+				OperationID:   op.ID(),
+				OperationDesc: op.Describe(),
+				Reason:        "path exists but is not a directory",
 			}
 		}
 	}
@@ -146,14 +139,9 @@ func (op *CreateDirectoryOperation) Validate(ctx context.Context, fsys interface
 }
 
 // Rollback removes the created directory.
-func (op *CreateDirectoryOperation) Rollback(ctx context.Context, fsys interface{}) error {
-	remove, ok := getRemoveMethod(fsys)
-	if !ok {
-		return fmt.Errorf("filesystem does not support Remove")
-	}
-
+func (op *CreateDirectoryOperation) Rollback(ctx context.Context, fsys filesystem.FileSystem) error {
 	// Remove the directory
-	if err := remove(op.description.Path); err != nil {
+	if err := fsys.Remove(op.description.Path); err != nil {
 		// If it doesn't exist, that's fine
 		return nil
 	}
@@ -161,49 +149,3 @@ func (op *CreateDirectoryOperation) Rollback(ctx context.Context, fsys interface
 	return nil
 }
 
-// Helper function to get Stat method from filesystem
-func getStatMethod(fsys interface{}) (func(string) (interface{}, error), bool) {
-	// Try os.FileInfo version
-	type statFSFileInfo interface {
-		Stat(name string) (os.FileInfo, error)
-	}
-
-	if fs, ok := fsys.(statFSFileInfo); ok {
-		return func(name string) (interface{}, error) {
-			return fs.Stat(name)
-		}, true
-	}
-
-	// Try fs.FileInfo version
-	type statFSInfo interface {
-		Stat(name string) (fs.FileInfo, error)
-	}
-
-	if fs, ok := fsys.(statFSInfo); ok {
-		return func(name string) (interface{}, error) {
-			return fs.Stat(name)
-		}, true
-	}
-
-	// Try interface{} version
-	type statFS interface {
-		Stat(name string) (interface{}, error)
-	}
-
-	if fs, ok := fsys.(statFS); ok {
-		return fs.Stat, true
-	}
-	return nil, false
-}
-
-// Helper function to get Remove method from filesystem
-func getRemoveMethod(fsys interface{}) (func(string) error, bool) {
-	type removeFS interface {
-		Remove(name string) error
-	}
-
-	if fs, ok := fsys.(removeFS); ok {
-		return fs.Remove, true
-	}
-	return nil, false
-}
