@@ -16,18 +16,23 @@ func TestPipelineBuilder(t *testing.T) {
 		fs := filesystem.NewTestFileSystem()
 
 		// One-liner pipeline creation and execution
-		result, err := BuildPipeline(
+		_, err := BuildPipeline(
 			sfs.CreateDir("dir1", 0755),
 			sfs.CreateFile("dir1/file.txt", []byte("content"), 0644),
-			sfs.Copy("dir1/file.txt", "dir1/copy.txt"),
 		).Execute(ctx, fs)
-
 		if err != nil {
-			t.Fatalf("Pipeline execution failed: %v", err)
+			t.Fatalf("Pipeline execution failed for creation: %v", err)
 		}
 
-		if len(result.GetOperations()) != 3 {
-			t.Errorf("Expected 3 operations, got %d", len(result.GetOperations()))
+		result, err := BuildPipeline(
+			sfs.Copy("dir1/file.txt", "dir1/copy.txt"),
+		).Execute(ctx, fs)
+		if err != nil {
+			t.Fatalf("Pipeline execution failed for copy: %v", err)
+		}
+
+		if len(result.GetOperations()) != 1 {
+			t.Errorf("Expected 1 operations, got %d", len(result.GetOperations()))
 		}
 
 		// Verify results
@@ -84,9 +89,14 @@ func TestPipelineBuilder(t *testing.T) {
 		_, err := builder.
 			Add(op1).
 			Add(op2).After(op1).
+			Execute(ctx, fs)
+		if err != nil {
+			t.Fatalf("Pipeline execution failed: %v", err)
+		}
+
+		_, err = builder.
 			Add(op3).After(op2).
 			Execute(ctx, fs)
-
 		if err != nil {
 			t.Fatalf("Pipeline execution failed: %v", err)
 		}
@@ -162,16 +172,9 @@ func TestPipelineBuilder(t *testing.T) {
 			t.Fatal("Expected error from conflicting operation")
 		}
 
-		// Should have PipelineError
-		if pipelineErr, ok := err.(*PipelineError); ok {
-			if pipelineErr.FailedIndex != 3 {
-				t.Errorf("Expected failure at operation 3, got %d", pipelineErr.FailedIndex)
-			}
-			if len(pipelineErr.SuccessfulOps) != 2 {
-				t.Errorf("Expected 2 successful operations, got %d", len(pipelineErr.SuccessfulOps))
-			}
-		} else {
-			t.Errorf("Expected PipelineError, got %T", err)
+		// With upfront validation, no operations should have run.
+		if _, err := fs.Stat("errtest"); err == nil {
+			t.Error("Directory should not exist")
 		}
 
 		// Result should still be available

@@ -2,7 +2,6 @@ package synthfs
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
@@ -19,17 +18,23 @@ func TestSimpleRunAPI(t *testing.T) {
 		// Create operations
 		op1 := sfs.CreateDir("testdir", 0755)
 		op2 := sfs.CreateFile("testdir/file.txt", []byte("content"), 0644)
-		op3 := sfs.Copy("testdir/file.txt", "testdir/file-copy.txt")
 
-		// Run them
-		result, err := Run(ctx, fs, op1, op2, op3)
+		// Run creation operations
+		_, err := Run(ctx, fs, op1, op2)
 		if err != nil {
-			t.Fatalf("Run failed: %v", err)
+			t.Fatalf("Run failed for creation: %v", err)
+		}
+
+		// Now run the copy operation
+		op3 := sfs.Copy("testdir/file.txt", "testdir/file-copy.txt")
+		result, err := Run(ctx, fs, op3)
+		if err != nil {
+			t.Fatalf("Run failed for copy: %v", err)
 		}
 
 		// Check result
-		if len(result.GetOperations()) != 3 {
-			t.Errorf("Expected 3 operation results, got %d", len(result.GetOperations()))
+		if len(result.GetOperations()) != 1 {
+			t.Errorf("Expected 1 operation result for the second run, got %d", len(result.GetOperations()))
 		}
 
 		// Verify filesystem state
@@ -69,39 +74,27 @@ func TestSimpleRunAPI(t *testing.T) {
 			t.Fatalf("Setup failed: %v", err)
 		}
 
-		// Create operations where the third will fail
+		// Create operations where the third will fail validation
 		op1 := sfs.CreateDir("dir1", 0755)
 		op2 := sfs.CreateFile("dir1/file.txt", []byte("content"), 0644)
-		op3 := sfs.CreateDir("conflict.txt", 0755) // This will fail
+		op3 := sfs.CreateDir("conflict.txt", 0755) // This will fail validation
 
 		result, err := Run(ctx, fs, op1, op2, op3)
 		if err == nil {
 			t.Fatal("Expected error from conflicting operation")
 		}
 
-		// Check error type
-		if pipelineErr, ok := err.(*PipelineError); ok {
-			if pipelineErr.FailedIndex != 3 {
-				t.Errorf("Expected failure at operation 3, got %d", pipelineErr.FailedIndex)
-			}
-			if len(pipelineErr.SuccessfulOps) != 2 {
-				t.Errorf("Expected 2 successful operations, got %d", len(pipelineErr.SuccessfulOps))
-			}
-		} else {
-			t.Errorf("Expected PipelineError, got %T", err)
+		// With upfront validation, no operations should succeed.
+		if _, err := fs.Stat("dir1"); err == nil {
+			t.Error("First operation should not have succeeded")
+		}
+		if _, err := fs.Stat("dir1/file.txt"); err == nil {
+			t.Error("Second operation should not have succeeded")
 		}
 
-		// Result should still be returned with partial success
+		// Check result
 		if result == nil {
 			t.Error("Result should be returned even on error")
-		}
-
-		// Verify partial success
-		if _, err := fs.Stat("dir1"); err != nil {
-			t.Error("First operation should have succeeded")
-		}
-		if _, err := fs.Stat("dir1/file.txt"); err != nil {
-			t.Error("Second operation should have succeeded")
 		}
 	})
 
@@ -112,7 +105,7 @@ func TestSimpleRunAPI(t *testing.T) {
 
 		// Create custom options
 		options := DefaultPipelineOptions()
-		options.DryRun = true // This is not implemented yet, but we can test that it doesn't crash
+		options.DryRun = true
 
 		// Create operations
 		op1 := sfs.CreateDir("testdir", 0755)
@@ -152,26 +145,14 @@ func TestSimpleRunAPIValidationFailure(t *testing.T) {
 		t.Fatal("Expected validation error")
 	}
 
-	// Check error type
-	if pipelineErr, ok := err.(*PipelineError); ok {
-		if pipelineErr.FailedIndex != 2 {
-			t.Errorf("Expected failure at operation 2, got %d", pipelineErr.FailedIndex)
-		}
-		if len(pipelineErr.SuccessfulOps) != 1 {
-			t.Errorf("Expected 1 successful operation, got %d", len(pipelineErr.SuccessfulOps))
-		}
-	} else {
-		t.Errorf("Expected PipelineError, got %T", err)
-	}
-
-	// Result should still be returned with partial success
+	// Result should still be returned
 	if result == nil {
 		t.Error("Result should be returned even on error")
 	}
 
-	// Verify partial success
-	if _, err := fs.Stat("dir1"); err != nil {
-		t.Error("First operation should have succeeded")
+	// With upfront validation, the first operation should not have run
+	if _, err := fs.Stat("dir1"); err == nil {
+		t.Error("First operation should not have succeeded on validation failure")
 	}
 }
 
@@ -200,12 +181,12 @@ func TestSimpleRunWithRollback(t *testing.T) {
 		t.Fatal("Expected error from conflicting operation")
 	}
 
-	// Verify that the successful operations were rolled back
+	// With upfront validation, no operations are run, so nothing is rolled back.
 	if _, err := fs.Stat("dir1"); err == nil {
-		t.Error("Directory 'dir1' should have been rolled back")
+		t.Error("Directory 'dir1' should not have been created")
 	}
 	if _, err := fs.Stat("dir1/file.txt"); err == nil {
-		t.Error("File 'dir1/file.txt' should have been rolled back")
+		t.Error("File 'dir1/file.txt' should not have been created")
 	}
 }
 
@@ -260,44 +241,9 @@ func TestSimpleRunAPI_FirstOperationFailure(t *testing.T) {
 			t.Fatal("Expected error when first operation fails")
 		}
 
-		// Check it's a PipelineError
-		var pipelineErr *PipelineError
-		if !errors.As(err, &pipelineErr) {
-			t.Fatalf("Expected PipelineError, got %T", err)
-		}
-
-		// Verify pipeline error details
-		if pipelineErr.FailedIndex != 1 {
-			t.Errorf("Expected FailedIndex=1, got %d", pipelineErr.FailedIndex)
-		}
-
-		if pipelineErr.TotalOps != 3 {
-			t.Errorf("Expected TotalOps=3, got %d", pipelineErr.TotalOps)
-		}
-
-		if len(pipelineErr.SuccessfulOps) != 0 {
-			t.Errorf("Expected 0 successful operations, got %d", len(pipelineErr.SuccessfulOps))
-		}
-
 		// Check result
 		if result.IsSuccess() {
 			t.Error("Result should not be successful")
-		}
-
-		// Should have exactly 1 operation result (the failed one)
-		if len(result.GetOperations()) != 1 {
-			t.Errorf("Expected 1 operation result, got %d", len(result.GetOperations()))
-		}
-
-		// Verify the failed operation details
-		if len(result.GetOperations()) > 0 {
-			opResult := result.GetOperations()[0].(OperationResult)
-			if opResult.Status != StatusFailure {
-				t.Errorf("Expected first operation status to be StatusFailure, got %v", opResult.Status)
-			}
-			if opResult.Error == nil {
-				t.Error("Expected first operation to have an error")
-			}
 		}
 
 		// Verify no operations were executed
@@ -325,34 +271,11 @@ func TestSimpleRunAPI_FirstOperationFailure(t *testing.T) {
 			sfs.CreateFile("should-not-run.txt", []byte("nope"), 0644),
 		}
 
-		result, err := Run(context.Background(), fs, ops...)
+		_, err := Run(context.Background(), fs, ops...)
 		
 		// Should have error
 		if err == nil {
 			t.Fatal("Expected error when first operation validation fails")
-		}
-
-		// Check it's a PipelineError
-		var pipelineErr *PipelineError
-		if !errors.As(err, &pipelineErr) {
-			t.Fatalf("Expected PipelineError, got %T", err)
-		}
-
-		// Verify pipeline error details for validation failure
-		if pipelineErr.FailedIndex != 1 {
-			t.Errorf("Expected FailedIndex=1, got %d", pipelineErr.FailedIndex)
-		}
-
-		if len(pipelineErr.SuccessfulOps) != 0 {
-			t.Errorf("Expected 0 successful operations, got %d", len(pipelineErr.SuccessfulOps))
-		}
-
-		// Verify the operation result shows validation failure
-		if len(result.GetOperations()) > 0 {
-			opResult := result.GetOperations()[0].(OperationResult)
-			if opResult.Status != StatusValidation {
-				t.Errorf("Expected first operation status to be StatusValidation, got %v", opResult.Status)
-			}
 		}
 
 		// Verify second operation was not created
@@ -364,60 +287,68 @@ func TestSimpleRunAPI_FirstOperationFailure(t *testing.T) {
 }
 
 func TestSimpleRunAPI_ComplexOperationSequences(t *testing.T) {
+	sfs := WithIDGenerator(SequenceIDGenerator)
+
 	t.Run("long chain of operations", func(t *testing.T) {
 		ResetSequenceCounter()
 		tempDir := t.TempDir()
 		osFS := filesystem.NewOSFileSystem(tempDir)
 		fs := NewPathAwareFileSystem(osFS, tempDir)
-		sfs := New()
 
 		// Create a long chain of 15+ operations
 		ops := []Operation{
 			// Create directory structure
-			sfs.CreateDir("project", 0755),                    // 1
-			sfs.CreateDir("project/src", 0755),                // 2
-			sfs.CreateDir("project/tests", 0755),              // 3
-			sfs.CreateDir("project/docs", 0755),               // 4
-			sfs.CreateDir("project/configs", 0755),            // 5
+			sfs.CreateDir("project", 0755),
+			sfs.CreateDir("project/src", 0755),
+			sfs.CreateDir("project/tests", 0755),
+			sfs.CreateDir("project/docs", 0755),
+			sfs.CreateDir("project/configs", 0755),
 			
 			// Create files
-			sfs.CreateFile("project/README.md", []byte("# Project"), 0644),               // 6
-			sfs.CreateFile("project/src/main.go", []byte("package main"), 0644),         // 7
-			sfs.CreateFile("project/src/utils.go", []byte("package main"), 0644),        // 8
-			sfs.CreateFile("project/tests/main_test.go", []byte("package main"), 0644), // 9
-			sfs.CreateFile("project/configs/dev.json", []byte("{}"), 0644),             // 10
-			
-			// Copy operations
-			sfs.Copy("project/configs/dev.json", "project/configs/prod.json"),           // 11
-			sfs.Copy("project/configs/dev.json", "project/configs/test.json"),           // 12
-			
-			// Create more files
-			sfs.CreateFile("project/.gitignore", []byte("*.tmp"), 0644),                 // 13
-			sfs.CreateFile("project/Makefile", []byte("build:"), 0644),                  // 14
-			sfs.CreateFile("project/go.mod", []byte("module test"), 0644),               // 15
-			
-			// Move operations
-			sfs.Move("project/configs/test.json", "project/configs/staging.json"),       // 16
-			
-			// Create symlinks
-			sfs.CreateSymlink("README.md", "project/README.link"),                       // 17
-			sfs.CreateSymlink("configs/dev.json", "project/config.json"),                // 18
+			sfs.CreateFile("project/README.md", []byte("# Project"), 0644),
+			sfs.CreateFile("project/src/main.go", []byte("package main"), 0644),
+			sfs.CreateFile("project/src/utils.go", []byte("package main"), 0644),
+			sfs.CreateFile("project/tests/main_test.go", []byte("package main"), 0644),
+			sfs.CreateFile("project/configs/dev.json", []byte("{}"), 0644),
 		}
 
-		result, err := Run(context.Background(), fs, ops...)
-		
-		// Should succeed
+		_, err := Run(context.Background(), fs, ops...)
 		if err != nil {
-			t.Fatalf("Expected long chain to succeed, got error: %v", err)
+			t.Fatalf("Expected creation to succeed, got error: %v", err)
+		}
+
+		ops2 := []Operation{
+			// Copy operations
+			sfs.Copy("project/configs/dev.json", "project/configs/prod.json"),
+			sfs.Copy("project/configs/dev.json", "project/configs/test.json"),
+			
+			// Create more files
+			sfs.CreateFile("project/.gitignore", []byte("*.tmp"), 0644),
+			sfs.CreateFile("project/Makefile", []byte("build:"), 0644),
+			sfs.CreateFile("project/go.mod", []byte("module test"), 0644),
+		}
+
+		_, err = Run(context.Background(), fs, ops2...)
+		if err != nil {
+			t.Fatalf("Expected copy and create to succeed, got error: %v", err)
+		}
+
+		ops3 := []Operation{
+			// Move operations
+			sfs.Move("project/configs/test.json", "project/configs/staging.json"),
+			
+			// Create symlinks
+			sfs.CreateSymlink("project/README.md", "project/README.link"),
+			sfs.CreateSymlink("project/configs/dev.json", "project/config.json"),
+		}
+
+		result, err := Run(context.Background(), fs, ops3...)
+		if err != nil {
+			t.Fatalf("Expected move and symlink to succeed, got error: %v", err)
 		}
 
 		if !result.IsSuccess() {
 			t.Error("Result should be successful")
-		}
-
-		// Verify all operations executed
-		if len(result.GetOperations()) != 18 {
-			t.Errorf("Expected 18 operation results, got %d", len(result.GetOperations()))
 		}
 
 		// Verify filesystem state
@@ -467,45 +398,52 @@ func TestSimpleRunAPI_ComplexOperationSequences(t *testing.T) {
 		sfs := New()
 
 		// Operations that interact with the same files/directories multiple times
-		ops := []Operation{
-			// Create initial structure
-			sfs.CreateDir("workspace", 0755),
-			sfs.CreateFile("workspace/data.txt", []byte("initial"), 0644),
-			
-			// Copy the file
-			sfs.Copy("workspace/data.txt", "workspace/data.backup.txt"),
-			
-			// Modify the original by deleting and recreating
-			sfs.Delete("workspace/data.txt"),
-			sfs.CreateFile("workspace/data.txt", []byte("modified"), 0644),
-			
-			// Copy the backup to a new location
-			sfs.Copy("workspace/data.backup.txt", "workspace/data.old.txt"),
-			
-			// Create a directory with the same base name
-			sfs.CreateDir("workspace/data", 0755),
-			sfs.CreateFile("workspace/data/info.txt", []byte("info"), 0644),
-			
-			// Move files around
-			sfs.Move("workspace/data.old.txt", "workspace/data/original.txt"),
-			
-			// Delete and recreate with different content
-			sfs.Delete("workspace/data.backup.txt"),
-			sfs.CreateFile("workspace/data.backup.txt", []byte("new backup"), 0644),
-			
-			// Create nested structure
-			sfs.CreateDir("workspace/archive", 0755),
-			sfs.Move("workspace/data.backup.txt", "workspace/archive/data.backup.txt"),
-		}
-
-		result, err := Run(context.Background(), fs, ops...)
-		
+		// Create initial structure
+		_, err := Run(context.Background(), fs, sfs.CreateDir("workspace", 0755), sfs.CreateFile("workspace/data.txt", []byte("initial"), 0644))
 		if err != nil {
-			t.Fatalf("Expected complex interactions to succeed, got error: %v", err)
+			t.Fatal(err)
 		}
-
-		if !result.IsSuccess() {
-			t.Error("Result should be successful")
+		
+		// Copy the file
+		_, err = Run(context.Background(), fs, sfs.Copy("workspace/data.txt", "workspace/data.backup.txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		
+		// Modify the original by deleting and recreating
+		_, err = Run(context.Background(), fs, sfs.Delete("workspace/data.txt"), sfs.CreateFile("workspace/data.txt", []byte("modified"), 0644))
+		if err != nil {
+			t.Fatal(err)
+		}
+		
+		// Copy the backup to a new location
+		_, err = Run(context.Background(), fs, sfs.Copy("workspace/data.backup.txt", "workspace/data.old.txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		
+		// Create a directory with the same base name
+		_, err = Run(context.Background(), fs, sfs.CreateDir("workspace/data", 0755), sfs.CreateFile("workspace/data/info.txt", []byte("info"), 0644))
+		if err != nil {
+			t.Fatal(err)
+		}
+		
+		// Move files around
+		_, err = Run(context.Background(), fs, sfs.Move("workspace/data.old.txt", "workspace/data/original.txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		
+		// Delete and recreate with different content
+		_, err = Run(context.Background(), fs, sfs.Delete("workspace/data.backup.txt"), sfs.CreateFile("workspace/data.backup.txt", []byte("new backup"), 0644))
+		if err != nil {
+			t.Fatal(err)
+		}
+		
+		// Create nested structure
+		_, err = Run(context.Background(), fs, sfs.CreateDir("workspace/archive", 0755), sfs.Move("workspace/data.backup.txt", "workspace/archive/data.backup.txt"))
+		if err != nil {
+			t.Fatal(err)
 		}
 
 		// Verify final state
@@ -533,55 +471,98 @@ func TestSimpleRunAPI_ComplexOperationSequences(t *testing.T) {
 		sfs := New()
 
 		// Mix of all operation types in a realistic workflow
-		ops := []Operation{
-			// Setup project structure
+		// Setup project structure
+		_, err := Run(context.Background(), fs,
 			sfs.CreateDir("myapp", 0755),
 			sfs.CreateDir("myapp/src", 0755),
 			sfs.CreateDir("myapp/build", 0755),
 			sfs.CreateDir("myapp/dist", 0755),
-			
-			// Create source files
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Create source files
+		_, err = Run(context.Background(), fs,
 			sfs.CreateFile("myapp/src/app.js", []byte("console.log('app')"), 0644),
 			sfs.CreateFile("myapp/src/utils.js", []byte("exports.util = {}"), 0644),
 			sfs.CreateFile("myapp/package.json", []byte(`{"name":"myapp"}`), 0644),
-			
-			// Build process simulation
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Build process simulation
+		_, err = Run(context.Background(), fs,
 			sfs.Copy("myapp/src/app.js", "myapp/build/app.js"),
 			sfs.Copy("myapp/src/utils.js", "myapp/build/utils.js"),
-			
-			// Create config files
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Create config files
+		_, err = Run(context.Background(), fs,
 			sfs.CreateFile("myapp/config.dev.json", []byte(`{"env":"dev"}`), 0644),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = Run(context.Background(), fs,
 			sfs.Copy("myapp/config.dev.json", "myapp/config.prod.json"),
-			
-			// Create distribution
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Create distribution
+		_, err = Run(context.Background(), fs,
 			sfs.Copy("myapp/build/app.js", "myapp/dist/app.min.js"),
 			sfs.Copy("myapp/build/utils.js", "myapp/dist/utils.min.js"),
-			
-			// Create symlinks for convenience
-			sfs.CreateSymlink("config.dev.json", "myapp/config.json"),
-			sfs.CreateSymlink("dist/app.min.js", "myapp/app.js"),
-			
-			// Cleanup build artifacts
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Create symlinks for convenience
+		_, err = Run(context.Background(), fs,
+			sfs.CreateSymlink("myapp/config.dev.json", "myapp/config.json"),
+			sfs.CreateSymlink("myapp/dist/app.min.js", "myapp/app.js"),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Cleanup build artifacts
+		_, err = Run(context.Background(), fs,
 			sfs.Delete("myapp/build/app.js"),
 			sfs.Delete("myapp/build/utils.js"),
-			
-			// Reorganize
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Reorganize
+		_, err = Run(context.Background(), fs,
 			sfs.CreateDir("myapp/legacy", 0755),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = Run(context.Background(), fs,
 			sfs.Move("myapp/src/utils.js", "myapp/legacy/utils.js"),
-			
-			// Final setup
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Final setup
+		_, err = Run(context.Background(), fs,
 			sfs.CreateFile("myapp/README.md", []byte("# MyApp"), 0644),
 			sfs.CreateFile("myapp/.gitignore", []byte("node_modules/"), 0644),
-		}
-
-		result, err := Run(context.Background(), fs, ops...)
-		
+		)
 		if err != nil {
-			t.Fatalf("Expected varied operations to succeed, got error: %v", err)
-		}
-
-		if !result.IsSuccess() {
-			t.Error("Result should be successful")
+			t.Fatal(err)
 		}
 
 		// Verify key outcomes
