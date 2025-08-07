@@ -97,7 +97,7 @@ func (b *BatchImpl) add(op interface{}) error {
 
 // validateOperation validates an operation
 func (b *BatchImpl) validateOperation(op interface{}) error {
-	// Try ExecutionContext-aware Validate method first with concrete types
+	// Check if operation implements the Validate method
 	type validator interface {
 		Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error
 	}
@@ -106,18 +106,6 @@ func (b *BatchImpl) validateOperation(op interface{}) error {
 		// Create a minimal ExecutionContext for validation
 		execCtx := &core.ExecutionContext{}
 		if err := v.Validate(b.ctx, execCtx, b.fs); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	// Fallback to legacy Validate method (for compatibility)
-	type legacyValidator interface {
-		Validate(ctx context.Context, fsys interface{}) error
-	}
-
-	if v, ok := op.(legacyValidator); ok {
-		if err := v.Validate(b.ctx, b.fs); err != nil {
 			return err
 		}
 	}
