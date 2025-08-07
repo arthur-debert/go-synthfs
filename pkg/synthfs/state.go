@@ -26,9 +26,9 @@ func (pst *PathStateTracker) GetState(path string) (*PathState, error) {
 
 // UpdateState applies the effect of an operation to the projected state of a path.
 func (pst *PathStateTracker) UpdateState(op Operation) error {
-	// Create a wrapper that implements execution.OperationInterface
-	wrapper := &operationWrapper{op: op}
-	return pst.tracker.UpdateState(wrapper)
+	// Create an adapter that implements execution.OperationInterface
+	adapter := &operationInterfaceAdapter{Operation: op}
+	return pst.tracker.UpdateState(adapter)
 }
 
 // IsDeleted returns true if the path is scheduled for deletion by any operation.

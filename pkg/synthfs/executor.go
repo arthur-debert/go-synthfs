@@ -2,6 +2,7 @@ package synthfs
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
@@ -85,8 +86,8 @@ func (e *Executor) convertResult(coreResult *core.Result) *Result {
 		// Convert operation from interface{} back to Operation
 		if op, ok := coreOpResult.Operation.(Operation); ok {
 			opResult.Operation = op
-		} else if wrapper, ok := coreOpResult.Operation.(*operationWrapper); ok {
-			opResult.Operation = wrapper.op
+		} else if adapter, ok := coreOpResult.Operation.(*operationInterfaceAdapter); ok {
+			opResult.Operation = adapter.Operation
 		}
 
 		operations = append(operations, opResult)
@@ -111,8 +112,8 @@ func (e *Executor) convertResult(coreResult *core.Result) *Result {
 					failedIndex = i + 1
 					if op, ok := opResult.Operation.(Operation); ok {
 						failedOp = op
-					} else if wrapper, ok := opResult.Operation.(*operationWrapper); ok {
-						failedOp = wrapper.op
+					} else if adapter, ok := opResult.Operation.(*operationInterfaceAdapter); ok {
+						failedOp = adapter.Operation
 					}
 					break
 				}
@@ -184,7 +185,7 @@ func (pw *pipelineWrapper) Operations() []interface{} {
 	ops := pw.pipeline.Operations()
 	var result []interface{}
 	for _, op := range ops {
-		result = append(result, &operationWrapper{op: op})
+		result = append(result, &operationInterfaceAdapter{Operation: op})
 	}
 	return result
 }
@@ -207,112 +208,67 @@ func (pw *pipelineWrapper) ResolvePrerequisites(resolver core.PrerequisiteResolv
 	return nil
 }
 
-// operationWrapper wraps Operation to implement execution.OperationInterface
-type operationWrapper struct {
-	op Operation
+// operationInterfaceAdapter implements execution.OperationInterface for synthfs.Operation
+// This is a temporary adapter that will be removed once all operations
+// implement the execution interface directly.
+type operationInterfaceAdapter struct {
+	Operation
 }
 
-func (ow *operationWrapper) ID() core.OperationID {
-	return ow.op.ID()
-}
-
-func (ow *operationWrapper) Describe() core.OperationDesc {
-	return ow.op.Describe()
-}
-
-
-func (ow *operationWrapper) Prerequisites() []core.Prerequisite {
-	// Check if operation implements Prerequisites method
-	if prereqOp, ok := ow.op.(interface{ Prerequisites() []core.Prerequisite }); ok {
-		return prereqOp.Prerequisites()
+// Execute adapts the concrete types to interface{} types
+func (a *operationInterfaceAdapter) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	contextObj, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("expected context.Context, got %T", ctx)
 	}
-	return []core.Prerequisite{}
-}
-
-func (ow *operationWrapper) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Delegate to the original operation's ExecuteV2 if available, otherwise Execute
-	if execV2Op, ok := ow.op.(interface {
-		ExecuteV2(interface{}, *core.ExecutionContext, interface{}) error
-	}); ok {
-		return execV2Op.ExecuteV2(ctx, execCtx, fsys)
+	fsysObj, ok := fsys.(FileSystem)
+	if !ok {
+		return fmt.Errorf("expected FileSystem, got %T", fsys)
 	}
+	return a.Operation.Execute(contextObj, execCtx, fsysObj)
+}
 
-	// Fallback to original Execute method
-	if contextOp, ok := ctx.(context.Context); ok {
-		if fsysOp, ok := fsys.(FileSystem); ok {
-			return ow.op.Execute(contextOp, nil, fsysOp)
-		}
+// Validate adapts the concrete types to interface{} types  
+func (a *operationInterfaceAdapter) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+	contextObj, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("expected context.Context, got %T", ctx)
 	}
-	return nil
-}
-
-func (ow *operationWrapper) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Delegate to the original operation's ValidateV2 if available, otherwise Validate
-	if validateV2Op, ok := ow.op.(interface {
-		ValidateV2(interface{}, *core.ExecutionContext, interface{}) error
-	}); ok {
-		return validateV2Op.ValidateV2(ctx, execCtx, fsys)
+	fsysObj, ok := fsys.(FileSystem)
+	if !ok {
+		return fmt.Errorf("expected FileSystem, got %T", fsys)
 	}
+	return a.Operation.Validate(contextObj, execCtx, fsysObj)
+}
 
-	// Fallback to original Validate method
-	if contextOp, ok := ctx.(context.Context); ok {
-		if fsysOp, ok := fsys.(FileSystem); ok {
-			return ow.op.Validate(contextOp, nil, fsysOp)
-		}
+// ReverseOps adapts the return types
+func (a *operationInterfaceAdapter) ReverseOps(ctx context.Context, fsys interface{}, budget *core.BackupBudget) ([]interface{}, *core.BackupData, error) {
+	fsysObj, ok := fsys.(FileSystem)
+	if !ok {
+		return nil, nil, fmt.Errorf("expected FileSystem, got %T", fsys)
 	}
-	return nil
-}
-
-func (ow *operationWrapper) ReverseOps(ctx context.Context, fsys interface{}, budget *core.BackupBudget) ([]interface{}, *core.BackupData, error) {
-	// Delegate to the original operation's ReverseOps
-	if fsysOp, ok := fsys.(FileSystem); ok {
-		reverseOps, backupData, err := ow.op.ReverseOps(ctx, fsysOp, budget)
-
-		// Convert []Operation to []interface{} even if there's an error
-		// This preserves partial backup data in case of budget exhaustion
-		var result []interface{}
-		for _, op := range reverseOps {
-			result = append(result, op)
-		}
-		return result, backupData, err
+	
+	ops, backupData, err := a.Operation.ReverseOps(ctx, fsysObj, budget)
+	
+	// Convert []Operation to []interface{}
+	var result []interface{}
+	for _, op := range ops {
+		result = append(result, &operationInterfaceAdapter{Operation: op})
 	}
-	return nil, nil, nil
+	
+	return result, backupData, err
 }
 
-func (ow *operationWrapper) Rollback(ctx context.Context, fsys interface{}) error {
-	// Delegate to the original operation's Rollback
-	if fsysOp, ok := fsys.(FileSystem); ok {
-		return ow.op.Rollback(ctx, fsysOp)
+// Rollback adapts the filesystem type
+func (a *operationInterfaceAdapter) Rollback(ctx context.Context, fsys interface{}) error {
+	fsysObj, ok := fsys.(FileSystem)
+	if !ok {
+		return fmt.Errorf("expected FileSystem, got %T", fsys)
 	}
-	return nil
+	return a.Operation.Rollback(ctx, fsysObj)
 }
 
-func (ow *operationWrapper) GetItem() interface{} {
-	return ow.op.GetItem()
-}
-
-func (ow *operationWrapper) GetSrcPath() string {
-	if adapter, ok := ow.op.(*OperationsPackageAdapter); ok {
-		src, _ := adapter.opsOperation.GetPaths()
-		return src
-	}
-	return ""
-}
-
-func (ow *operationWrapper) GetDstPath() string {
-	if adapter, ok := ow.op.(*OperationsPackageAdapter); ok {
-		_, dst := adapter.opsOperation.GetPaths()
-		return dst
-	}
-	return ""
-}
-
-func (ow *operationWrapper) AddDependency(depID core.OperationID) {
-	// Delegate to the original operation's AddDependency method
-	ow.op.AddDependency(depID)
-}
-
-func (ow *operationWrapper) SetDescriptionDetail(key string, value interface{}) {
-	// Delegate to the original operation's SetDescriptionDetail method
-	ow.op.SetDescriptionDetail(key, value)
+// GetItem returns the item as interface{}
+func (a *operationInterfaceAdapter) GetItem() interface{} {
+	return a.Operation.GetItem()
 }
