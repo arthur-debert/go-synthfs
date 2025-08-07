@@ -30,8 +30,9 @@ func TestReverseOperations_CreateFile(t *testing.T) {
 		t.Fatalf("Expected 1 reverse operation, got %d", len(reverseOps))
 	}
 
-	if backupData == nil {
-		t.Fatal("Expected backup data to be created")
+	// For create operations, no backup data is expected when file doesn't exist
+	if backupData != nil {
+		t.Error("Expected no backup data for create operation when file doesn't exist")
 	}
 
 	reverseOp := reverseOps[0]
@@ -40,13 +41,6 @@ func TestReverseOperations_CreateFile(t *testing.T) {
 	}
 	if reverseOp.Describe().Path != "test.txt" {
 		t.Errorf("Expected reverse operation path 'test.txt', got '%s'", reverseOp.Describe().Path)
-	}
-
-	if backupData.BackupType != "none" {
-		t.Errorf("Expected backup type 'none', got '%s'", backupData.BackupType)
-	}
-	if backupData.SizeMB != 0 {
-		t.Errorf("Expected backup size 0, got %f", backupData.SizeMB)
 	}
 }
 
@@ -90,17 +84,21 @@ func TestReverseOperations_Delete(t *testing.T) {
 		t.Errorf("Expected reverse operation path 'test.txt', got '%s'", reverseOp.Describe().Path)
 	}
 
-	if backupData.BackupType != "file" {
-		t.Errorf("Expected backup type 'file', got '%s'", backupData.BackupType)
+	bd, ok := backupData.(*core.BackupData)
+	if !ok {
+		t.Fatalf("Expected *core.BackupData, got %T", backupData)
 	}
-	if string(backupData.BackupContent) != string(content) {
-		t.Errorf("Expected backup content '%s', got '%s'", string(content), string(backupData.BackupContent))
+	if bd.BackupType != "file" {
+		t.Errorf("Expected backup type 'file', got '%s'", bd.BackupType)
+	}
+	if string(bd.BackupContent) != string(content) {
+		t.Errorf("Expected backup content '%s', got '%s'", string(content), string(bd.BackupContent))
 	}
 
 	// Check budget consumption
 	expectedSizeMB := float64(len(content)) / (1024 * 1024)
-	if backupData.SizeMB != expectedSizeMB {
-		t.Errorf("Expected backup size %f MB, got %f MB", expectedSizeMB, backupData.SizeMB)
+	if bd.SizeMB != expectedSizeMB {
+		t.Errorf("Expected backup size %f MB, got %f MB", expectedSizeMB, bd.SizeMB)
 	}
 
 	if budget.UsedMB != expectedSizeMB {
@@ -186,8 +184,9 @@ func TestReverseOperations_Move(t *testing.T) {
 		}
 	}
 
-	if backupData.BackupType != "none" {
-		t.Errorf("Expected backup type 'none' for move operation, got '%s'", backupData.BackupType)
+	// For move operations, no backup data is expected
+	if backupData != nil {
+		t.Error("Expected no backup data for move operation")
 	}
 }
 
@@ -221,7 +220,8 @@ func TestReverseOperations_Copy(t *testing.T) {
 		t.Errorf("Expected reverse operation path 'dst.txt', got '%s'", reverseOp.Describe().Path)
 	}
 
-	if backupData.BackupType != "none" {
-		t.Errorf("Expected backup type 'none' for copy operation, got '%s'", backupData.BackupType)
+	// For copy operations, no backup data is expected
+	if backupData != nil {
+		t.Error("Expected no backup data for copy operation")
 	}
 }

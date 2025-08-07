@@ -351,9 +351,7 @@ func CreateTestDirectoryOperation(id, path string) synthfs.Operation {
 func CreateTestCopyOperation(id, src, dst string) synthfs.Operation {
 	op := CreateTestOperation(id, "copy", src)
 	op.SetDescriptionDetail("destination", dst)
-	if adapter, ok := op.(*synthfs.OperationsPackageAdapter); ok { //nolint:staticcheck // adapter is deprecated but still needed
-		adapter.SetPaths(src, dst)
-	}
+	op.SetPaths(src, dst)
 	return op
 }
 
@@ -361,9 +359,7 @@ func CreateTestCopyOperation(id, src, dst string) synthfs.Operation {
 func CreateTestMoveOperation(id, src, dst string) synthfs.Operation {
 	op := CreateTestOperation(id, "move", src)
 	op.SetDescriptionDetail("destination", dst)
-	if adapter, ok := op.(*synthfs.OperationsPackageAdapter); ok { //nolint:staticcheck // adapter is deprecated but still needed
-		adapter.SetPaths(src, dst)
-	}
+	op.SetPaths(src, dst)
 	return op
 }
 

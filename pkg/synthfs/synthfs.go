@@ -42,7 +42,7 @@ func (s *SynthFS) CreateFile(path string, content []byte, mode fs.FileMode) Oper
 	op := operations.NewCreateFileOperation(id, path)
 	item := targets.NewFile(path).WithContent(content).WithMode(mode)
 	op.SetItem(item)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // CreateDir creates a directory creation operation with an auto-generated ID.
@@ -51,13 +51,13 @@ func (s *SynthFS) CreateDir(path string, mode fs.FileMode) Operation {
 	op := operations.NewCreateDirectoryOperation(id, path)
 	item := targets.NewDirectory(path).WithMode(mode)
 	op.SetItem(item)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // Delete creates a delete operation with an auto-generated ID.
 func (s *SynthFS) Delete(path string) Operation {
 	id := s.idGen("delete", path)
-	return NewOperationsPackageAdapter(operations.NewDeleteOperation(id, path))
+	return operations.NewDeleteOperation(id, path)
 }
 
 // Copy creates a copy operation with an auto-generated ID.
@@ -65,7 +65,7 @@ func (s *SynthFS) Copy(src, dst string) Operation {
 	id := s.idGen("copy", src)
 	op := operations.NewCopyOperation(id, src)
 	op.SetPaths(src, dst)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // Move creates a move operation with an auto-generated ID.
@@ -73,7 +73,7 @@ func (s *SynthFS) Move(src, dst string) Operation {
 	id := s.idGen("move", src)
 	op := operations.NewMoveOperation(id, src)
 	op.SetPaths(src, dst)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // CreateSymlink creates a symlink operation with an auto-generated ID.
@@ -83,7 +83,7 @@ func (s *SynthFS) CreateSymlink(target, linkPath string) Operation {
 	item := targets.NewSymlink(linkPath, target)
 	op.SetItem(item)
 	op.SetDescriptionDetail("target", target)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // CreateFileWithID creates a file creation operation with an explicit ID.
@@ -91,7 +91,7 @@ func (s *SynthFS) CreateFileWithID(id string, path string, content []byte, mode 
 	op := operations.NewCreateFileOperation(core.OperationID(id), path)
 	item := targets.NewFile(path).WithContent(content).WithMode(mode)
 	op.SetItem(item)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // CreateDirWithID creates a directory creation operation with an explicit ID.
@@ -99,26 +99,26 @@ func (s *SynthFS) CreateDirWithID(id string, path string, mode fs.FileMode) Oper
 	op := operations.NewCreateDirectoryOperation(core.OperationID(id), path)
 	item := targets.NewDirectory(path).WithMode(mode)
 	op.SetItem(item)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // DeleteWithID creates a delete operation with an explicit ID.
 func (s *SynthFS) DeleteWithID(id string, path string) Operation {
-	return NewOperationsPackageAdapter(operations.NewDeleteOperation(core.OperationID(id), path))
+	return operations.NewDeleteOperation(core.OperationID(id), path)
 }
 
 // CopyWithID creates a copy operation with an explicit ID.
 func (s *SynthFS) CopyWithID(id string, src, dst string) Operation {
 	op := operations.NewCopyOperation(core.OperationID(id), src)
 	op.SetPaths(src, dst)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // MoveWithID creates a move operation with an explicit ID.
 func (s *SynthFS) MoveWithID(id string, src, dst string) Operation {
 	op := operations.NewMoveOperation(core.OperationID(id), src)
 	op.SetPaths(src, dst)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // CreateSymlinkWithID creates a symlink operation with an explicit ID.
@@ -127,7 +127,7 @@ func (s *SynthFS) CreateSymlinkWithID(id string, target, linkPath string) Operat
 	item := targets.NewSymlink(linkPath, target)
 	op.SetItem(item)
 	op.SetDescriptionDetail("target", target)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // CustomOperation creates a custom operation with an auto-generated ID.

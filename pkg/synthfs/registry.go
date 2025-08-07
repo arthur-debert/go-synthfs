@@ -26,24 +26,19 @@ func (r *OperationRegistry) CreateOperation(id core.OperationID, opType string, 
 	if err != nil {
 		return nil, err
 	}
-	// Wrap in adapter to implement main package Operation interface
-	return NewOperationsPackageAdapter(opsOp), nil
+	// Return operations.Operation directly  
+	return opsOp, nil
 }
 
 // SetItemForOperation sets the item for an operation
 func (r *OperationRegistry) SetItemForOperation(op interface{}, item interface{}) error {
-	// Check if it's an adapter
-	if adapter, ok := op.(*OperationsPackageAdapter); ok {
-		adapter.opsOperation.SetItem(item)
+	// Handle operations package operation directly
+	if opsOp, ok := op.(operations.Operation); ok {
+		opsOp.SetItem(item)
 		return nil
 	}
 
-	// Handle operations package operation directly
-	if opsOp, ok := op.(operations.Operation); ok {
-		return r.operationsFactory.SetItemForOperation(opsOp, item)
-	}
-
-	return fmt.Errorf("operation is not an OperationsPackageAdapter or operations.Operation")
+	return fmt.Errorf("operation is not an operations.Operation")
 }
 
 // Global registry instance

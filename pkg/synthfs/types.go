@@ -7,6 +7,7 @@ import (
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/validation"
 )
 
@@ -55,22 +56,9 @@ type Executable interface {
 	Validate(ctx context.Context, fsys FileSystem) error
 }
 
-// Operation is the main interface that composes all operation capabilities
-type Operation interface {
-	core.OperationMetadata // ID(), Describe()
-	core.Executable        // ExecutionContext-aware Execute(), Validate()
-	Prerequisites() []core.Prerequisite
-	Rollback(ctx context.Context, fsys FileSystem) error
-	GetItem() FsItem
-	GetChecksum(path string) *ChecksumRecord
-	GetAllChecksums() map[string]*ChecksumRecord
-	ReverseOps(ctx context.Context, fsys FileSystem, budget *core.BackupBudget) ([]Operation, *core.BackupData, error)
-
-	// Batch building methods
-	SetDescriptionDetail(key string, value interface{})
-	AddDependency(depID OperationID)
-	SetPaths(src, dst string)
-}
+// Operation type alias - Phase 2: Use operations.Operation directly
+// This provides backward compatibility while we complete the consolidation
+type Operation = operations.Operation
 
 // ValidationError is now defined in the core package
 type ValidationError = core.ValidationError

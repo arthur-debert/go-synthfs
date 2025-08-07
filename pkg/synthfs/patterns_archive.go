@@ -43,7 +43,7 @@ func (s *SynthFS) CreateArchive(archivePath string, sources ...string) Operation
 	op.SetDescriptionDetail("sources", sources)
 	op.SetDescriptionDetail("format", format.String())
 
-	return &OperationsPackageAdapter{opsOperation: op}
+	return op
 }
 
 // CreateZipArchive creates a ZIP archive operation
@@ -61,7 +61,7 @@ func (s *SynthFS) CreateZipArchive(archivePath string, sources ...string) Operat
 	op.SetDescriptionDetail("sources", sources)
 	op.SetDescriptionDetail("format", "zip")
 
-	return &OperationsPackageAdapter{opsOperation: op}
+	return op
 }
 
 // CreateTarArchive creates a TAR archive operation
@@ -85,7 +85,7 @@ func (s *SynthFS) CreateTarGzArchive(archivePath string, sources ...string) Oper
 	op.SetDescriptionDetail("sources", sources)
 	op.SetDescriptionDetail("format", "tar.gz")
 
-	return &OperationsPackageAdapter{opsOperation: op}
+	return op
 }
 
 // ExtractArchive creates an unarchive operation
@@ -99,7 +99,7 @@ func (s *SynthFS) ExtractArchive(archivePath, extractPath string) Operation {
 	op := operations.NewUnarchiveOperation(id, archivePath)
 	op.SetItem(unarchive)
 
-	return &OperationsPackageAdapter{opsOperation: op}
+	return op
 }
 
 // ExtractArchiveWithPatterns creates an unarchive operation with file patterns
@@ -113,7 +113,7 @@ func (s *SynthFS) ExtractArchiveWithPatterns(archivePath, extractPath string, pa
 	op := operations.NewUnarchiveOperation(id, archivePath)
 	op.SetItem(unarchive)
 
-	return &OperationsPackageAdapter{opsOperation: op}
+	return op
 }
 
 // Archive provides direct archive creation with execution

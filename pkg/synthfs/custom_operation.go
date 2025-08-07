@@ -101,17 +101,9 @@ func (op *CustomOperation) executeInternal(ctx context.Context, execCtx *core.Ex
 	return op.executeFunc(ctx, fsys)
 }
 
-// Execute with interface{} signature for both interfaces  
-func (op *CustomOperation) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	contextObj, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("expected context.Context, got %T", ctx)
-	}
-	fsysObj, ok := fsys.(filesystem.FileSystem)
-	if !ok {
-		return fmt.Errorf("expected filesystem.FileSystem, got %T", fsys)
-	}
-	return op.executeInternal(contextObj, execCtx, fsysObj)
+// Execute with concrete types for operations.Operation interface
+func (op *CustomOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
+	return op.executeInternal(ctx, execCtx, fsys)
 }
 
 // validateInternal runs the custom operation's validation function if defined.
@@ -125,17 +117,9 @@ func (op *CustomOperation) validateInternal(ctx context.Context, execCtx *core.E
 	return op.validateFunc(ctx, fsys)
 }
 
-// Validate with interface{} signature for synthfs.Operation compatibility
-func (op *CustomOperation) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	contextObj, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("expected context.Context, got %T", ctx)
-	}
-	fsysObj, ok := fsys.(filesystem.FileSystem)
-	if !ok {
-		return fmt.Errorf("expected filesystem.FileSystem, got %T", fsys)
-	}
-	return op.validateInternal(contextObj, execCtx, fsysObj)
+// Validate with concrete types for operations.Operation interface  
+func (op *CustomOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
+	return op.validateInternal(ctx, execCtx, fsys)
 }
 
 // Rollback runs the custom operation's rollback function if defined.
@@ -154,25 +138,25 @@ func (op *CustomOperation) Rollback(ctx context.Context, fsys filesystem.FileSys
 // Additional methods to implement synthfs.Operation interface directly
 
 // GetItem returns nil for custom operations (they don't have filesystem items)
-func (op *CustomOperation) GetItem() FsItem {
+func (op *CustomOperation) GetItem() interface{} {
 	return nil
 }
 
 // GetChecksum returns nil for custom operations (they don't manage checksums)  
-func (op *CustomOperation) GetChecksum(path string) *ChecksumRecord {
+func (op *CustomOperation) GetChecksum(path string) interface{} {
 	return nil
 }
 
 // GetAllChecksums returns nil for custom operations (they don't manage checksums)
-func (op *CustomOperation) GetAllChecksums() map[string]*ChecksumRecord {
+func (op *CustomOperation) GetAllChecksums() map[string]interface{} {
 	return nil
 }
 
 // ReverseOps returns the operations needed to reverse this custom operation
-func (op *CustomOperation) ReverseOps(ctx context.Context, fsys FileSystem, budget *BackupBudget) ([]Operation, *BackupData, error) {
+func (op *CustomOperation) ReverseOps(ctx context.Context, fsys filesystem.FileSystem, budget interface{}) ([]operations.Operation, interface{}, error) {
 	if op.rollbackFunc == nil {
 		// No rollback means no reverse operations
-		return []Operation{}, nil, nil
+		return []operations.Operation{}, nil, nil
 	}
 
 	// Create a reverse custom operation that runs the rollback function
@@ -181,26 +165,25 @@ func (op *CustomOperation) ReverseOps(ctx context.Context, fsys FileSystem, budg
 		op.rollbackFunc,
 	).WithDescription(fmt.Sprintf("Reverse of %s", op.ID()))
 
-	return []Operation{reverseOp}, nil, nil
+	return []operations.Operation{reverseOp}, nil, nil
 }
 
 // Core interface methods with proper signatures
 
 // AddDependency for both interfaces - uses OperationID which is an alias for core.OperationID
-func (op *CustomOperation) AddDependency(depID OperationID) {
-	op.BaseOperation.AddDependency(core.OperationID(depID))
+func (op *CustomOperation) AddDependency(depID core.OperationID) {
+	op.BaseOperation.AddDependency(depID)
 }
 
 // ID returns the operation ID - uses OperationID which is an alias for core.OperationID
-func (op *CustomOperation) ID() OperationID {
-	return OperationID(op.BaseOperation.ID())
+func (op *CustomOperation) ID() core.OperationID {
+	return op.BaseOperation.ID()
 }
 
 // Describe returns the operation description - uses OperationDesc which is an alias for core.OperationDesc
-func (op *CustomOperation) Describe() OperationDesc {
-	desc := op.BaseOperation.Describe()
-	return OperationDesc(desc)
+func (op *CustomOperation) Describe() core.OperationDesc {
+	return op.BaseOperation.Describe()
 }
 
-// Ensure CustomOperation implements synthfs.Operation interface
-var _ Operation = (*CustomOperation)(nil)
+// Ensure CustomOperation implements operations.Operation interface
+var _ operations.Operation = (*CustomOperation)(nil)

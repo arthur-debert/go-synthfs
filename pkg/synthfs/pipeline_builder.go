@@ -25,26 +25,24 @@ func BuildPipeline(ops ...Operation) *PipelineBuilder {
 
 	for _, op := range ops {
 		// Auto-detect dependencies based on paths
-		if adapter, ok := op.(*OperationsPackageAdapter); ok {
-			srcPath, dstPath := adapter.opsOperation.GetPaths()
-			desc := adapter.opsOperation.Describe()
-			opType := desc.Type
+		srcPath, dstPath := op.GetPaths()
+		desc := op.Describe()
+		opType := desc.Type
 
-			// For operations that read from a source, check if source was created by a previous op
-			if srcPath != "" && (opType == "copy" || opType == "move") {
-				if creator, exists := pathCreators[srcPath]; exists {
-					op.AddDependency(creator.ID())
-				}
+		// For operations that read from a source, check if source was created by a previous op
+		if srcPath != "" && (opType == "copy" || opType == "move") {
+			if creator, exists := pathCreators[srcPath]; exists {
+				op.AddDependency(creator.ID())
 			}
+		}
 
-			// Track paths this operation creates
-			if dstPath != "" {
-				pathCreators[dstPath] = op
-			} else if srcPath != "" && (opType == "create_file" ||
-				opType == "create_directory" ||
-				opType == "create_symlink") {
-				pathCreators[srcPath] = op
-			}
+		// Track paths this operation creates
+		if dstPath != "" {
+			pathCreators[dstPath] = op
+		} else if srcPath != "" && (opType == "create_file" ||
+			opType == "create_directory" ||
+			opType == "create_symlink") {
+			pathCreators[srcPath] = op
 		}
 
 		if err := pb.pipeline.Add(op); err == nil {

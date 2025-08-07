@@ -256,7 +256,15 @@ func (a *operationInterfaceAdapter) ReverseOps(ctx context.Context, fsys interfa
 		result = append(result, &operationInterfaceAdapter{Operation: op})
 	}
 	
-	return result, backupData, err
+	// Convert backupData interface{} to *core.BackupData
+	var backupDataPtr *core.BackupData
+	if backupData != nil {
+		if bd, ok := backupData.(*core.BackupData); ok {
+			backupDataPtr = bd
+		}
+	}
+	
+	return result, backupDataPtr, err
 }
 
 // Rollback adapts the filesystem type
@@ -275,18 +283,12 @@ func (a *operationInterfaceAdapter) GetItem() interface{} {
 
 // GetSrcPath returns the source path for copy/move operations
 func (a *operationInterfaceAdapter) GetSrcPath() string {
-	if adapter, ok := a.Operation.(*OperationsPackageAdapter); ok {
-		src, _ := adapter.opsOperation.GetPaths()
-		return src
-	}
-	return ""
+	src, _ := a.GetPaths()
+	return src
 }
 
 // GetDstPath returns the destination path for copy/move operations
 func (a *operationInterfaceAdapter) GetDstPath() string {
-	if adapter, ok := a.Operation.(*OperationsPackageAdapter); ok {
-		_, dst := adapter.opsOperation.GetPaths()
-		return dst
-	}
-	return ""
+	_, dst := a.GetPaths()
+	return dst
 }

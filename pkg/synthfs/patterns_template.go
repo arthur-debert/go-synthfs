@@ -9,6 +9,7 @@ import (
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
 )
 
 // TemplateData holds template data for rendering
@@ -65,7 +66,7 @@ func (op *WriteTemplateOperation) Prerequisites() []core.Prerequisite {
 }
 
 // GetItem returns nil - no specific item
-func (op *WriteTemplateOperation) GetItem() FsItem {
+func (op *WriteTemplateOperation) GetItem() interface{} {
 	return nil
 }
 
@@ -89,52 +90,55 @@ func (op *WriteTemplateOperation) SetPaths(src, dst string) {
 }
 
 // GetChecksum returns nil
-func (op *WriteTemplateOperation) GetChecksum(path string) *ChecksumRecord {
+func (op *WriteTemplateOperation) GetChecksum(path string) interface{} {
 	return nil
 }
 
 // GetAllChecksums returns nil
-func (op *WriteTemplateOperation) GetAllChecksums() map[string]*ChecksumRecord {
+func (op *WriteTemplateOperation) GetAllChecksums() map[string]interface{} {
 	return nil
 }
 
 // Execute with ExecutionContext support
-func (op *WriteTemplateOperation) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	if contextOp, ok := ctx.(context.Context); ok {
-		if fsysOp, ok := fsys.(FileSystem); ok {
-			return op.execute(contextOp, fsysOp)
-		}
-	}
-	return fmt.Errorf("Execute not implemented for WriteTemplateOperation")
+func (op *WriteTemplateOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
+	// Convert filesystem.FileSystem to FileSystem interface
+	return op.execute(ctx, fsys)
 }
 
 // Validate with ExecutionContext support
-func (op *WriteTemplateOperation) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	if contextOp, ok := ctx.(context.Context); ok {
-		if fsysOp, ok := fsys.(FileSystem); ok {
-			return op.validate(contextOp, fsysOp)
-		}
-	}
-	return fmt.Errorf("Validate not implemented for WriteTemplateOperation")
+func (op *WriteTemplateOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
+	// Convert filesystem.FileSystem to FileSystem interface
+	return op.validate(ctx, fsys)
 }
 
 // Rollback removes the created file
-func (op *WriteTemplateOperation) Rollback(ctx context.Context, fsys FileSystem) error {
-	if writeFS, ok := fsys.(WriteFS); ok {
-		return writeFS.Remove(op.path)
-	}
-	return fmt.Errorf("filesystem does not support Remove")
+func (op *WriteTemplateOperation) Rollback(ctx context.Context, fsys filesystem.FileSystem) error {
+	return fsys.Remove(op.path)
+}
+
+// GetPaths returns empty source and the template path as destination
+func (op *WriteTemplateOperation) GetPaths() (src, dst string) {
+	return "", op.path
+}
+
+// SetItem is a no-op for template operations
+func (op *WriteTemplateOperation) SetItem(item interface{}) {
+	// No-op
+}
+
+// SetChecksum is a no-op for template operations
+func (op *WriteTemplateOperation) SetChecksum(path string, checksum interface{}) {
+	// No-op
 }
 
 // ReverseOps generates reverse operations
-func (op *WriteTemplateOperation) ReverseOps(ctx context.Context, fsys FileSystem, budget *core.BackupBudget) ([]Operation, *core.BackupData, error) {
-	// Would create a delete operation
-	deleteOp := New().Delete(op.path)
-	return []Operation{deleteOp}, nil, nil
+func (op *WriteTemplateOperation) ReverseOps(ctx context.Context, fsys filesystem.FileSystem, budget interface{}) ([]operations.Operation, interface{}, error) {
+	return []operations.Operation{}, nil, fmt.Errorf("reverse ops not implemented for WriteTemplateOperation")
 }
 
+
 // execute performs the template write operation
-func (op *WriteTemplateOperation) execute(ctx context.Context, fsys FileSystem) error {
+func (op *WriteTemplateOperation) execute(ctx context.Context, fsys filesystem.FileSystem) error {
 	// Parse and execute template
 	tmpl, err := template.New("file").Parse(op.template)
 	if err != nil {
@@ -155,7 +159,7 @@ func (op *WriteTemplateOperation) execute(ctx context.Context, fsys FileSystem) 
 }
 
 // validate checks if the operation can be performed
-func (op *WriteTemplateOperation) validate(ctx context.Context, fsys FileSystem) error {
+func (op *WriteTemplateOperation) validate(ctx context.Context, fsys filesystem.FileSystem) error {
 	// Validate template syntax
 	if _, err := template.New("validate").Parse(op.template); err != nil {
 		return fmt.Errorf("invalid template syntax: %w", err)

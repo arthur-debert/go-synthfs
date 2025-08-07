@@ -843,7 +843,18 @@ func (oa *operationAdapter) AddDependency(dep core.OperationID) {
 }
 
 func (oa *operationAdapter) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Try ExecutionContext-aware Execute first
+	// Try operations.Operation interface first (most common case)
+	if op, ok := oa.op.(interface {
+		Execute(context.Context, *core.ExecutionContext, filesystem.FileSystem) error
+	}); ok {
+		if ctxTyped, ok := ctx.(context.Context); ok {
+			if fsysTyped, ok := fsys.(filesystem.FileSystem); ok {
+				return op.Execute(ctxTyped, execCtx, fsysTyped)
+			}
+		}
+	}
+
+	// Try ExecutionContext-aware Execute with interface{} parameters
 	if op, ok := oa.op.(interface {
 		Execute(interface{}, *core.ExecutionContext, interface{}) error
 	}); ok {
@@ -863,7 +874,18 @@ func (oa *operationAdapter) Execute(ctx interface{}, execCtx *core.ExecutionCont
 }
 
 func (oa *operationAdapter) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Try ExecutionContext-aware Validate first
+	// Try operations.Operation interface first (most common case)
+	if op, ok := oa.op.(interface {
+		Validate(context.Context, *core.ExecutionContext, filesystem.FileSystem) error
+	}); ok {
+		if ctxTyped, ok := ctx.(context.Context); ok {
+			if fsysTyped, ok := fsys.(filesystem.FileSystem); ok {
+				return op.Validate(ctxTyped, execCtx, fsysTyped)
+			}
+		}
+	}
+
+	// Try ExecutionContext-aware Validate with interface{} parameters
 	if op, ok := oa.op.(interface {
 		Validate(interface{}, *core.ExecutionContext, interface{}) error
 	}); ok {

@@ -9,6 +9,8 @@ import (
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
@@ -462,19 +464,22 @@ func (m *MockMainOperation) Describe() synthfs.OperationDesc {
 }
 func (m *MockMainOperation) AddDependency(depID synthfs.OperationID) { /* no-op for mock */ }
 
-func (m *MockMainOperation) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (m *MockMainOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	return m.executeError
 }
 
-func (m *MockMainOperation) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (m *MockMainOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	return m.validateError
 }
 
-func (m *MockMainOperation) ReverseOps(ctx context.Context, fs synthfs.FileSystem, budget *synthfs.BackupBudget) ([]synthfs.Operation, *synthfs.BackupData, error) {
+func (m *MockMainOperation) ReverseOps(ctx context.Context, fs filesystem.FileSystem, budget interface{}) ([]operations.Operation, interface{}, error) {
 	if m.reverseOpsError != nil {
 		return nil, nil, m.reverseOpsError
 	}
-	return m.reverseOps, m.backupData, nil
+	// Convert []synthfs.Operation to []operations.Operation
+	// synthfs.Operation is now an alias to operations.Operation
+	opsOps := append([]operations.Operation(nil), m.reverseOps...)
+	return opsOps, m.backupData, nil
 }
 
 func (m *MockMainOperation) Rollback(ctx context.Context, fs synthfs.FileSystem) error {
@@ -482,18 +487,17 @@ func (m *MockMainOperation) Rollback(ctx context.Context, fs synthfs.FileSystem)
 	return m.rollbackError
 }
 
-func (m *MockMainOperation) GetItem() synthfs.FsItem {
-	if item, ok := m.item.(synthfs.FsItem); ok {
-		return item
-	}
-	return nil
+func (m *MockMainOperation) GetItem() interface{} {
+	return m.item
 }
 
-func (m *MockMainOperation) Prerequisites() []core.Prerequisite                  { return []core.Prerequisite{} }
-func (m *MockMainOperation) GetChecksum(path string) *synthfs.ChecksumRecord     { return nil }
-func (m *MockMainOperation) GetAllChecksums() map[string]*synthfs.ChecksumRecord { return nil }
+func (m *MockMainOperation) Prerequisites() []core.Prerequisite                   { return []core.Prerequisite{} }
+func (m *MockMainOperation) GetChecksum(path string) interface{}                  { return nil }
+func (m *MockMainOperation) GetAllChecksums() map[string]interface{}             { return nil }
 func (m *MockMainOperation) SetDescriptionDetail(key string, value interface{})  { /* no-op for mock */ }
 func (m *MockMainOperation) SetPaths(src, dst string)                            { /* no-op for mock */ }
+func (m *MockMainOperation) GetPaths() (src, dst string)                         { return "", "" }
+func (m *MockMainOperation) SetChecksum(path string, checksum interface{})       { /* no-op for mock */ }
 
 func (m *MockMainOperation) SetExecuteError(err error)    { m.executeError = err }
 func (m *MockMainOperation) SetValidateError(err error)   { m.validateError = err }

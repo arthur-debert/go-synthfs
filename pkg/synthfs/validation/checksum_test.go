@@ -5,6 +5,7 @@ import (
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/validation"
 )
 
 func TestBatchChecksumming(t *testing.T) {
@@ -35,14 +36,18 @@ func TestBatchChecksumming(t *testing.T) {
 		if checksum == nil {
 			t.Error("Expected checksum to be computed for source file")
 		} else {
-			if checksum.Path != "source.txt" {
-				t.Errorf("Expected checksum path 'source.txt', got '%s'", checksum.Path)
+			cr, ok := checksum.(*validation.ChecksumRecord)
+			if !ok {
+				t.Fatalf("Expected *validation.ChecksumRecord, got %T", checksum)
 			}
-			if checksum.MD5 == "" {
+			if cr.Path != "source.txt" {
+				t.Errorf("Expected checksum path 'source.txt', got '%s'", cr.Path)
+			}
+			if cr.MD5 == "" {
 				t.Error("Expected non-empty MD5 checksum")
 			}
-			if checksum.Size != int64(len(sourceContent)) {
-				t.Errorf("Expected checksum size %d, got %d", len(sourceContent), checksum.Size)
+			if cr.Size != int64(len(sourceContent)) {
+				t.Errorf("Expected checksum size %d, got %d", len(sourceContent), cr.Size)
 			}
 		}
 
@@ -50,8 +55,11 @@ func TestBatchChecksumming(t *testing.T) {
 		desc := operation.Describe()
 		if sourceChecksum, exists := desc.Details["source_checksum"]; !exists {
 			t.Error("Expected source_checksum in operation details")
-		} else if sourceChecksum != checksum.MD5 {
-			t.Errorf("Expected source_checksum %s, got %v", checksum.MD5, sourceChecksum)
+		} else {
+			cr, _ := checksum.(*validation.ChecksumRecord)
+			if sourceChecksum != cr.MD5 {
+				t.Errorf("Expected source_checksum %s, got %v", cr.MD5, sourceChecksum)
+			}
 		}
 	})
 
@@ -80,14 +88,18 @@ func TestBatchChecksumming(t *testing.T) {
 		if checksum == nil {
 			t.Error("Expected checksum to be computed for source file")
 		} else {
-			if checksum.Path != "old.txt" {
-				t.Errorf("Expected checksum path 'old.txt', got '%s'", checksum.Path)
+			cr, ok := checksum.(*validation.ChecksumRecord)
+			if !ok {
+				t.Fatalf("Expected *validation.ChecksumRecord, got %T", checksum)
 			}
-			if checksum.MD5 == "" {
+			if cr.Path != "old.txt" {
+				t.Errorf("Expected checksum path 'old.txt', got '%s'", cr.Path)
+			}
+			if cr.MD5 == "" {
 				t.Error("Expected non-empty MD5 checksum")
 			}
-			if checksum.Size != int64(len(sourceContent)) {
-				t.Errorf("Expected checksum size %d, got %d", len(sourceContent), checksum.Size)
+			if cr.Size != int64(len(sourceContent)) {
+				t.Errorf("Expected checksum size %d, got %d", len(sourceContent), cr.Size)
 			}
 		}
 
@@ -95,8 +107,11 @@ func TestBatchChecksumming(t *testing.T) {
 		desc := operation.Describe()
 		if sourceChecksum, exists := desc.Details["source_checksum"]; !exists {
 			t.Error("Expected source_checksum in operation details")
-		} else if sourceChecksum != checksum.MD5 {
-			t.Errorf("Expected source_checksum %s, got %v", checksum.MD5, sourceChecksum)
+		} else {
+			cr, _ := checksum.(*validation.ChecksumRecord)
+			if sourceChecksum != cr.MD5 {
+				t.Errorf("Expected source_checksum %s, got %v", cr.MD5, sourceChecksum)
+			}
 		}
 	})
 
@@ -140,14 +155,18 @@ func TestBatchChecksumming(t *testing.T) {
 				continue
 			}
 
-			if checksum.Path != path {
-				t.Errorf("Expected checksum path '%s', got '%s'", path, checksum.Path)
+			cr, ok := checksum.(*validation.ChecksumRecord)
+			if !ok {
+				t.Fatalf("Expected *validation.ChecksumRecord, got %T", checksum)
 			}
-			if checksum.MD5 == "" {
+			if cr.Path != path {
+				t.Errorf("Expected checksum path '%s', got '%s'", path, cr.Path)
+			}
+			if cr.MD5 == "" {
 				t.Errorf("Expected non-empty MD5 checksum for %s", path)
 			}
-			if checksum.Size != int64(len(expectedContent)) {
-				t.Errorf("Expected checksum size %d for %s, got %d", len(expectedContent), path, checksum.Size)
+			if cr.Size != int64(len(expectedContent)) {
+				t.Errorf("Expected checksum size %d for %s, got %d", len(expectedContent), path, cr.Size)
 			}
 		}
 
@@ -223,7 +242,13 @@ func TestBatchChecksumming(t *testing.T) {
 			t.Fatal("Both checksums should be computed")
 		}
 
-		if checksum1.MD5 == checksum2.MD5 {
+		cr1, ok1 := checksum1.(*validation.ChecksumRecord)
+		cr2, ok2 := checksum2.(*validation.ChecksumRecord)
+		if !ok1 || !ok2 {
+			t.Fatal("Expected *validation.ChecksumRecord for both checksums")
+		}
+
+		if cr1.MD5 == cr2.MD5 {
 			t.Error("Different files should have different checksums")
 		}
 	})
@@ -266,9 +291,15 @@ func TestBatchChecksumming(t *testing.T) {
 			t.Fatal("Both checksums should be computed")
 		}
 
-		if checksum1.MD5 != checksum2.MD5 {
+		cr1, ok1 := checksum1.(*validation.ChecksumRecord)
+		cr2, ok2 := checksum2.(*validation.ChecksumRecord)
+		if !ok1 || !ok2 {
+			t.Fatal("Expected *validation.ChecksumRecord for both checksums")
+		}
+
+		if cr1.MD5 != cr2.MD5 {
 			t.Errorf("Identical content should have same checksum, got %s vs %s",
-				checksum1.MD5, checksum2.MD5)
+				cr1.MD5, cr2.MD5)
 		}
 	})
 }
