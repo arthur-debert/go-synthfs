@@ -2,6 +2,7 @@ package synthfs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
@@ -34,27 +35,37 @@ func (a *CustomOperationAdapter) Prerequisites() []core.Prerequisite {
 }
 
 func (a *CustomOperationAdapter) Execute(ctx context.Context, fsys FileSystem) error {
-	return a.CustomOperation.Execute(ctx, fsys)
+	// Convert FileSystem to filesystem.FileSystem and call with nil ExecutionContext
+	return a.CustomOperation.Execute(ctx, nil, fsys)
 }
 
 func (a *CustomOperationAdapter) Validate(ctx context.Context, fsys FileSystem) error {
-	return a.CustomOperation.Validate(ctx, fsys)
+	// Convert FileSystem to filesystem.FileSystem and call with nil ExecutionContext
+	return a.CustomOperation.Validate(ctx, nil, fsys)
 }
 
 func (a *CustomOperationAdapter) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Convert interface{} to filesystem.FileSystem
-	if fs, ok := fsys.(filesystem.FileSystem); ok {
-		return a.CustomOperation.ExecuteV2(ctx, execCtx, fs)
+	// Convert interfaces and delegate to unified Execute method
+	contextObj, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
 	}
-	return a.CustomOperation.ExecuteV2(ctx, execCtx, fsys.(filesystem.FileSystem))
+	if fs, ok := fsys.(filesystem.FileSystem); ok {
+		return a.CustomOperation.Execute(contextObj, execCtx, fs)
+	}
+	return a.CustomOperation.Execute(contextObj, execCtx, fsys.(filesystem.FileSystem))
 }
 
 func (a *CustomOperationAdapter) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Convert interface{} to filesystem.FileSystem
-	if fs, ok := fsys.(filesystem.FileSystem); ok {
-		return a.CustomOperation.ValidateV2(ctx, execCtx, fs)
+	// Convert interfaces and delegate to unified Validate method
+	contextObj, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
 	}
-	return a.CustomOperation.ValidateV2(ctx, execCtx, fsys.(filesystem.FileSystem))
+	if fs, ok := fsys.(filesystem.FileSystem); ok {
+		return a.CustomOperation.Validate(contextObj, execCtx, fs)
+	}
+	return a.CustomOperation.Validate(contextObj, execCtx, fsys.(filesystem.FileSystem))
 }
 
 func (a *CustomOperationAdapter) Rollback(ctx context.Context, fsys FileSystem) error {

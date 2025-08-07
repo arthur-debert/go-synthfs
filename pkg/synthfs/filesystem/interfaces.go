@@ -32,6 +32,4 @@ type FileSystem interface {
 	Rename(oldpath, newpath string) error
 }
 
-// Legacy type aliases for backward compatibility - these will be removed in Phase 2
-type StatFS = FileSystem
-type FullFileSystem = FileSystem
+// Phase 2: Legacy type aliases have been removed - use FileSystem directly

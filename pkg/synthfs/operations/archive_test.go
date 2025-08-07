@@ -20,7 +20,7 @@ func TestArchiveOperations(t *testing.T) {
 		op := operations.NewCreateArchiveOperation(core.OperationID("test-op"), "test/archive.tar.gz")
 		// Don't set sources in description - should fail validation
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected validation error for missing sources")
 		}
@@ -43,7 +43,7 @@ func TestArchiveOperations(t *testing.T) {
 		op.SetDescriptionDetail("format", "zip")
 		op.SetDescriptionDetail("sources", []string{"file1.txt", "file2.txt"})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -135,7 +135,7 @@ func TestArchiveOperations(t *testing.T) {
 		// Set extract_path in description
 		op.SetDescriptionDetail("extract_path", "output")
 
-		if err := op.Execute(ctx, fs); err != nil {
+		if err := op.Execute(ctx, nil, fs); err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
 

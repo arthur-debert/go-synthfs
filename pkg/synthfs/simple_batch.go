@@ -40,13 +40,13 @@ import (
 //		}
 //	}
 type SimpleBatch struct {
-	fs         filesystem.FullFileSystem
+	fs         filesystem.FileSystem
 	operations []Operation
 	ctx        context.Context
 }
 
 // NewSimpleBatch creates a new simple batch for the given filesystem
-func NewSimpleBatch(fs filesystem.FullFileSystem) *SimpleBatch {
+func NewSimpleBatch(fs filesystem.FileSystem) *SimpleBatch {
 	return &SimpleBatch{
 		fs:         fs,
 		operations: []Operation{},

@@ -26,7 +26,7 @@ func TestSymlinkExecuteErrorPaths(t *testing.T) {
 		op := operations.NewCreateSymlinkOperation(core.OperationID("test-op"), "link.txt")
 
 		// Don't set item
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected error for missing item")
@@ -47,7 +47,7 @@ func TestSymlinkExecuteErrorPaths(t *testing.T) {
 			target: "target.txt",
 		})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected error for missing target")
@@ -69,7 +69,7 @@ func TestSymlinkExecuteErrorPaths(t *testing.T) {
 			target: "target.txt",
 		})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected error for empty target")
@@ -90,7 +90,7 @@ func TestSymlinkExecuteErrorPaths(t *testing.T) {
 		// Set item that doesn't implement ItemInterface
 		op.SetItem("not-an-item-interface")
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected error for non-ItemInterface item")
@@ -114,7 +114,7 @@ func TestSymlinkExecuteErrorPaths(t *testing.T) {
 			target: "target.txt",
 		})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected error for filesystem without Symlink")
@@ -135,7 +135,7 @@ func TestSymlinkExecuteErrorPaths(t *testing.T) {
 			target: "../../target.txt",
 		})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err != nil {
 			t.Errorf("Expected no error for valid symlink with parent dirs, got: %v", err)
@@ -164,7 +164,7 @@ func TestSymlinkExecuteErrorPaths(t *testing.T) {
 			target: "target.txt",
 		})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err != nil {
 			t.Errorf("Expected no error for root directory symlink, got: %v", err)
@@ -195,7 +195,7 @@ func TestSymlinkExecuteErrorPaths(t *testing.T) {
 			target: "target.txt",
 		})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err != nil {
 			t.Errorf("Expected no error even without MkdirAll, got: %v", err)
@@ -221,7 +221,7 @@ func TestSymlinkExecuteErrorPaths(t *testing.T) {
 			target: "target.txt",
 		})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected error for failing symlink creation")
@@ -244,7 +244,7 @@ func TestSymlinkExecuteErrorPaths(t *testing.T) {
 			target: "target.txt",
 		})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected error for failing parent directory creation")

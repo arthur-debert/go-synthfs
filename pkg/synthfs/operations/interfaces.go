@@ -34,13 +34,9 @@ type Operation interface {
 	SetDescriptionDetail(key string, value interface{})
 
 	// Execution methods
-	Execute(ctx context.Context, fsys filesystem.FileSystem) error
-	Validate(ctx context.Context, fsys filesystem.FileSystem) error
+	Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error
+	Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error
 	Rollback(ctx context.Context, fsys filesystem.FileSystem) error
-
-	// ExecuteV2 for new execution context pattern
-	ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error
-	ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error
 
 	// Reverse operations
 	ReverseOps(ctx context.Context, fsys filesystem.FileSystem, budget interface{}) ([]Operation, interface{}, error)

@@ -172,7 +172,7 @@ func TestDeleteOperation_Execute(t *testing.T) {
 		}
 
 		op := operations.NewDeleteOperation(core.OperationID("test-del"), "test.txt")
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Execute failed: %v", err)
 		}
@@ -187,7 +187,7 @@ func TestDeleteOperation_Execute(t *testing.T) {
 		fs := NewMockFilesystem()
 
 		op := operations.NewDeleteOperation(core.OperationID("test-del"), "nonexistent.txt")
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Execute should not fail for non-existent file: %v", err)
 		}
@@ -200,7 +200,7 @@ func TestDeleteOperation_Execute(t *testing.T) {
 		}
 
 		op := operations.NewDeleteOperation(core.OperationID("test-del"), "testdir")
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Execute failed: %v", err)
 		}

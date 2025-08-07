@@ -37,8 +37,19 @@ func (op *CreateSymlinkOperation) Prerequisites() []core.Prerequisite {
 	return prereqs
 }
 
-// Execute creates the symbolic link.
-func (op *CreateSymlinkOperation) Execute(ctx context.Context, fsys filesystem.FileSystem) error {
+// Execute creates the symbolic link with event handling.
+func (op *CreateSymlinkOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
+	// Execute with event handling if ExecutionContext is provided
+	if execCtx != nil {
+		return ExecuteWithEvents(op, ctx, execCtx, fsys, op.execute)
+	}
+
+	// Fallback to direct execution
+	return op.execute(ctx, fsys)
+}
+
+// execute is the internal implementation without event handling
+func (op *CreateSymlinkOperation) execute(ctx context.Context, fsys filesystem.FileSystem) error {
 	item := op.GetItem()
 	if item == nil {
 		return fmt.Errorf("create_symlink operation requires an item")
@@ -79,27 +90,12 @@ func (op *CreateSymlinkOperation) Execute(ctx context.Context, fsys filesystem.F
 	return nil
 }
 
-// ExecuteV2 performs the symlink creation with execution context support.
-func (op *CreateSymlinkOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Convert context
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
 
-	// Call the operation's Execute method with proper event handling
-	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
-}
-
-// ValidateV2 checks if the symlink can be created using ExecutionContext.
-func (op *CreateSymlinkOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	return validateV2Helper(op, ctx, execCtx, fsys)
-}
 
 // Validate checks if the symlink can be created.
-func (op *CreateSymlinkOperation) Validate(ctx context.Context, fsys filesystem.FileSystem) error {
+func (op *CreateSymlinkOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	// First do base validation
-	if err := op.BaseOperation.Validate(ctx, fsys); err != nil {
+	if err := op.BaseOperation.Validate(ctx, execCtx, fsys); err != nil {
 		return err
 	}
 

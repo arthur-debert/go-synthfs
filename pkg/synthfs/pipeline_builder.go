@@ -93,7 +93,7 @@ func (pb *PipelineBuilder) Build() Pipeline {
 }
 
 // Execute runs the pipeline against the given filesystem.
-func (pb *PipelineBuilder) Execute(ctx context.Context, fs filesystem.FullFileSystem) (*Result, error) {
+func (pb *PipelineBuilder) Execute(ctx context.Context, fs filesystem.FileSystem) (*Result, error) {
 	// For BuildPipeline, use sequential execution like simple_api to handle dependencies
 	// The pipeline/executor approach validates all operations upfront which fails for
 	// operations that depend on files created by previous operations

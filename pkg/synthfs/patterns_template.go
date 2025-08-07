@@ -180,7 +180,7 @@ func (s *SynthFS) WriteTemplateWithMode(path, templateContent string, data Templ
 }
 
 // WriteTemplateFile is a convenience function that writes a template directly
-func WriteTemplateFile(ctx context.Context, fs filesystem.FullFileSystem, path, templateContent string, data TemplateData) error {
+func WriteTemplateFile(ctx context.Context, fs filesystem.FileSystem, path, templateContent string, data TemplateData) error {
 	op := New().WriteTemplate(path, templateContent, data)
 	return op.Execute(ctx, fs)
 }
@@ -232,7 +232,7 @@ func (tb *TemplateBuilder) Build() Operation {
 }
 
 // Execute builds and executes the operation
-func (tb *TemplateBuilder) Execute(ctx context.Context, fs filesystem.FullFileSystem) error {
+func (tb *TemplateBuilder) Execute(ctx context.Context, fs filesystem.FileSystem) error {
 	op := tb.Build()
 	return op.Execute(ctx, fs)
 }
@@ -297,7 +297,7 @@ func (btw *BatchTemplateWriter) BuildOperations() []Operation {
 }
 
 // Execute writes all templates
-func (btw *BatchTemplateWriter) Execute(ctx context.Context, fs filesystem.FullFileSystem) error {
+func (btw *BatchTemplateWriter) Execute(ctx context.Context, fs filesystem.FileSystem) error {
 	ops := btw.BuildOperations()
 	result, err := Run(ctx, fs, ops...)
 	if err != nil {

@@ -199,7 +199,7 @@ func (op *CopyTreeOperation) ReverseOps(ctx context.Context, fsys FileSystem, bu
 
 // Execute performs the copy tree operation
 func (op *CopyTreeOperation) Execute(ctx context.Context, fsys FileSystem) error {
-	// Use the filesystem directly as FullFileSystem
+	// Use the filesystem directly (unified FileSystem interface)
 
 	// We need a way to walk the filesystem
 	// For now, we'll use a simple recursive approach

@@ -2,6 +2,7 @@ package synthfs
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
@@ -40,30 +41,40 @@ func (a *OperationsPackageAdapter) Prerequisites() []core.Prerequisite {
 
 // Execute performs the operation.
 func (a *OperationsPackageAdapter) Execute(ctx context.Context, fsys FileSystem) error {
-	return a.opsOperation.Execute(ctx, fsys)
+	// Convert FileSystem to filesystem.FileSystem and call with nil ExecutionContext
+	return a.opsOperation.Execute(ctx, nil, fsys)
 }
 
 // Validate checks if the operation can be performed.
 func (a *OperationsPackageAdapter) Validate(ctx context.Context, fsys FileSystem) error {
-	return a.opsOperation.Validate(ctx, fsys)
+	// Convert FileSystem to filesystem.FileSystem and call with nil ExecutionContext
+	return a.opsOperation.Validate(ctx, nil, fsys)
 }
 
 // ExecuteV2 performs the operation using ExecutionContext.
 func (a *OperationsPackageAdapter) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Convert interface{} to filesystem.FileSystem
-	if fs, ok := fsys.(filesystem.FileSystem); ok {
-		return a.opsOperation.ExecuteV2(ctx, execCtx, fs)
+	// Convert interfaces and delegate to unified Execute method
+	contextObj, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
 	}
-	return a.opsOperation.ExecuteV2(ctx, execCtx, fsys.(filesystem.FileSystem))
+	if fs, ok := fsys.(filesystem.FileSystem); ok {
+		return a.opsOperation.Execute(contextObj, execCtx, fs)
+	}
+	return a.opsOperation.Execute(contextObj, execCtx, fsys.(filesystem.FileSystem))
 }
 
 // ValidateV2 checks if the operation can be performed using ExecutionContext.
 func (a *OperationsPackageAdapter) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Convert interface{} to filesystem.FileSystem
-	if fs, ok := fsys.(filesystem.FileSystem); ok {
-		return a.opsOperation.ValidateV2(ctx, execCtx, fs)
+	// Convert interfaces and delegate to unified Validate method
+	contextObj, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("invalid context type")
 	}
-	return a.opsOperation.ValidateV2(ctx, execCtx, fsys.(filesystem.FileSystem))
+	if fs, ok := fsys.(filesystem.FileSystem); ok {
+		return a.opsOperation.Validate(contextObj, execCtx, fs)
+	}
+	return a.opsOperation.Validate(contextObj, execCtx, fsys.(filesystem.FileSystem))
 }
 
 // Rollback undoes the operation.

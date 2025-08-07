@@ -32,7 +32,7 @@ func TestFilesystemHelperMethods(t *testing.T) {
 			mode:    0644,
 		})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Expected no error for interface{} filesystem, got: %v", err)
 		}
@@ -63,7 +63,7 @@ func TestFilesystemHelperMethods(t *testing.T) {
 			mode:    0644,
 		})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Expected no error for fs.FileMode filesystem, got: %v", err)
 		}
@@ -100,7 +100,7 @@ func TestFilesystemHelperMethods(t *testing.T) {
 			mode:    0644,
 		})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected error for filesystem without WriteFile")
@@ -121,7 +121,7 @@ func TestFilesystemHelperMethods(t *testing.T) {
 			mode:    0644,
 		})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected error for filesystem without MkdirAll")
@@ -142,7 +142,7 @@ func TestFilesystemHelperMethods(t *testing.T) {
 			mode:    0644,
 		})
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for filesystem without WriteFile")
@@ -169,7 +169,7 @@ func TestFilesystemHelperMethods(t *testing.T) {
 			mode:    0644,
 		})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Expected no error for root directory file, got: %v", err)
 		}

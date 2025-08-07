@@ -38,14 +38,14 @@ import (
 //	)
 //
 // For complex dependency management, consider using BuildPipeline instead.
-func Run(ctx context.Context, fs filesystem.FullFileSystem, ops ...Operation) (*Result, error) {
+func Run(ctx context.Context, fs filesystem.FileSystem, ops ...Operation) (*Result, error) {
 	return RunWithOptions(ctx, fs, DefaultPipelineOptions(), ops...)
 }
 
 // RunWithOptions executes operations with custom options.
 // It builds a pipeline with the given operations and runs it using the main executor.
 // This ensures that all operations are validated before execution begins.
-func RunWithOptions(ctx context.Context, fs filesystem.FullFileSystem, options PipelineOptions, ops ...Operation) (*Result, error) {
+func RunWithOptions(ctx context.Context, fs filesystem.FileSystem, options PipelineOptions, ops ...Operation) (*Result, error) {
 	// For the simple API, we disable prerequisite resolution by default to allow for the straightforward,
 	// ordered execution of operations without requiring explicit dependency declarations.
 	// For complex workflows with non-linear dependencies, users should use the

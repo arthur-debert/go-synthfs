@@ -84,18 +84,26 @@ func (op *CustomOperation) StoreOutput(key string, value interface{}) {
 	op.SetDescriptionDetail(key, value)
 }
 
-// Execute runs the custom operation's execute function.
-func (op *CustomOperation) Execute(ctx context.Context, fsys filesystem.FileSystem) error {
+// Execute runs the custom operation's execute function with event handling.
+func (op *CustomOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	if op.executeFunc == nil {
 		return fmt.Errorf("custom operation %s: no execute function defined", op.ID())
 	}
 
+	// Execute with event handling if ExecutionContext is provided
+	if execCtx != nil {
+		return operations.ExecuteWithEvents(op, ctx, execCtx, fsys, func(ctx context.Context, fsys filesystem.FileSystem) error {
+			return op.executeFunc(ctx, fsys)
+		})
+	}
+
+	// Fallback to direct execution
 	return op.executeFunc(ctx, fsys)
 }
 
 // Validate runs the custom operation's validation function if defined.
 // If no validation function is set, it returns nil (assumes valid).
-func (op *CustomOperation) Validate(ctx context.Context, fsys filesystem.FileSystem) error {
+func (op *CustomOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	if op.validateFunc == nil {
 		// No validation function means operation is always valid
 		return nil
@@ -115,23 +123,6 @@ func (op *CustomOperation) Rollback(ctx context.Context, fsys filesystem.FileSys
 	return op.rollbackFunc(ctx, fsys)
 }
 
-// ExecuteV2 implements the V2 execution interface
-func (op *CustomOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Delegate to Execute with context type assertion
-	if contextOp, ok := ctx.(context.Context); ok {
-		return op.Execute(contextOp, fsys)
-	}
-	return fmt.Errorf("custom operation %s: invalid context type", op.ID())
-}
-
-// ValidateV2 implements the V2 validation interface
-func (op *CustomOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Delegate to Validate with context type assertion
-	if contextOp, ok := ctx.(context.Context); ok {
-		return op.Validate(contextOp, fsys)
-	}
-	return fmt.Errorf("custom operation %s: invalid context type", op.ID())
-}
 
 // ReverseOps returns the operations needed to reverse this custom operation.
 // For custom operations, this creates a single operation that runs the rollback function.

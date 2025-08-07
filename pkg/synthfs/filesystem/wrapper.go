@@ -4,7 +4,7 @@ import (
 	"io/fs"
 )
 
-// ReadOnlyWrapper wraps an fs.FS to add StatFS capabilities if not already present
+// ReadOnlyWrapper wraps an fs.FS to add FileSystem capabilities if not already present
 type ReadOnlyWrapper struct {
 	fs.FS
 }
@@ -14,9 +14,9 @@ func NewReadOnlyWrapper(fsys fs.FS) *ReadOnlyWrapper {
 	return &ReadOnlyWrapper{FS: fsys}
 }
 
-// Stat implements the StatFS interface
+// Stat implements the FileSystem interface
 func (w *ReadOnlyWrapper) Stat(name string) (fs.FileInfo, error) {
-	if statFS, ok := w.FS.(StatFS); ok {
+	if statFS, ok := w.FS.(FileSystem); ok {
 		return statFS.Stat(name)
 	}
 

@@ -74,7 +74,7 @@ func (pfs *PathAwareFileSystem) Open(name string) (fs.File, error) {
 	return pfs.fs.Open(resolved)
 }
 
-// Stat implements StatFS
+// Stat implements FileSystem
 func (pfs *PathAwareFileSystem) Stat(name string) (fs.FileInfo, error) {
 	resolved, err := pfs.resolvePath(name)
 	if err != nil {
@@ -158,7 +158,7 @@ func (pfs *PathAwareFileSystem) RemoveAll(name string) error {
 	return &fs.PathError{Op: "removeall", Path: name, Err: fs.ErrInvalid}
 }
 
-// Rename implements FullFileSystem
+// Rename implements FileSystem
 func (pfs *PathAwareFileSystem) Rename(oldpath, newpath string) error {
 	resolvedOld, err := pfs.resolvePath(oldpath)
 	if err != nil {
@@ -173,7 +173,7 @@ func (pfs *PathAwareFileSystem) Rename(oldpath, newpath string) error {
 	return pfs.fs.Rename(resolvedOld, resolvedNew)
 }
 
-// Symlink implements FullFileSystem
+// Symlink implements FileSystem
 func (pfs *PathAwareFileSystem) Symlink(oldname, newname string) error {
 	// For symlinks, we need to be careful about the target
 	// The target (oldname) might be relative to the link location
@@ -196,7 +196,7 @@ func (pfs *PathAwareFileSystem) Symlink(oldname, newname string) error {
 	return pfs.fs.Symlink(targetPath, resolvedNew)
 }
 
-// Readlink implements FullFileSystem
+// Readlink implements FileSystem
 func (pfs *PathAwareFileSystem) Readlink(name string) (string, error) {
 	resolved, err := pfs.resolvePath(name)
 	if err != nil {

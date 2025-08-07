@@ -109,13 +109,13 @@ func (op *BaseOperation) GetAllChecksums() map[string]interface{} {
 
 // Execute performs the actual filesystem operation.
 // Subclasses should override this method.
-func (op *BaseOperation) Execute(ctx context.Context, fsys filesystem.FileSystem) error {
+func (op *BaseOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	return fmt.Errorf("Execute not implemented for operation type: %s", op.description.Type)
 }
 
 // Validate checks if the operation can be performed.
 // Subclasses should override this method.
-func (op *BaseOperation) Validate(ctx context.Context, fsys filesystem.FileSystem) error {
+func (op *BaseOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	// Basic validation: reject empty IDs
 	if string(op.id) == "" {
 		return &core.ValidationError{
@@ -163,24 +163,4 @@ func (op *BaseOperation) ReverseOps(ctx context.Context, fsys filesystem.FileSys
 // Additional methods to satisfy the main package Operation interface
 // Note: GetItem, GetChecksum, and GetAllChecksums are already defined above
 
-// ExecuteV2 performs the operation using ExecutionContext.
-// IMPORTANT: This base implementation should NOT be used. Each concrete operation
-// type must override this method to ensure proper method dispatch.
-func (op *BaseOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// This is a fallback that should not be reached if operations are properly implemented
-	return fmt.Errorf("ExecuteV2 not properly implemented for operation type: %s", op.description.Type)
-}
 
-// ValidateV2 checks if the operation can be performed using ExecutionContext.
-func (op *BaseOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Convert interfaces back to concrete types
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
-
-	// For now, delegate to the original method
-	// Note: This calls BaseOperation.Validate, not the overridden method!
-	// Concrete operations should override ValidateV2 to call their own Validate method.
-	return op.Validate(context, fsys)
-}

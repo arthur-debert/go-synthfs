@@ -60,8 +60,19 @@ func (op *CreateArchiveOperation) Prerequisites() []core.Prerequisite {
 	return prereqs
 }
 
-// Execute creates the archive.
-func (op *CreateArchiveOperation) Execute(ctx context.Context, fsys filesystem.FileSystem) error {
+// Execute creates the archive with event handling.
+func (op *CreateArchiveOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
+	// Execute with event handling if ExecutionContext is provided
+	if execCtx != nil {
+		return ExecuteWithEvents(op, ctx, execCtx, fsys, op.execute)
+	}
+
+	// Fallback to direct execution
+	return op.execute(ctx, fsys)
+}
+
+// execute is the internal implementation without event handling
+func (op *CreateArchiveOperation) execute(ctx context.Context, fsys filesystem.FileSystem) error {
 	// Get sources - first try from item, then from details
 	var sources []string
 	var format interface{}
@@ -255,27 +266,12 @@ func (op *CreateArchiveOperation) createTarArchive(archivePath string, sources [
 	return fsys.WriteFile(archivePath, buf.Bytes(), 0644)
 }
 
-// ExecuteV2 performs the archive creation with execution context support.
-func (op *CreateArchiveOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Convert context
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
 
-	// Call the operation's Execute method with proper event handling
-	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
-}
-
-// ValidateV2 checks if the archive can be created using ExecutionContext.
-func (op *CreateArchiveOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	return validateV2Helper(op, ctx, execCtx, fsys)
-}
 
 // Validate checks if the archive can be created.
-func (op *CreateArchiveOperation) Validate(ctx context.Context, fsys filesystem.FileSystem) error {
+func (op *CreateArchiveOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	// First do base validation
-	if err := op.BaseOperation.Validate(ctx, fsys); err != nil {
+	if err := op.BaseOperation.Validate(ctx, execCtx, fsys); err != nil {
 		return err
 	}
 
@@ -357,8 +353,19 @@ func (op *UnarchiveOperation) Prerequisites() []core.Prerequisite {
 	return prereqs
 }
 
-// Execute extracts the archive.
-func (op *UnarchiveOperation) Execute(ctx context.Context, fsys filesystem.FileSystem) error {
+// Execute extracts the archive with event handling.
+func (op *UnarchiveOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
+	// Execute with event handling if ExecutionContext is provided
+	if execCtx != nil {
+		return ExecuteWithEvents(op, ctx, execCtx, fsys, op.execute)
+	}
+
+	// Fallback to direct execution
+	return op.execute(ctx, fsys)
+}
+
+// execute is the internal implementation without event handling
+func (op *UnarchiveOperation) execute(ctx context.Context, fsys filesystem.FileSystem) error {
 	// Get extract path - first check item, then details
 	var extractPath string
 	if op.item != nil {
@@ -557,27 +564,12 @@ func matchesPatterns(name string, patterns []string) bool {
 	return false
 }
 
-// ExecuteV2 performs the unarchive with execution context support.
-func (op *UnarchiveOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Convert context
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
 
-	// Call the operation's Execute method with proper event handling
-	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
-}
-
-// ValidateV2 checks if the unarchive operation can be performed using ExecutionContext.
-func (op *UnarchiveOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	return validateV2Helper(op, ctx, execCtx, fsys)
-}
 
 // Validate checks if the unarchive operation can be performed.
-func (op *UnarchiveOperation) Validate(ctx context.Context, fsys filesystem.FileSystem) error {
+func (op *UnarchiveOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	// First do base validation
-	if err := op.BaseOperation.Validate(ctx, fsys); err != nil {
+	if err := op.BaseOperation.Validate(ctx, execCtx, fsys); err != nil {
 		return err
 	}
 

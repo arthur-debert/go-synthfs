@@ -136,7 +136,7 @@ func (op *MirrorWithSymlinksOperation) ReverseOps(ctx context.Context, fsys File
 
 // Execute performs the mirror operation
 func (op *MirrorWithSymlinksOperation) Execute(ctx context.Context, fsys FileSystem) error {
-	// Use the filesystem directly as FullFileSystem
+	// Use the filesystem directly (unified FileSystem interface)
 
 	// Recursive walk function
 	var walk func(string) error

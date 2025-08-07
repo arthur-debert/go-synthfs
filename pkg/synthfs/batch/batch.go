@@ -235,7 +235,7 @@ func (b *BatchImpl) Copy(src, dst string, metadata ...map[string]interface{}) (i
 	}
 
 	// Compute checksum for source file (after validation passes)
-	if fs, ok := b.fs.(filesystem.FullFileSystem); ok {
+	if fs, ok := b.fs.(filesystem.FileSystem); ok {
 		if checksum, err := validation.ComputeFileChecksum(fs, src); err == nil && checksum != nil {
 			// Set checksum on operation
 			type checksumSetter interface {
@@ -289,7 +289,7 @@ func (b *BatchImpl) Move(src, dst string, metadata ...map[string]interface{}) (i
 	}
 
 	// Compute checksum for source file (after validation passes)
-	if fs, ok := b.fs.(filesystem.FullFileSystem); ok {
+	if fs, ok := b.fs.(filesystem.FileSystem); ok {
 		if checksum, err := validation.ComputeFileChecksum(fs, src); err == nil && checksum != nil {
 			// Set checksum on operation
 			type checksumSetter interface {
@@ -409,7 +409,7 @@ func (b *BatchImpl) CreateArchive(archivePath string, format interface{}, source
 	}
 
 	// Compute checksums for all source files
-	if fs, ok := b.fs.(filesystem.FullFileSystem); ok {
+	if fs, ok := b.fs.(filesystem.FileSystem); ok {
 		for _, source := range sources {
 			if checksum, err := validation.ComputeFileChecksum(fs, source); err == nil && checksum != nil {
 				// Set checksum on operation

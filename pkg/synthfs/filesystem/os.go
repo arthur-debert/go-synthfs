@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// OSFileSystem implements FullFileSystem using the OS filesystem
+// OSFileSystem implements FileSystem using the OS filesystem
 type OSFileSystem struct {
 	root string
 }
@@ -26,7 +26,7 @@ func (osfs *OSFileSystem) Open(name string) (fs.File, error) {
 	return os.Open(fullPath)
 }
 
-// Stat implements StatFS
+// Stat implements FileSystem
 func (osfs *OSFileSystem) Stat(name string) (fs.FileInfo, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrInvalid}

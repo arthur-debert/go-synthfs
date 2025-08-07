@@ -18,7 +18,7 @@ func TestArchiveValidationEdgeCases(t *testing.T) {
 		op := operations.NewCreateArchiveOperation(core.OperationID("test-op"), "test.zip")
 
 		// Don't set any sources - should fail validation
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for no sources")
@@ -39,7 +39,7 @@ func TestArchiveValidationEdgeCases(t *testing.T) {
 		// Set sources that don't exist
 		op.SetDescriptionDetail("sources", []string{"nonexistent1.txt", "nonexistent2.txt"})
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for non-existent sources")
@@ -66,7 +66,7 @@ func TestArchiveValidationEdgeCases(t *testing.T) {
 		// Set mix of existing and non-existent sources
 		op.SetDescriptionDetail("sources", []string{"existing.txt", "nonexistent.txt"})
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for non-existent source")
@@ -85,7 +85,7 @@ func TestArchiveValidationEdgeCases(t *testing.T) {
 		op := operations.NewUnarchiveOperation(core.OperationID("test-op"), "test.zip")
 
 		// Don't set item - should fail validation
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for missing item")
@@ -106,7 +106,7 @@ func TestArchiveValidationEdgeCases(t *testing.T) {
 		// Set item that doesn't implement required interfaces
 		op.SetItem(&TestFileItem{path: "test.zip", content: []byte("data"), mode: 0644})
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for wrong item type")
@@ -132,7 +132,7 @@ func TestArchiveValidationEdgeCases(t *testing.T) {
 		}
 		op.SetItem(unarchiveItem)
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for empty archive path")
@@ -158,7 +158,7 @@ func TestArchiveValidationEdgeCases(t *testing.T) {
 		}
 		op.SetItem(unarchiveItem)
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for empty extract path")
@@ -189,7 +189,7 @@ func TestArchiveValidationEdgeCases(t *testing.T) {
 		}
 		op.SetItem(unarchiveItem)
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for unsupported format")
@@ -214,7 +214,7 @@ func TestArchiveValidationEdgeCases(t *testing.T) {
 		}
 		op.SetItem(unarchiveItem)
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for non-existent archive")
@@ -250,7 +250,7 @@ func TestArchiveValidationEdgeCases(t *testing.T) {
 			}
 			op.SetItem(unarchiveItem)
 
-			err := op.Validate(ctx, fs)
+			err := op.Validate(ctx, nil, fs)
 
 			if err != nil {
 				t.Errorf("Unexpected validation error for supported format %s: %v", ext, err)

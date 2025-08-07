@@ -18,7 +18,7 @@ func TestArchiveExecutionErrorPaths(t *testing.T) {
 		op := operations.NewCreateArchiveOperation(core.OperationID("test-op"), "test.zip")
 
 		// Don't set sources - should fail during execution
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected execution error for no sources")
@@ -41,7 +41,7 @@ func TestArchiveExecutionErrorPaths(t *testing.T) {
 		op.SetDescriptionDetail("sources", []string{"source.txt"})
 		// Don't set format - should fail during execution
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected execution error for no format")
@@ -64,7 +64,7 @@ func TestArchiveExecutionErrorPaths(t *testing.T) {
 		op.SetDescriptionDetail("sources", []string{"source.txt"})
 		op.SetDescriptionDetail("format", "unsupported_format")
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected execution error for unsupported format")
@@ -87,7 +87,7 @@ func TestArchiveExecutionErrorPaths(t *testing.T) {
 		op.SetDescriptionDetail("sources", []string{"source.txt"})
 		op.SetDescriptionDetail("format", "other_format") // Will fallback to extension
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected execution error for unsupported extension")
@@ -116,7 +116,7 @@ func TestArchiveExecutionErrorPaths(t *testing.T) {
 		}
 		op.SetItem(archiveItem)
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err != nil {
 			t.Errorf("Expected no execution error for valid zip creation, got: %v", err)
@@ -140,7 +140,7 @@ func TestArchiveExecutionErrorPaths(t *testing.T) {
 		op.SetDescriptionDetail("sources", []string{"source.txt"})
 		op.SetDescriptionDetail("format", "tar")
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err != nil {
 			t.Errorf("Expected no execution error for tar creation, got: %v", err)
@@ -164,7 +164,7 @@ func TestArchiveExecutionErrorPaths(t *testing.T) {
 		op.SetDescriptionDetail("sources", []string{"source.txt"})
 		op.SetDescriptionDetail("format", "tar.gz")
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err != nil {
 			t.Errorf("Expected no execution error for tar.gz creation, got: %v", err)
@@ -193,7 +193,7 @@ func TestArchiveExecutionErrorPaths(t *testing.T) {
 		}
 		op.SetItem(unarchiveItem)
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected execution error for unsupported format")
@@ -221,7 +221,7 @@ func TestArchiveExecutionErrorPaths(t *testing.T) {
 		}
 		op.SetItem(unarchiveItem)
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected execution error for non-tar .gz file")
@@ -248,7 +248,7 @@ func TestArchiveExecutionErrorPaths(t *testing.T) {
 		// Don't set proper UnarchiveItem to test fallback
 		op.SetItem(&TestFileItem{path: "test.zip", content: []byte("data"), mode: 0644})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		// Should not fail due to extract path source (though may fail due to invalid zip data)
 		if err != nil && strings.Contains(err.Error(), "extract path") {
@@ -269,7 +269,7 @@ func TestArchiveExecutionErrorPaths(t *testing.T) {
 		// Don't set extract path anywhere - should default to "."
 		op.SetItem(&TestFileItem{path: "test.zip", content: []byte("data"), mode: 0644})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		// Should not fail due to extract path (defaults to current directory)
 		if err != nil && strings.Contains(err.Error(), "extract path") {
@@ -294,7 +294,7 @@ func TestArchiveExecutionErrorPaths(t *testing.T) {
 		// Don't set proper UnarchiveItem to test fallback
 		op.SetItem(&TestFileItem{path: "test.zip", content: []byte("data"), mode: 0644})
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 
 		// Should not fail due to pattern source (though may fail due to invalid zip data)
 		if err != nil && strings.Contains(err.Error(), "pattern") {

@@ -46,8 +46,19 @@ func (op *CopyOperation) Prerequisites() []core.Prerequisite {
 	return prereqs
 }
 
-// Execute performs the copy operation.
-func (op *CopyOperation) Execute(ctx context.Context, fsys filesystem.FileSystem) error {
+// Execute performs the copy operation with event handling.
+func (op *CopyOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
+	// Execute with event handling if ExecutionContext is provided
+	if execCtx != nil {
+		return ExecuteWithEvents(op, ctx, execCtx, fsys, op.execute)
+	}
+
+	// Fallback to direct execution
+	return op.execute(ctx, fsys)
+}
+
+// execute is the internal implementation without event handling
+func (op *CopyOperation) execute(ctx context.Context, fsys filesystem.FileSystem) error {
 	src, dst := op.GetPaths()
 	if src == "" || dst == "" {
 		return fmt.Errorf("copy operation requires both source and destination paths")
@@ -110,22 +121,11 @@ func (op *CopyOperation) Execute(ctx context.Context, fsys filesystem.FileSystem
 	return nil
 }
 
-// ExecuteV2 performs the copy with execution context support.
-func (op *CopyOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Convert context
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
-
-	// Call the operation's Execute method with proper event handling
-	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
-}
 
 // Validate checks if the copy operation can be performed.
-func (op *CopyOperation) Validate(ctx context.Context, fsys filesystem.FileSystem) error {
+func (op *CopyOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	// First do base validation
-	if err := op.BaseOperation.Validate(ctx, fsys); err != nil {
+	if err := op.BaseOperation.Validate(ctx, execCtx, fsys); err != nil {
 		return err
 	}
 
@@ -159,10 +159,6 @@ func (op *CopyOperation) Validate(ctx context.Context, fsys filesystem.FileSyste
 	return nil
 }
 
-// ValidateV2 checks if the copy operation can be performed using ExecutionContext.
-func (op *CopyOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	return validateV2Helper(op, ctx, execCtx, fsys)
-}
 
 // Rollback removes the copied file/directory.
 func (op *CopyOperation) Rollback(ctx context.Context, fsys filesystem.FileSystem) error {
@@ -212,8 +208,19 @@ func (op *MoveOperation) Prerequisites() []core.Prerequisite {
 	return prereqs
 }
 
-// Execute performs the move operation.
-func (op *MoveOperation) Execute(ctx context.Context, fsys filesystem.FileSystem) error {
+// Execute performs the move operation with event handling.
+func (op *MoveOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
+	// Execute with event handling if ExecutionContext is provided
+	if execCtx != nil {
+		return ExecuteWithEvents(op, ctx, execCtx, fsys, op.execute)
+	}
+
+	// Fallback to direct execution
+	return op.execute(ctx, fsys)
+}
+
+// execute is the internal implementation without event handling
+func (op *MoveOperation) execute(ctx context.Context, fsys filesystem.FileSystem) error {
 	src, dst := op.GetPaths()
 	if src == "" || dst == "" {
 		return fmt.Errorf("move operation requires both source and destination paths")
@@ -229,7 +236,7 @@ func (op *MoveOperation) Execute(ctx context.Context, fsys filesystem.FileSystem
 	// First copy
 	copyOp := NewCopyOperation(op.ID(), src)
 	copyOp.SetPaths(src, dst)
-	if err := copyOp.Execute(ctx, fsys); err != nil {
+	if err := copyOp.Execute(ctx, nil, fsys); err != nil {
 		return fmt.Errorf("move failed during copy: %w", err)
 	}
 
@@ -243,29 +250,14 @@ func (op *MoveOperation) Execute(ctx context.Context, fsys filesystem.FileSystem
 	return nil
 }
 
-// ExecuteV2 performs the move with execution context support.
-func (op *MoveOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	// Convert context
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
-
-	// Call the operation's Execute method with proper event handling
-	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
-}
 
 // Validate checks if the move operation can be performed.
-func (op *MoveOperation) Validate(ctx context.Context, fsys filesystem.FileSystem) error {
+func (op *MoveOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	// Use same validation as copy
 	copyOp := &CopyOperation{BaseOperation: op.BaseOperation}
-	return copyOp.Validate(ctx, fsys)
+	return copyOp.Validate(ctx, execCtx, fsys)
 }
 
-// ValidateV2 checks if the move operation can be performed using ExecutionContext.
-func (op *MoveOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
-	return validateV2Helper(op, ctx, execCtx, fsys)
-}
 
 // Rollback attempts to restore the moved file to its original location.
 func (op *MoveOperation) Rollback(ctx context.Context, fsys filesystem.FileSystem) error {
@@ -283,7 +275,7 @@ func (op *MoveOperation) Rollback(ctx context.Context, fsys filesystem.FileSyste
 	// First copy back
 	copyOp := NewCopyOperation(op.ID(), dst)
 	copyOp.SetPaths(dst, src)
-	if err := copyOp.Execute(ctx, fsys); err != nil {
+	if err := copyOp.Execute(ctx, nil, fsys); err != nil {
 		return fmt.Errorf("rollback failed during copy: %w", err)
 	}
 

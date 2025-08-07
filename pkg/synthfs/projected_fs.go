@@ -27,12 +27,12 @@ func (pfi *projectedFileInfo) Sys() interface{}   { return nil }
 
 // ProjectedFileSystem wraps a real filesystem and overlays projected state from operations
 type ProjectedFileSystem struct {
-	realFS  filesystem.FullFileSystem
+	realFS  filesystem.FileSystem
 	tracker *PathStateTracker
 }
 
 // NewProjectedFileSystem creates a new projected filesystem
-func NewProjectedFileSystem(fs filesystem.FullFileSystem) *ProjectedFileSystem {
+func NewProjectedFileSystem(fs filesystem.FileSystem) *ProjectedFileSystem {
 	return &ProjectedFileSystem{
 		realFS:  fs,
 		tracker: NewPathStateTracker(fs),
@@ -126,5 +126,5 @@ func (pfs *ProjectedFileSystem) WriteFile(name string, data []byte, perm fs.File
 	return pfs.realFS.WriteFile(name, data, perm)
 }
 
-// Ensure ProjectedFileSystem implements FullFileSystem
-var _ filesystem.FullFileSystem = (*ProjectedFileSystem)(nil)
+// Ensure ProjectedFileSystem implements FileSystem
+var _ filesystem.FileSystem = (*ProjectedFileSystem)(nil)

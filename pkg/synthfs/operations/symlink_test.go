@@ -19,7 +19,7 @@ func TestSymlinkOperations(t *testing.T) {
 		op := operations.NewCreateSymlinkOperation(core.OperationID("test-op"), "test/link")
 		// Don't set item - should fail validation
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected validation error for missing item")
 			return
@@ -45,7 +45,7 @@ func TestSymlinkOperations(t *testing.T) {
 		// Also set target in description
 		op.SetDescriptionDetail("target", "../target")
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Expected no validation error, got: %v", err)
 		}
@@ -68,7 +68,7 @@ func TestSymlinkOperations(t *testing.T) {
 		op.SetDescriptionDetail("target", "../target")
 
 		// MockFilesystem doesn't support symlinks
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected error for unsupported symlink operation")
 			return

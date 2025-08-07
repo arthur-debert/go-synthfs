@@ -13,7 +13,7 @@ type PathStateTracker struct {
 }
 
 // NewPathStateTracker creates a new tracker.
-func NewPathStateTracker(fs FullFileSystem) *PathStateTracker {
+func NewPathStateTracker(fs FileSystem) *PathStateTracker {
 	return &PathStateTracker{
 		tracker: execution.NewPathStateTracker(fs),
 	}

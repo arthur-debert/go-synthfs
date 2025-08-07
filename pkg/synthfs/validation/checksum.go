@@ -19,7 +19,7 @@ type ChecksumRecord struct {
 }
 
 // ComputeFileChecksum calculates the MD5 checksum and gathers file metadata.
-func ComputeFileChecksum(fsys filesystem.FullFileSystem, filePath string) (*ChecksumRecord, error) {
+func ComputeFileChecksum(fsys filesystem.FileSystem, filePath string) (*ChecksumRecord, error) {
 	info, err := fsys.Stat(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to stat file %s: %w", filePath, err)

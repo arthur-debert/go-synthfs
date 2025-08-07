@@ -40,7 +40,7 @@ type FilesystemInterface interface {
 	// Read operations
 	Stat(name string) (interface{}, error)
 	Open(name string) (interface{}, error)
-	// Write operations (for FullFileSystem)
+	// Write operations (for FileSystem)
 	WriteFile(name string, data []byte, perm interface{}) error
 	MkdirAll(path string, perm interface{}) error
 	Remove(name string) error

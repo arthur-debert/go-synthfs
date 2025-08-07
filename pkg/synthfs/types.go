@@ -17,8 +17,7 @@ import (
 type ReadFS = filesystem.ReadFS
 type WriteFS = filesystem.WriteFS
 type FileSystem = filesystem.FileSystem
-type StatFS = filesystem.StatFS
-type FullFileSystem = filesystem.FullFileSystem
+// Phase 2: Legacy aliases StatFS and FullFileSystem have been removed - use FileSystem directly
 
 // --- FsItem Types ---
 

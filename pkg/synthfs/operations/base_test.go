@@ -70,7 +70,7 @@ func TestBaseOperation_ValidateID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			op := operations.NewBaseOperation(tt.id, "test", tt.path)
-			err := op.Validate(context.Background(), nil)
+			err := op.Validate(context.Background(), nil, nil)
 
 			if tt.expectError {
 				if err == nil {

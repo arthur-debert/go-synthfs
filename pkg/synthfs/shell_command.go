@@ -216,7 +216,7 @@ func createShellCommand(id, command string, options ...ShellCommandOption) *Cust
 				func(o *ShellCommandOptions) { *o = rollbackOpts },
 			)
 			
-			return rollbackOp.Execute(ctx, fs)
+			return rollbackOp.Execute(ctx, nil, fs)
 		}
 		op = op.WithRollback(rollbackFunc)
 	}
