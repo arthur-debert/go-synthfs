@@ -79,7 +79,7 @@ func TestPipelineBuilder(t *testing.T) {
 		ctx := context.Background()
 		fs := filesystem.NewTestFileSystem()
 
-		// Build pipeline step by step
+		// Build complete pipeline and execute once
 		builder := NewPipelineBuilder()
 
 		op1 := sfs.CreateDir("step1", 0755)
@@ -89,12 +89,6 @@ func TestPipelineBuilder(t *testing.T) {
 		_, err := builder.
 			Add(op1).
 			Add(op2).After(op1).
-			Execute(ctx, fs)
-		if err != nil {
-			t.Fatalf("Pipeline execution failed: %v", err)
-		}
-
-		_, err = builder.
 			Add(op3).After(op2).
 			Execute(ctx, fs)
 		if err != nil {

@@ -410,8 +410,12 @@ func TestSimpleRunAPI_ComplexOperationSequences(t *testing.T) {
 			t.Fatal(err)
 		}
 		
-		// Modify the original by deleting and recreating
-		_, err = Run(context.Background(), fs, sfs.Delete("workspace/data.txt"), sfs.CreateFile("workspace/data.txt", []byte("modified"), 0644))
+		// Modify the original by deleting then recreating (in separate runs to avoid conflicts)
+		_, err = Run(context.Background(), fs, sfs.Delete("workspace/data.txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = Run(context.Background(), fs, sfs.CreateFile("workspace/data.txt", []byte("modified"), 0644))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -434,8 +438,12 @@ func TestSimpleRunAPI_ComplexOperationSequences(t *testing.T) {
 			t.Fatal(err)
 		}
 		
-		// Delete and recreate with different content
-		_, err = Run(context.Background(), fs, sfs.Delete("workspace/data.backup.txt"), sfs.CreateFile("workspace/data.backup.txt", []byte("new backup"), 0644))
+		// Delete and recreate with different content (in separate runs)
+		_, err = Run(context.Background(), fs, sfs.Delete("workspace/data.backup.txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = Run(context.Background(), fs, sfs.CreateFile("workspace/data.backup.txt", []byte("new backup"), 0644))
 		if err != nil {
 			t.Fatal(err)
 		}

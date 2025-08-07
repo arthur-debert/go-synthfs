@@ -64,6 +64,34 @@ func RunWithOptions(ctx context.Context, fs filesystem.FullFileSystem, options P
 		}, nil
 	}
 
+	// For the simple API, we need to validate operations with projected state
+	// to support sequential operations where later ops depend on earlier ones
+	projectedFS := NewProjectedFileSystem(fs)
+	
+	// First, validate all operations with projected state
+	for _, op := range ops {
+		// Validate against projected filesystem state
+		if err := op.Validate(ctx, projectedFS); err != nil {
+			// Return a failed result with the error
+			return &Result{
+				success:    false,
+				operations: []interface{}{},
+				duration:   0,
+				err:        err,
+			}, err
+		}
+		// Update projected state to reflect this operation
+		if err := projectedFS.UpdateProjectedState(op); err != nil {
+			// Return a failed result with the error
+			return &Result{
+				success:    false,
+				operations: []interface{}{},
+				duration:   0,
+				err:        err,
+			}, err
+		}
+	}
+	
 	// Build a pipeline from the operations.
 	pipeline := NewMemPipeline()
 	for _, op := range ops {
@@ -73,9 +101,12 @@ func RunWithOptions(ctx context.Context, fs filesystem.FullFileSystem, options P
 		}
 	}
 
+	// Wrap the pipeline to skip validation since we already validated with projected state
+	prevalidatedPipeline := newPrevalidatedPipeline(pipeline)
+	
 	// Use the main executor to run the pipeline.
 	executor := NewExecutor()
-	result := executor.RunWithOptions(ctx, pipeline, fs, options)
+	result := executor.RunWithOptions(ctx, prevalidatedPipeline, fs, options)
 
 	// The executor's result is already in the desired format.
 	// We just need to extract the top-level error for the return signature.
