@@ -1,3 +1,5 @@
+THIS IS DOCUMENTING A LEGACY FEATURE WE DO NOT WANT
+ 
 Parallel Execution in SynthFS
 
 	The go-synthfs library is designed with two primary layers: a high-level Simple API for ease of use, and a low-level Core API for power and performance. A key feature of the Core API is its ability to execute independent filesystem operations in parallel, which can dramatically improve performance for I/O-heavy tasks.
