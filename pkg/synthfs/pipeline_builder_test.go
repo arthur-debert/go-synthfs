@@ -129,16 +129,16 @@ func TestPipelineBuilder(t *testing.T) {
 		}
 	})
 
-	t.Run("Pipeline with custom executor", func(t *testing.T) {
+	t.Run("Pipeline execution with WithOptions", func(t *testing.T) {
 		ResetSequenceCounter()
 		ctx := context.Background()
 		fs := filesystem.NewTestFileSystem()
 
-		customExecutor := NewExecutor()
+		options := DefaultPipelineOptions()
 
 		_, err := BuildPipeline(
 			sfs.CreateDir("custom", 0755),
-		).ExecuteWith(ctx, fs, customExecutor)
+		).WithOptions(options).Execute(ctx, fs)
 
 		if err != nil {
 			t.Fatalf("Pipeline execution failed: %v", err)
