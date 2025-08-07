@@ -275,7 +275,9 @@ func (op *MoveOperation) Rollback(ctx context.Context, fsys filesystem.FileSyste
 	}
 
 	// Try to move it back
-	return fsys.Rename(dst, src)
+	if err := fsys.Rename(dst, src); err == nil {
+		return nil
+	}
 
 	// Fallback to copy and delete
 	// First copy back

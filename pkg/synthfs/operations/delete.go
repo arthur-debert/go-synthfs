@@ -123,12 +123,15 @@ func (op *DeleteOperation) ReverseOps(ctx context.Context, fsys filesystem.FileS
 	isDir := info.IsDir()
 
 	// Estimate backup size
-	estimatedSizeMB := float64(0.001) // Default 1KB for empty files
-
-	// Try to get actual size
-	estimatedSizeMB = float64(info.Size()) / (1024 * 1024) // Convert bytes to MB
+	var estimatedSizeMB float64
 	if isDir {
 		estimatedSizeMB = float64(5.0) // Default 5MB for directories
+	} else {
+		// Try to get actual size for files
+		estimatedSizeMB = float64(info.Size()) / (1024 * 1024) // Convert bytes to MB
+		if info.Size() == 0 {
+			estimatedSizeMB = 0.001 // Minimum 1KB for empty files
+		}
 	}
 
 	// For directories, we'll check budget per-file during the walk
