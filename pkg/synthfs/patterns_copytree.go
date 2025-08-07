@@ -129,15 +129,6 @@ func (op *CopyTreeOperation) Describe() OperationDesc {
 	return op.desc
 }
 
-// Dependencies returns empty - no dependencies
-func (op *CopyTreeOperation) Dependencies() []OperationID {
-	return nil
-}
-
-// Conflicts returns empty - no conflicts
-func (op *CopyTreeOperation) Conflicts() []OperationID {
-	return nil
-}
 
 // Prerequisites returns prerequisites for the operation
 func (op *CopyTreeOperation) Prerequisites() []core.Prerequisite {

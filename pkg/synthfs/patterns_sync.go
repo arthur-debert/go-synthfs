@@ -94,15 +94,6 @@ func (op *SyncOperation) Describe() OperationDesc {
 	return op.desc
 }
 
-// Dependencies returns empty - no dependencies
-func (op *SyncOperation) Dependencies() []OperationID {
-	return nil
-}
-
-// Conflicts returns empty - no conflicts
-func (op *SyncOperation) Conflicts() []OperationID {
-	return nil
-}
 
 // Prerequisites returns prerequisites for the operation
 func (op *SyncOperation) Prerequisites() []core.Prerequisite {

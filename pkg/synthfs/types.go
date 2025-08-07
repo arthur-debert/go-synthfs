@@ -59,7 +59,6 @@ type Executable interface {
 // Operation is the main interface that composes all operation capabilities
 type Operation interface {
 	core.OperationMetadata // ID(), Describe()
-	core.DependencyAware   // Dependencies(), Conflicts()
 	Executable             // Execute(), Validate()
 	core.ExecutableV2      // ExecuteV2(), ValidateV2() - new methods
 	Prerequisites() []core.Prerequisite

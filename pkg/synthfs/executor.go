@@ -28,7 +28,6 @@ func DefaultPipelineOptions() PipelineOptions {
 		DryRun:                 false,
 		RollbackOnError:        false,
 		ContinueOnError:        false,
-		MaxConcurrent:          1, // Default to sequential execution
 		Restorable:             false,
 		MaxBackupSizeMB:        10,
 		ResolvePrerequisites:   true,
@@ -221,13 +220,6 @@ func (ow *operationWrapper) Describe() core.OperationDesc {
 	return ow.op.Describe()
 }
 
-func (ow *operationWrapper) Dependencies() []core.OperationID {
-	return ow.op.Dependencies()
-}
-
-func (ow *operationWrapper) Conflicts() []core.OperationID {
-	return ow.op.Conflicts()
-}
 
 func (ow *operationWrapper) Prerequisites() []core.Prerequisite {
 	// Check if operation implements Prerequisites method

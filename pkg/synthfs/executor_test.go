@@ -460,8 +460,6 @@ func (m *MockMainOperation) Describe() synthfs.OperationDesc {
 		Path: m.path,
 	}
 }
-func (m *MockMainOperation) Dependencies() []synthfs.OperationID     { return []synthfs.OperationID{} }
-func (m *MockMainOperation) Conflicts() []synthfs.OperationID        { return []synthfs.OperationID{} }
 func (m *MockMainOperation) AddDependency(depID synthfs.OperationID) { /* no-op for mock */ }
 
 func (m *MockMainOperation) Execute(ctx context.Context, fs synthfs.FileSystem) error {

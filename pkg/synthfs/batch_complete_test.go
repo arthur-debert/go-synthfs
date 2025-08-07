@@ -270,17 +270,14 @@ func TestBatchCompleteAPI(t *testing.T) {
 		t.Logf("File Operation: %s (ID: %s)", fileOp.(synthfs.Operation).Describe().Type, fileOp.(synthfs.Operation).ID())
 		t.Logf("  Path: %s", fileOp.(synthfs.Operation).Describe().Path)
 		t.Logf("  Details: %+v", fileOp.(synthfs.Operation).Describe().Details)
-		t.Logf("  Dependencies: %v", fileOp.(synthfs.Operation).Dependencies())
 
 		t.Logf("Symlink Operation: %s (ID: %s)", symlinkOp.(synthfs.Operation).Describe().Type, symlinkOp.(synthfs.Operation).ID())
 		t.Logf("  Path: %s", symlinkOp.(synthfs.Operation).Describe().Path)
 		t.Logf("  Details: %+v", symlinkOp.(synthfs.Operation).Describe().Details)
-		t.Logf("  Dependencies: %v", symlinkOp.(synthfs.Operation).Dependencies())
 
 		t.Logf("Archive Operation: %s (ID: %s)", archiveOp.(synthfs.Operation).Describe().Type, archiveOp.(synthfs.Operation).ID())
 		t.Logf("  Path: %s", archiveOp.(synthfs.Operation).Describe().Path)
 		t.Logf("  Details: %+v", archiveOp.(synthfs.Operation).Describe().Details)
-		t.Logf("  Dependencies: %v", archiveOp.(synthfs.Operation).Dependencies())
 
 		// Execute and inspect results
 		result, err := inspectBatch.Run()

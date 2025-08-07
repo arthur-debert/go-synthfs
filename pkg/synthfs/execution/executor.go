@@ -33,7 +33,6 @@ func DefaultPipelineOptions() core.PipelineOptions {
 		DryRun:                 false,
 		RollbackOnError:        false,
 		ContinueOnError:        false,
-		MaxConcurrent:          1, // Default to sequential execution
 		Restorable:             false,
 		MaxBackupSizeMB:        10,
 		ResolvePrerequisites:   true,
@@ -45,8 +44,6 @@ func DefaultPipelineOptions() core.PipelineOptions {
 type OperationInterface interface {
 	ID() core.OperationID
 	Describe() core.OperationDesc
-	Dependencies() []core.OperationID
-	Conflicts() []core.OperationID
 	Prerequisites() []core.Prerequisite
 	AddDependency(depID core.OperationID)
 	ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error

@@ -65,12 +65,16 @@ func TestPipelineBuilder(t *testing.T) {
 			t.Fatalf("Pipeline execution failed: %v", err)
 		}
 
-		// Check dependencies were set
-		if len(op2.Dependencies()) != 1 || op2.Dependencies()[0] != op1.ID() {
-			t.Error("op2 should depend on op1")
+		// Dependencies are no longer tracked, but operations should still execute successfully
+		// Verify the files were created
+		if _, err := fs.Stat("base"); err != nil {
+			t.Error("base directory should exist")
 		}
-		if len(op3.Dependencies()) != 1 || op3.Dependencies()[0] != op1.ID() {
-			t.Error("op3 should depend on op1")
+		if _, err := fs.Stat("base/file1.txt"); err != nil {
+			t.Error("file1.txt should exist")
+		}
+		if _, err := fs.Stat("base/file2.txt"); err != nil {
+			t.Error("file2.txt should exist")
 		}
 	})
 

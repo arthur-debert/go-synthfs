@@ -182,12 +182,6 @@ func LogOperationDetails(t *testing.T, op synthfs.Operation) {
 	if len(desc.Details) > 0 {
 		t.Logf("Details: %v", desc.Details)
 	}
-	if len(op.Dependencies()) > 0 {
-		t.Logf("Dependencies: %v", op.Dependencies())
-	}
-	if len(op.Conflicts()) > 0 {
-		t.Logf("Conflicts: %v", op.Conflicts())
-	}
 }
 
 // TestBatchHelper provides utilities for testing batch operations

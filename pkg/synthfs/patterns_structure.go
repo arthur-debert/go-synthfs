@@ -191,14 +191,6 @@ func (op *CreateStructureOperation) Describe() OperationDesc {
 }
 
 // Dependencies returns empty - no dependencies
-func (op *CreateStructureOperation) Dependencies() []OperationID {
-	return nil
-}
-
-// Conflicts returns empty - no conflicts
-func (op *CreateStructureOperation) Conflicts() []OperationID {
-	return nil
-}
 
 // Prerequisites returns prerequisites for the operation
 func (op *CreateStructureOperation) Prerequisites() []core.Prerequisite {
