@@ -99,36 +99,6 @@ func (pb *PipelineBuilder) Execute(ctx context.Context, fs filesystem.FileSystem
 	return RunWithOptions(ctx, fs, DefaultPipelineOptions(), ops...)
 }
 
-// ExecuteWith runs the pipeline with a custom executor
-func (pb *PipelineBuilder) ExecuteWith(ctx context.Context, fs FileSystem, executor *Executor) (*Result, error) {
-	result := executor.Run(ctx, pb.pipeline, fs)
-
-	// Check for errors (same as Execute)
-	for i, opResult := range result.Operations {
-		if opResult.Error != nil {
-			var successfulOps []OperationID
-			for j := 0; j < i; j++ {
-				if result.Operations[j].Error == nil {
-					successfulOps = append(successfulOps, result.Operations[j].OperationID)
-				}
-			}
-
-			ops := pb.pipeline.Operations()
-			if i < len(ops) {
-				return result, &PipelineError{
-					FailedOp:      ops[i],
-					FailedIndex:   i + 1,
-					TotalOps:      len(ops),
-					Err:           opResult.Error,
-					SuccessfulOps: successfulOps,
-				}
-			}
-			return result, opResult.Error
-		}
-	}
-
-	return result, nil
-}
 
 // WithOptions sets pipeline options and executes
 func (pb *PipelineBuilder) WithOptions(options PipelineOptions) *PipelineExecutor {
@@ -145,33 +115,7 @@ type PipelineExecutor struct {
 }
 
 // Execute runs the pipeline with the configured options
-func (pe *PipelineExecutor) Execute(ctx context.Context, fs FileSystem) (*Result, error) {
-	executor := NewExecutor()
-	result := executor.RunWithOptions(ctx, pe.pipeline, fs, pe.options)
-
-	// Check for errors
-	for i, opResult := range result.Operations {
-		if opResult.Error != nil {
-			var successfulOps []OperationID
-			for j := 0; j < i; j++ {
-				if result.Operations[j].Error == nil {
-					successfulOps = append(successfulOps, result.Operations[j].OperationID)
-				}
-			}
-
-			ops := pe.pipeline.Operations()
-			if i < len(ops) {
-				return result, &PipelineError{
-					FailedOp:      ops[i],
-					FailedIndex:   i + 1,
-					TotalOps:      len(ops),
-					Err:           opResult.Error,
-					SuccessfulOps: successfulOps,
-				}
-			}
-			return result, opResult.Error
-		}
-	}
-
-	return result, nil
+func (pe *PipelineExecutor) Execute(ctx context.Context, fs filesystem.FileSystem) (*Result, error) {
+	ops := pe.pipeline.Operations()
+	return RunWithOptions(ctx, fs, pe.options, ops...)
 }
