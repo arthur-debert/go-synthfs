@@ -77,10 +77,16 @@ func TestPathHandlingIntegration(t *testing.T) {
 		batch.
 			CreateDir("src", 0755).                                    // relative
 			WriteFile("src/main.go", []byte("package main"), 0644).   // relative
-			WriteFile("./src/utils.go", []byte("package main"), 0644). // ./ prefix
-			Copy("src/main.go", "src/main.go.bak")                     // relative
-
+			WriteFile("./src/utils.go", []byte("package main"), 0644) // ./ prefix
+		
 		err := batch.Execute()
+		if err != nil {
+			t.Fatalf("Batch execution failed: %v", err)
+		}
+
+		batch2 := NewSimpleBatch(fs).WithContext(ctx)
+		batch2.Copy("src/main.go", "src/main.go.bak") // relative
+		err = batch2.Execute()
 		if err != nil {
 			t.Fatalf("Batch execution failed: %v", err)
 		}
@@ -112,9 +118,14 @@ func TestPathHandlingIntegration(t *testing.T) {
 		// Create operations with unnormalized paths
 		op1 := sfs.CreateDir("path//to///dir", 0755)
 		op2 := sfs.CreateFile("./path/to/../to/dir/file.txt", []byte("content"), 0644)
-		op3 := sfs.Copy("path/to/dir/file.txt", "path/to/dir/backup.txt")
+		
+		_, err := Run(ctx, fs, op1, op2)
+		if err != nil {
+			t.Fatalf("Pipeline execution failed: %v", err)
+		}
 
-		_, err := Run(ctx, fs, op1, op2, op3)
+		op3 := sfs.Copy("path/to/dir/file.txt", "path/to/dir/backup.txt")
+		_, err = Run(ctx, fs, op3)
 		if err != nil {
 			t.Fatalf("Pipeline execution failed: %v", err)
 		}

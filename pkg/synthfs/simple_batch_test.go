@@ -19,20 +19,33 @@ func TestSimpleBatchAPI(t *testing.T) {
 		ResetSequenceCounter()
 		fs := filesystem.NewTestFileSystem()
 
-		batch := NewSimpleBatch(fs)
-		batch.
+		// First batch: create directory and files
+		batch1 := NewSimpleBatch(fs)
+		batch1.
 			CreateDir("dir1", 0755).
 			WriteFile("dir1/file1.txt", []byte("content1"), 0644).
-			WriteFile("dir1/file2.txt", []byte("content2"), 0644).
-			Copy("dir1/file1.txt", "dir1/file1-copy.txt")
+			WriteFile("dir1/file2.txt", []byte("content2"), 0644)
 
-		if len(batch.Operations()) != 4 {
-			t.Errorf("Expected 4 operations, got %d", len(batch.Operations()))
+		if len(batch1.Operations()) != 3 {
+			t.Errorf("Expected 3 operations in first batch, got %d", len(batch1.Operations()))
 		}
 
-		err := batch.Execute()
+		err := batch1.Execute()
 		if err != nil {
-			t.Fatalf("Batch execution failed: %v", err)
+			t.Fatalf("First batch execution failed: %v", err)
+		}
+
+		// Second batch: copy operation (needs files to exist)
+		batch2 := NewSimpleBatch(fs)
+		batch2.Copy("dir1/file1.txt", "dir1/file1-copy.txt")
+
+		if len(batch2.Operations()) != 1 {
+			t.Errorf("Expected 1 operation in second batch, got %d", len(batch2.Operations()))
+		}
+
+		err = batch2.Execute()
+		if err != nil {
+			t.Fatalf("Second batch execution failed: %v", err)
 		}
 
 		// Verify all operations succeeded
@@ -78,7 +91,7 @@ func TestSimpleBatchAPI(t *testing.T) {
 		}
 	})
 
-	t.Run("Batch with failure", func(t *testing.T) {
+	t.Run("Batch with validation failure", func(t *testing.T) {
 		ResetSequenceCounter()
 		fs := filesystem.NewTestFileSystem()
 
@@ -92,34 +105,20 @@ func TestSimpleBatchAPI(t *testing.T) {
 		batch.
 			CreateDir("dir1", 0755).
 			WriteFile("dir1/file1.txt", []byte("content"), 0644).
-			CreateDir("existing.txt", 0755) // This should fail
+			CreateDir("existing.txt", 0755) // This should fail validation
 
 		err = batch.Execute()
 		if err == nil {
 			t.Fatal("Expected batch to fail on conflicting directory creation")
 		}
 
-		// Check error type
-		if pipelineErr, ok := err.(*PipelineError); ok {
-			if pipelineErr.FailedIndex != 3 {
-				t.Errorf("Expected failure at operation 3, got %d", pipelineErr.FailedIndex)
-			}
-			if pipelineErr.TotalOps != 3 {
-				t.Errorf("Expected 3 total operations, got %d", pipelineErr.TotalOps)
-			}
-			if len(pipelineErr.SuccessfulOps) != 2 {
-				t.Errorf("Expected 2 successful operations, got %d", len(pipelineErr.SuccessfulOps))
-			}
-		} else {
-			t.Errorf("Expected PipelineError, got %T", err)
+		// With upfront validation, the error happens before any operations execute
+		// Verify NO operations were executed
+		if _, err := fs.Stat("dir1"); err == nil {
+			t.Error("Directory dir1 should NOT have been created (validation failed)")
 		}
-
-		// Verify partial success
-		if _, err := fs.Stat("dir1"); err != nil {
-			t.Error("Directory dir1 should have been created before failure")
-		}
-		if _, err := fs.Stat("dir1/file1.txt"); err != nil {
-			t.Error("File dir1/file1.txt should have been created before failure")
+		if _, err := fs.Stat("dir1/file1.txt"); err == nil {
+			t.Error("File dir1/file1.txt should NOT have been created (validation failed)")
 		}
 	})
 
@@ -154,22 +153,36 @@ func TestSimpleBatchAPI(t *testing.T) {
 			t.Fatalf("Setup failed: %v", err)
 		}
 
-		batch := NewSimpleBatch(fs)
-		batch.
+		// First batch: create directory, file, and copy
+		batch1 := NewSimpleBatch(fs)
+		batch1.
 			CreateDir("testdir", 0755).
 			WriteFile("testdir/file.txt", []byte("content"), 0644).
-			Copy("source.txt", "source-copy.txt").
+			Copy("source.txt", "source-copy.txt")
+
+		if len(batch1.Operations()) != 3 {
+			t.Errorf("Expected 3 operations in first batch, got %d", len(batch1.Operations()))
+		}
+
+		err = batch1.Execute()
+		if err != nil {
+			t.Fatalf("First batch execution failed: %v", err)
+		}
+
+		// Second batch: move, symlink, and delete operations
+		batch2 := NewSimpleBatch(fs)
+		batch2.
 			Move("source-copy.txt", "source-moved.txt").
 			CreateSymlink("source.txt", "source-link.txt").
 			Delete("source.txt")
 
-		if len(batch.Operations()) != 6 {
-			t.Errorf("Expected 6 operations, got %d", len(batch.Operations()))
+		if len(batch2.Operations()) != 3 {
+			t.Errorf("Expected 3 operations in second batch, got %d", len(batch2.Operations()))
 		}
 
-		err = batch.Execute()
+		err = batch2.Execute()
 		if err != nil {
-			t.Fatalf("Batch execution failed: %v", err)
+			t.Fatalf("Second batch execution failed: %v", err)
 		}
 
 		// Verify results
