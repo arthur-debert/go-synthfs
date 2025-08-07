@@ -26,7 +26,7 @@ func TestCreateFileValidationEdgeCases(t *testing.T) {
 		}
 		op.SetItem(dirItem)
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for directory item on file operation")
@@ -53,7 +53,7 @@ func TestCreateFileValidationEdgeCases(t *testing.T) {
 		}
 		op.SetItem(dirItem)
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for item with IsDir() returning true")
@@ -79,7 +79,7 @@ func TestCreateFileValidationEdgeCases(t *testing.T) {
 		}
 		op.SetItem(fileItem)
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err != nil {
 			t.Errorf("Expected no validation error for valid file item, got: %v", err)
@@ -104,7 +104,7 @@ func TestCreateDirectoryValidationEdgeCases(t *testing.T) {
 		}
 		op.SetItem(fileItem)
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for file item on directory operation")
@@ -131,7 +131,7 @@ func TestCreateDirectoryValidationEdgeCases(t *testing.T) {
 		}
 		op.SetItem(fileItem)
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for item with IsDir() returning false")
@@ -162,7 +162,7 @@ func TestCreateDirectoryValidationEdgeCases(t *testing.T) {
 		}
 		op.SetItem(dirItem)
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for path existing as file")
@@ -194,7 +194,7 @@ func TestSymlinkValidationEdgeCases(t *testing.T) {
 		op.SetItem(symlinkItem)
 		op.SetDescriptionDetail("target", "") // Empty target
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for empty target")
@@ -227,7 +227,7 @@ func TestSymlinkValidationEdgeCases(t *testing.T) {
 		op.SetItem(symlinkItem)
 		op.SetDescriptionDetail("target", "target.txt")
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for existing symlink")
@@ -254,7 +254,7 @@ func TestSymlinkValidationEdgeCases(t *testing.T) {
 		op.SetItem(symlinkItem)
 		op.SetDescriptionDetail("target", "nonexistent-target.txt")
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err != nil {
 			t.Errorf("Expected no validation error for dangling symlink (should be allowed), got: %v", err)
@@ -271,7 +271,7 @@ func TestCopyMoveValidationEdgeCases(t *testing.T) {
 		op := operations.NewCopyOperation(core.OperationID("test-op"), "")
 		op.SetPaths("", "dst.txt") // Empty source
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for empty source path")
@@ -296,7 +296,7 @@ func TestCopyMoveValidationEdgeCases(t *testing.T) {
 		op := operations.NewCopyOperation(core.OperationID("test-op"), "src.txt")
 		op.SetPaths("src.txt", "") // Empty destination
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for empty destination path")
@@ -315,7 +315,7 @@ func TestCopyMoveValidationEdgeCases(t *testing.T) {
 		op := operations.NewMoveOperation(core.OperationID("test-op"), "")
 		op.SetPaths("", "dst.txt") // Empty source - should trigger copy validation
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 
 		if err == nil {
 			t.Error("Expected validation error for empty source path in move")

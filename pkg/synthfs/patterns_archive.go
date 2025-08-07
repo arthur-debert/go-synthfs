@@ -43,7 +43,7 @@ func (s *SynthFS) CreateArchive(archivePath string, sources ...string) Operation
 	op.SetDescriptionDetail("sources", sources)
 	op.SetDescriptionDetail("format", format.String())
 
-	return &OperationsPackageAdapter{opsOperation: op}
+	return op
 }
 
 // CreateZipArchive creates a ZIP archive operation
@@ -61,7 +61,7 @@ func (s *SynthFS) CreateZipArchive(archivePath string, sources ...string) Operat
 	op.SetDescriptionDetail("sources", sources)
 	op.SetDescriptionDetail("format", "zip")
 
-	return &OperationsPackageAdapter{opsOperation: op}
+	return op
 }
 
 // CreateTarArchive creates a TAR archive operation
@@ -85,7 +85,7 @@ func (s *SynthFS) CreateTarGzArchive(archivePath string, sources ...string) Oper
 	op.SetDescriptionDetail("sources", sources)
 	op.SetDescriptionDetail("format", "tar.gz")
 
-	return &OperationsPackageAdapter{opsOperation: op}
+	return op
 }
 
 // ExtractArchive creates an unarchive operation
@@ -99,7 +99,7 @@ func (s *SynthFS) ExtractArchive(archivePath, extractPath string) Operation {
 	op := operations.NewUnarchiveOperation(id, archivePath)
 	op.SetItem(unarchive)
 
-	return &OperationsPackageAdapter{opsOperation: op}
+	return op
 }
 
 // ExtractArchiveWithPatterns creates an unarchive operation with file patterns
@@ -113,19 +113,19 @@ func (s *SynthFS) ExtractArchiveWithPatterns(archivePath, extractPath string, pa
 	op := operations.NewUnarchiveOperation(id, archivePath)
 	op.SetItem(unarchive)
 
-	return &OperationsPackageAdapter{opsOperation: op}
+	return op
 }
 
 // Archive provides direct archive creation with execution
 func Archive(ctx context.Context, fs FileSystem, archivePath string, sources ...string) error {
 	op := New().CreateArchive(archivePath, sources...)
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }
 
 // Extract provides direct archive extraction with execution
 func Extract(ctx context.Context, fs FileSystem, archivePath, extractPath string) error {
 	op := New().ExtractArchive(archivePath, extractPath)
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }
 
 // ArchiveBuilder provides a fluent interface for creating archives
@@ -202,7 +202,7 @@ func (ab *ArchiveBuilder) Build() Operation {
 // Execute creates and executes the archive operation
 func (ab *ArchiveBuilder) Execute(ctx context.Context, fs FileSystem) error {
 	op := ab.Build()
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }
 
 // ExtractBuilder provides a fluent interface for extracting archives
@@ -256,5 +256,5 @@ func (eb *ExtractBuilder) Build() Operation {
 // Execute creates and executes the extract operation
 func (eb *ExtractBuilder) Execute(ctx context.Context, fs FileSystem) error {
 	op := eb.Build()
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }

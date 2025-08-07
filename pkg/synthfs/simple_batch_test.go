@@ -208,6 +208,8 @@ func TestSimpleBatchAPI(t *testing.T) {
 }
 
 func TestSimpleBatchWithRollback(t *testing.T) {
+	// Testing error handling alignment with expected error types
+	
 	t.Run("Successful rollback", func(t *testing.T) {
 		ResetSequenceCounter()
 		fs := filesystem.NewTestFileSystem()
@@ -330,7 +332,7 @@ func TestSimpleBatchWithRollback(t *testing.T) {
 			// Try to delete but simulate failure
 			return errors.New("rollback failed: file locked")
 		})
-		op1Adapter := NewCustomOperationAdapter(op1)
+		op1Adapter := op1
 
 		op2 := sfs.CreateFileWithID("op2", "file2.txt", []byte("content2"), 0644)
 
@@ -391,11 +393,11 @@ func TestSimpleBatchWithRollback(t *testing.T) {
 		}
 
 		// Verify result details
-		if result.IsSuccess() {
+		if result.Success {
 			t.Error("Result should not be successful")
 		}
-		if len(result.GetOperations()) != 3 {
-			t.Errorf("Expected 3 operation results, got %d", len(result.GetOperations()))
+		if len(result.Operations) != 3 {
+			t.Errorf("Expected 3 operation results, got %d", len(result.Operations))
 		}
 	})
 }

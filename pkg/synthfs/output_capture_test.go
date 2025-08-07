@@ -13,6 +13,8 @@ import (
 )
 
 func TestShellCommand_OutputCapture(t *testing.T) {
+	// Testing with direct execution - no more adapter conversions
+	
 	if runtime.GOOS == "windows" {
 		t.Skip("Shell command tests are Unix-specific")
 	}
@@ -20,7 +22,7 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 	t.Run("capture stdout", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create a command that produces stdout
@@ -34,22 +36,22 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 		}
 
 		// Get the operation result
-		ops := result.GetOperations()
+		ops := result.Operations
 		if len(ops) != 1 {
 			t.Fatalf("Expected 1 operation, got %d", len(ops))
 		}
 
-		opResult := ops[0].(synthfs.OperationResult)
+		opResult := ops[0]
 		
 		// Check stdout was captured
-		stdout := synthfs.GetOperationOutput(opResult.Operation, "stdout")
+		stdout := synthfs.GetOperationOutput(opResult.Operation.(synthfs.Operation), "stdout")
 		expectedOutput := "Hello, World!\n"
 		if stdout != expectedOutput {
 			t.Errorf("Expected stdout %q, got %q", expectedOutput, stdout)
 		}
 
 		// stderr should be empty
-		stderr := synthfs.GetOperationOutput(opResult.Operation, "stderr")
+		stderr := synthfs.GetOperationOutput(opResult.Operation.(synthfs.Operation), "stderr")
 		if stderr != "" {
 			t.Errorf("Expected empty stderr, got %q", stderr)
 		}
@@ -58,7 +60,7 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 	t.Run("capture stderr", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create a command that produces stderr
@@ -72,18 +74,18 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 		}
 
 		// Get the operation result
-		ops := result.GetOperations()
-		opResult := ops[0].(synthfs.OperationResult)
+		ops := result.Operations
+		opResult := ops[0]
 		
 		// Check stderr was captured
-		stderr := synthfs.GetOperationOutput(opResult.Operation, "stderr")
+		stderr := synthfs.GetOperationOutput(opResult.Operation.(synthfs.Operation), "stderr")
 		expectedError := "Error message\n"
 		if stderr != expectedError {
 			t.Errorf("Expected stderr %q, got %q", expectedError, stderr)
 		}
 
 		// stdout should be empty
-		stdout := synthfs.GetOperationOutput(opResult.Operation, "stdout")
+		stdout := synthfs.GetOperationOutput(opResult.Operation.(synthfs.Operation), "stdout")
 		if stdout != "" {
 			t.Errorf("Expected empty stdout, got %q", stdout)
 		}
@@ -92,7 +94,7 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 	t.Run("capture both stdout and stderr", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create a command that produces both stdout and stderr
@@ -106,12 +108,12 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 		}
 
 		// Get the operation result
-		ops := result.GetOperations()
-		opResult := ops[0].(synthfs.OperationResult)
+		ops := result.Operations
+		opResult := ops[0]
 		
 		// Check both were captured
-		stdout := synthfs.GetOperationOutput(opResult.Operation, "stdout")
-		stderr := synthfs.GetOperationOutput(opResult.Operation, "stderr")
+		stdout := synthfs.GetOperationOutput(opResult.Operation.(synthfs.Operation), "stdout")
+		stderr := synthfs.GetOperationOutput(opResult.Operation.(synthfs.Operation), "stderr")
 		
 		if stdout != "Output\n" {
 			t.Errorf("Expected stdout 'Output\\n', got %q", stdout)
@@ -124,7 +126,7 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 	t.Run("no capture when option not set", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create a command without capture option
@@ -137,12 +139,12 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 		}
 
 		// Get the operation result
-		ops := result.GetOperations()
-		opResult := ops[0].(synthfs.OperationResult)
+		ops := result.Operations
+		opResult := ops[0]
 		
 		// Check nothing was captured
-		stdout := synthfs.GetOperationOutput(opResult.Operation, "stdout")
-		stderr := synthfs.GetOperationOutput(opResult.Operation, "stderr")
+		stdout := synthfs.GetOperationOutput(opResult.Operation.(synthfs.Operation), "stdout")
+		stderr := synthfs.GetOperationOutput(opResult.Operation.(synthfs.Operation), "stderr")
 		
 		if stdout != "" {
 			t.Errorf("Expected no stdout capture, got %q", stdout)
@@ -155,7 +157,7 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 	t.Run("capture multiline output", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create a command with multiline output
@@ -169,11 +171,11 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 		}
 
 		// Get the operation result
-		ops := result.GetOperations()
-		opResult := ops[0].(synthfs.OperationResult)
+		ops := result.Operations
+		opResult := ops[0]
 		
 		// Check multiline output was captured
-		stdout := synthfs.GetOperationOutput(opResult.Operation, "stdout")
+		stdout := synthfs.GetOperationOutput(opResult.Operation.(synthfs.Operation), "stdout")
 		expectedOutput := "Line 1\nLine 2\nLine 3\n"
 		if stdout != expectedOutput {
 			t.Errorf("Expected stdout %q, got %q", expectedOutput, stdout)
@@ -182,9 +184,11 @@ func TestShellCommand_OutputCapture(t *testing.T) {
 }
 
 func TestCustomOperation_OutputCapture(t *testing.T) {
+	// Testing with direct execution - no more adapter conversions
+	
 	t.Run("custom operation with output", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create custom operation that stores output
@@ -207,26 +211,26 @@ func TestCustomOperation_OutputCapture(t *testing.T) {
 		}
 
 		// Get the operation result
-		ops := result.GetOperations()
+		ops := result.Operations
 		if len(ops) != 1 {
 			t.Fatalf("Expected 1 operation, got %d", len(ops))
 		}
 
-		opResult := ops[0].(synthfs.OperationResult)
+		opResult := ops[0]
 		
 		// Check stored outputs
-		items := synthfs.GetOperationOutput(opResult.Operation, "items")
+		items := synthfs.GetOperationOutput(opResult.Operation.(synthfs.Operation), "items")
 		if items != "apple,banana,cherry" {
 			t.Errorf("Expected items 'apple,banana,cherry', got %q", items)
 		}
 
 		// Check non-string output
-		count := synthfs.GetOperationOutputValue(opResult.Operation, "count")
+		count := synthfs.GetOperationOutputValue(opResult.Operation.(synthfs.Operation), "count")
 		if count != 3 {
 			t.Errorf("Expected count 3, got %v", count)
 		}
 
-		processed := synthfs.GetOperationOutputValue(opResult.Operation, "processed")
+		processed := synthfs.GetOperationOutputValue(opResult.Operation.(synthfs.Operation), "processed")
 		if processed != true {
 			t.Errorf("Expected processed true, got %v", processed)
 		}
@@ -234,7 +238,7 @@ func TestCustomOperation_OutputCapture(t *testing.T) {
 
 	t.Run("custom operation with complex output", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create custom operation that stores complex data
@@ -264,11 +268,11 @@ func TestCustomOperation_OutputCapture(t *testing.T) {
 		}
 
 		// Get the operation result
-		ops := result.GetOperations()
-		opResult := ops[0].(synthfs.OperationResult)
+		ops := result.Operations
+		opResult := ops[0]
 		
 		// Check complex outputs
-		result1 := synthfs.GetOperationOutputValue(opResult.Operation, "result")
+		result1 := synthfs.GetOperationOutputValue(opResult.Operation.(synthfs.Operation), "result")
 		if result1 == nil {
 			t.Error("Expected result to be stored")
 		}
@@ -284,7 +288,7 @@ func TestCustomOperation_OutputCapture(t *testing.T) {
 			t.Error("Result is not a map")
 		}
 
-		metadata := synthfs.GetOperationOutputValue(opResult.Operation, "metadata")
+		metadata := synthfs.GetOperationOutputValue(opResult.Operation.(synthfs.Operation), "metadata")
 		if metadata == nil {
 			t.Error("Expected metadata to be stored")
 		}
@@ -292,7 +296,7 @@ func TestCustomOperation_OutputCapture(t *testing.T) {
 
 	t.Run("get all outputs", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create custom operation with multiple outputs
@@ -310,11 +314,11 @@ func TestCustomOperation_OutputCapture(t *testing.T) {
 		}
 
 		// Get the operation result
-		ops := result.GetOperations()
-		opResult := ops[0].(synthfs.OperationResult)
+		ops := result.Operations
+		opResult := ops[0]
 		
 		// Get all outputs
-		allOutputs := synthfs.GetAllOperationOutputs(opResult.Operation)
+		allOutputs := synthfs.GetAllOperationOutputs(opResult.Operation.(synthfs.Operation))
 		
 		// Should have at least our 3 outputs (might have more like description)
 		if len(allOutputs) < 3 {
@@ -335,7 +339,7 @@ func TestCustomOperation_OutputCapture(t *testing.T) {
 
 	t.Run("custom operation with validation and output", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 
 		// Create the base custom operation with output
 		op := synthfs.NewCustomOperationWithOutput("validated-op",
@@ -350,17 +354,14 @@ func TestCustomOperation_OutputCapture(t *testing.T) {
 			return nil
 		})
 
-		// Create adapter
-		adapter := synthfs.NewCustomOperationAdapter(op)
-
 		// Execute directly
-		err := adapter.Execute(context.Background(), fs)
+		err := op.Execute(context.Background(), nil, fs)
 		if err != nil {
 			t.Fatalf("Operation failed: %v", err)
 		}
 
 		// Check output was stored
-		status := synthfs.GetOperationOutput(adapter, "status")
+		status := synthfs.GetOperationOutput(op, "status")
 		if status != "executed" {
 			t.Errorf("Expected status 'executed', got %q", status)
 		}
@@ -368,6 +369,8 @@ func TestCustomOperation_OutputCapture(t *testing.T) {
 }
 
 func TestOutputCapture_RealWorldExample(t *testing.T) {
+	// Testing with direct execution - no more adapter conversions
+	
 	if runtime.GOOS == "windows" {
 		t.Skip("Shell command tests are Unix-specific")
 	}
@@ -375,7 +378,7 @@ func TestOutputCapture_RealWorldExample(t *testing.T) {
 	t.Run("pipeline with mixed output capture", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		tempDir := helper.TempDir()
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test data
@@ -436,36 +439,36 @@ func TestOutputCapture_RealWorldExample(t *testing.T) {
 		}
 
 		// Check outputs from different operations
-		opResults := result.GetOperations()
+		opResults := result.Operations
 		
 		// Check line count from wc command (operation 1)
-		wcOp := opResults[1].(synthfs.OperationResult)
-		lineCount := strings.TrimSpace(synthfs.GetOperationOutput(wcOp.Operation, "stdout"))
+		wcOp := opResults[1]
+		lineCount := strings.TrimSpace(synthfs.GetOperationOutput(wcOp.Operation.(synthfs.Operation), "stdout"))
 		if lineCount != "5" {
 			t.Errorf("Expected line count '5', got %q", lineCount)
 		}
 
 		// Check custom operation outputs (operation 2)
-		analyzerOp := opResults[2].(synthfs.OperationResult)
-		totalFruits := synthfs.GetOperationOutputValue(analyzerOp.Operation, "totalFruits")
+		analyzerOp := opResults[2]
+		totalFruits := synthfs.GetOperationOutputValue(analyzerOp.Operation.(synthfs.Operation), "totalFruits")
 		if totalFruits != 5 {
 			t.Errorf("Expected 5 total fruits, got %v", totalFruits)
 		}
 		
-		startsWithAorE := synthfs.GetOperationOutputValue(analyzerOp.Operation, "startsWithAorE")
+		startsWithAorE := synthfs.GetOperationOutputValue(analyzerOp.Operation.(synthfs.Operation), "startsWithAorE")
 		if startsWithAorE != 2 { // apple and elderberry
 			t.Errorf("Expected 2 fruits starting with 'a' or 'e', got %v", startsWithAorE)
 		}
 
-		analysis := synthfs.GetOperationOutput(analyzerOp.Operation, "analysis")
+		analysis := synthfs.GetOperationOutput(analyzerOp.Operation.(synthfs.Operation), "analysis")
 		expectedAnalysis := "Found 5 fruits, 2 start with 'a' or 'e'"
 		if analysis != expectedAnalysis {
 			t.Errorf("Expected analysis %q, got %q", expectedAnalysis, analysis)
 		}
 
 		// Check head command output (operation 3)
-		headOp := opResults[3].(synthfs.OperationResult)
-		firstFruit := strings.TrimSpace(synthfs.GetOperationOutput(headOp.Operation, "stdout"))
+		headOp := opResults[3]
+		firstFruit := strings.TrimSpace(synthfs.GetOperationOutput(headOp.Operation.(synthfs.Operation), "stdout"))
 		if firstFruit != "apple" {
 			t.Errorf("Expected first fruit 'apple', got %q", firstFruit)
 		}

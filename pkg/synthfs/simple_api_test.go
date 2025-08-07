@@ -33,8 +33,8 @@ func TestSimpleRunAPI(t *testing.T) {
 		}
 
 		// Check result
-		if len(result.GetOperations()) != 1 {
-			t.Errorf("Expected 1 operation result for the second run, got %d", len(result.GetOperations()))
+		if len(result.Operations) != 1 {
+			t.Errorf("Expected 1 operation result for the second run, got %d", len(result.Operations))
 		}
 
 		// Verify filesystem state
@@ -58,7 +58,7 @@ func TestSimpleRunAPI(t *testing.T) {
 			t.Fatalf("Run with no operations should succeed: %v", err)
 		}
 
-		if len(result.GetOperations()) != 0 {
+		if len(result.Operations) != 0 {
 			t.Error("Should have no operation results")
 		}
 	})
@@ -116,7 +116,7 @@ func TestSimpleRunAPI(t *testing.T) {
 			t.Fatalf("RunWithOptions failed: %v", err)
 		}
 
-		if len(result.GetOperations()) != 2 {
+		if len(result.Operations) != 2 {
 			t.Error("Should have 2 operation results")
 		}
 
@@ -208,7 +208,7 @@ func TestSimpleRunWithDryRun(t *testing.T) {
 		t.Fatalf("RunWithOptions with DryRun failed: %v", err)
 	}
 
-	if len(result.GetOperations()) != 2 {
+	if len(result.Operations) != 2 {
 		t.Error("Should have 2 operation results")
 	}
 
@@ -242,7 +242,7 @@ func TestSimpleRunAPI_FirstOperationFailure(t *testing.T) {
 		}
 
 		// Check result
-		if result.IsSuccess() {
+		if result.Success {
 			t.Error("Result should not be successful")
 		}
 
@@ -347,7 +347,7 @@ func TestSimpleRunAPI_ComplexOperationSequences(t *testing.T) {
 			t.Fatalf("Expected move and symlink to succeed, got error: %v", err)
 		}
 
-		if !result.IsSuccess() {
+		if !result.Success {
 			t.Error("Result should be successful")
 		}
 

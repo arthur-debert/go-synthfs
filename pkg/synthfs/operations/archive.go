@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/validation"
 )
 
 // CreateArchiveOperation represents an archive creation operation.
@@ -59,8 +61,19 @@ func (op *CreateArchiveOperation) Prerequisites() []core.Prerequisite {
 	return prereqs
 }
 
-// Execute creates the archive.
-func (op *CreateArchiveOperation) Execute(ctx context.Context, fsys interface{}) error {
+// Execute creates the archive with event handling.
+func (op *CreateArchiveOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
+	// Execute with event handling if ExecutionContext is provided
+	if execCtx != nil {
+		return ExecuteWithEvents(op, ctx, execCtx, fsys, op.execute)
+	}
+
+	// Fallback to direct execution
+	return op.execute(ctx, fsys)
+}
+
+// execute is the internal implementation without event handling
+func (op *CreateArchiveOperation) execute(ctx context.Context, fsys filesystem.FileSystem) error {
 	// Get sources - first try from item, then from details
 	var sources []string
 	var format interface{}
@@ -96,6 +109,9 @@ func (op *CreateArchiveOperation) Execute(ctx context.Context, fsys interface{})
 	// This is a limitation we'll address in future iterations
 	archivePath := op.description.Path
 
+	// Compute checksums for all source files before creating archive
+	op.computeAndStoreChecksums(fsys, sources)
+
 	// Determine archive type based on format or file extension
 	formatStr := fmt.Sprintf("%v", format)
 	switch strings.ToLower(formatStr) {
@@ -120,7 +136,8 @@ func (op *CreateArchiveOperation) Execute(ctx context.Context, fsys interface{})
 }
 
 // createZipArchive creates a ZIP archive.
-func (op *CreateArchiveOperation) createZipArchive(archivePath string, sources []string, fsys interface{}) error {
+func (op *CreateArchiveOperation) createZipArchive(archivePath string, sources []string, fsys filesystem.FileSystem) error {
+
 	// Create a buffer to hold the archive data
 	var buf bytes.Buffer
 
@@ -130,20 +147,13 @@ func (op *CreateArchiveOperation) createZipArchive(archivePath string, sources [
 	// Add sources to archive
 	for _, source := range sources {
 		// Try to stat the source
-		var sourceInfo interface{}
-		if stat, ok := getStatMethod(fsys); ok {
-			info, err := stat(source)
-			if err != nil {
-				return fmt.Errorf("failed to stat source %s: %w", source, err)
-			}
-			sourceInfo = info
+		info, err := fsys.Stat(source)
+		if err != nil {
+			return fmt.Errorf("failed to stat source %s: %w", source, err)
 		}
 
 		// Check if it's a directory
-		isDir := false
-		if fi, ok := sourceInfo.(interface{ IsDir() bool }); ok {
-			isDir = fi.IsDir()
-		}
+		isDir := info.IsDir()
 
 		if isDir {
 			// Skip directories for now - would need to walk them
@@ -152,20 +162,18 @@ func (op *CreateArchiveOperation) createZipArchive(archivePath string, sources [
 
 		// Read file content
 		var content []byte
-		if open, ok := getOpenMethod(fsys); ok {
-			file, err := open(source)
+		file, err := fsys.Open(source)
+		if err != nil {
+			return fmt.Errorf("failed to open source %s: %w", source, err)
+		}
+		if reader, ok := file.(io.Reader); ok {
+			content, err = io.ReadAll(reader)
 			if err != nil {
-				return fmt.Errorf("failed to open source %s: %w", source, err)
+				return fmt.Errorf("failed to read source %s: %w", source, err)
 			}
-			if reader, ok := file.(io.Reader); ok {
-				content, err = io.ReadAll(reader)
-				if err != nil {
-					return fmt.Errorf("failed to read source %s: %w", source, err)
-				}
-			}
-			if closer, ok := file.(io.Closer); ok {
-				_ = closer.Close()
-			}
+		}
+		if closer, ok := file.(io.Closer); ok {
+			_ = closer.Close()
 		}
 
 		// Add file to archive
@@ -185,15 +193,12 @@ func (op *CreateArchiveOperation) createZipArchive(archivePath string, sources [
 	}
 
 	// Write the archive to filesystem
-	if writeFile, ok := getWriteFileMethod(fsys); ok {
-		return writeFile(archivePath, buf.Bytes(), 0644)
-	}
-
-	return fmt.Errorf("filesystem does not support WriteFile")
+	return fsys.WriteFile(archivePath, buf.Bytes(), 0644)
 }
 
 // createTarArchive creates a TAR or TAR.GZ archive.
-func (op *CreateArchiveOperation) createTarArchive(archivePath string, sources []string, fsys interface{}, compress bool) error {
+func (op *CreateArchiveOperation) createTarArchive(archivePath string, sources []string, fsys filesystem.FileSystem, compress bool) error {
+
 	// Create a buffer to hold the archive data
 	var buf bytes.Buffer
 
@@ -210,27 +215,14 @@ func (op *CreateArchiveOperation) createTarArchive(archivePath string, sources [
 	// Add sources to archive
 	for _, source := range sources {
 		// Try to stat the source
-		var sourceInfo interface{}
-		if stat, ok := getStatMethod(fsys); ok {
-			info, err := stat(source)
-			if err != nil {
-				return fmt.Errorf("failed to stat source %s: %w", source, err)
-			}
-			sourceInfo = info
+		info, err := fsys.Stat(source)
+		if err != nil {
+			return fmt.Errorf("failed to stat source %s: %w", source, err)
 		}
 
 		// Check if it's a directory
-		isDir := false
-		var mode os.FileMode = 0644
-
-		if fi, ok := sourceInfo.(interface {
-			IsDir() bool
-			Size() int64
-			Mode() os.FileMode
-		}); ok {
-			isDir = fi.IsDir()
-			mode = fi.Mode()
-		}
+		isDir := info.IsDir()
+		mode := info.Mode()
 
 		if isDir {
 			// Skip directories for now - would need to walk them
@@ -239,20 +231,18 @@ func (op *CreateArchiveOperation) createTarArchive(archivePath string, sources [
 
 		// Read file content
 		var content []byte
-		if open, ok := getOpenMethod(fsys); ok {
-			file, err := open(source)
+		file, err := fsys.Open(source)
+		if err != nil {
+			return fmt.Errorf("failed to open source %s: %w", source, err)
+		}
+		if reader, ok := file.(io.Reader); ok {
+			content, err = io.ReadAll(reader)
 			if err != nil {
-				return fmt.Errorf("failed to open source %s: %w", source, err)
+				return fmt.Errorf("failed to read source %s: %w", source, err)
 			}
-			if reader, ok := file.(io.Reader); ok {
-				content, err = io.ReadAll(reader)
-				if err != nil {
-					return fmt.Errorf("failed to read source %s: %w", source, err)
-				}
-			}
-			if closer, ok := file.(io.Closer); ok {
-				_ = closer.Close()
-			}
+		}
+		if closer, ok := file.(io.Closer); ok {
+			_ = closer.Close()
 		}
 
 		// Create tar header
@@ -277,34 +267,15 @@ func (op *CreateArchiveOperation) createTarArchive(archivePath string, sources [
 	}
 
 	// Write the archive to filesystem
-	if writeFile, ok := getWriteFileMethod(fsys); ok {
-		return writeFile(archivePath, buf.Bytes(), 0644)
-	}
-
-	return fmt.Errorf("filesystem does not support WriteFile")
+	return fsys.WriteFile(archivePath, buf.Bytes(), 0644)
 }
 
-// ExecuteV2 performs the archive creation with execution context support.
-func (op *CreateArchiveOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Convert context
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
 
-	// Call the operation's Execute method with proper event handling
-	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
-}
-
-// ValidateV2 checks if the archive can be created using ExecutionContext.
-func (op *CreateArchiveOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return validateV2Helper(op, ctx, execCtx, fsys)
-}
 
 // Validate checks if the archive can be created.
-func (op *CreateArchiveOperation) Validate(ctx context.Context, fsys interface{}) error {
+func (op *CreateArchiveOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	// First do base validation
-	if err := op.BaseOperation.Validate(ctx, fsys); err != nil {
+	if err := op.BaseOperation.Validate(ctx, execCtx, fsys); err != nil {
 		return err
 	}
 
@@ -330,17 +301,14 @@ func (op *CreateArchiveOperation) Validate(ctx context.Context, fsys interface{}
 			Reason:        "must specify at least one source",
 		}
 	}
-
 	// Check if sources exist
-	if stat, ok := getStatMethod(fsys); ok {
-		for _, source := range sources {
-			if _, err := stat(source); err != nil {
-				return &core.ValidationError{
-					OperationID:   op.ID(),
-					OperationDesc: op.Describe(),
-					Reason:        fmt.Sprintf("source does not exist: %s", source),
-					Cause:         err,
-				}
+	for _, source := range sources {
+		if _, err := fsys.Stat(source); err != nil {
+			return &core.ValidationError{
+				OperationID:   op.ID(),
+				OperationDesc: op.Describe(),
+				Reason:        fmt.Sprintf("source does not exist: %s", source),
+				Cause:         err,
 			}
 		}
 	}
@@ -349,15 +317,27 @@ func (op *CreateArchiveOperation) Validate(ctx context.Context, fsys interface{}
 }
 
 // Rollback removes the created archive.
-func (op *CreateArchiveOperation) Rollback(ctx context.Context, fsys interface{}) error {
-	remove, ok := getRemoveMethod(fsys)
-	if !ok {
-		return fmt.Errorf("filesystem does not support Remove")
-	}
-
+func (op *CreateArchiveOperation) Rollback(ctx context.Context, fsys filesystem.FileSystem) error {
 	// Remove the archive
-	_ = remove(op.description.Path) // Ignore error - might not exist
+	_ = fsys.Remove(op.description.Path) // Ignore error - might not exist
 	return nil
+}
+
+// computeAndStoreChecksums computes checksums for all source files and stores them in the operation
+func (op *CreateArchiveOperation) computeAndStoreChecksums(fsys filesystem.FileSystem, sources []string) {
+	checksummedCount := 0
+	for _, source := range sources {
+		if checksum, err := validation.ComputeFileChecksum(fsys, source); err == nil && checksum != nil {
+			// Store checksum for this source file
+			op.SetChecksum(source, checksum)
+			checksummedCount++
+		}
+		// Ignore checksum errors - checksums are nice-to-have, not critical
+	}
+	// Store count of checksummed sources in description details
+	if checksummedCount > 0 {
+		op.SetDescriptionDetail("sources_checksummed", checksummedCount)
+	}
 }
 
 // UnarchiveOperation represents an archive extraction operation.
@@ -394,8 +374,19 @@ func (op *UnarchiveOperation) Prerequisites() []core.Prerequisite {
 	return prereqs
 }
 
-// Execute extracts the archive.
-func (op *UnarchiveOperation) Execute(ctx context.Context, fsys interface{}) error {
+// Execute extracts the archive with event handling.
+func (op *UnarchiveOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
+	// Execute with event handling if ExecutionContext is provided
+	if execCtx != nil {
+		return ExecuteWithEvents(op, ctx, execCtx, fsys, op.execute)
+	}
+
+	// Fallback to direct execution
+	return op.execute(ctx, fsys)
+}
+
+// execute is the internal implementation without event handling
+func (op *UnarchiveOperation) execute(ctx context.Context, fsys filesystem.FileSystem) error {
 	// Get extract path - first check item, then details
 	var extractPath string
 	if op.item != nil {
@@ -451,15 +442,10 @@ func (op *UnarchiveOperation) Execute(ctx context.Context, fsys interface{}) err
 }
 
 // extractZipArchive extracts a ZIP archive.
-func (op *UnarchiveOperation) extractZipArchive(archivePath, extractPath string, patterns []string, fsys interface{}) error {
-	// Get filesystem methods
-	open, hasOpen := getOpenMethod(fsys)
-	if !hasOpen {
-		return fmt.Errorf("filesystem does not support Open")
-	}
+func (op *UnarchiveOperation) extractZipArchive(archivePath, extractPath string, patterns []string, fsys filesystem.FileSystem) error {
 
 	// Open archive file through filesystem interface
-	file, err := open(archivePath)
+	file, err := fsys.Open(archivePath)
 	if err != nil {
 		return fmt.Errorf("failed to open archive: %w", err)
 	}
@@ -485,11 +471,6 @@ func (op *UnarchiveOperation) extractZipArchive(archivePath, extractPath string,
 	if err != nil {
 		return fmt.Errorf("failed to create zip reader: %w", err)
 	}
-
-	// Get filesystem methods
-	mkdirAll, _ := getMkdirAllMethod(fsys)
-	writeFile, _ := getWriteFileMethod(fsys)
-
 	for _, file := range reader.File {
 		// Check patterns if provided
 		if len(patterns) > 0 && !matchesPatterns(file.Name, patterns) {
@@ -499,42 +480,31 @@ func (op *UnarchiveOperation) extractZipArchive(archivePath, extractPath string,
 		path := filepath.Join(extractPath, file.Name)
 
 		if file.FileInfo().IsDir() {
-			if mkdirAll != nil {
-				_ = mkdirAll(path, file.Mode())
-			}
+			_ = fsys.MkdirAll(path, file.Mode())
 			continue
 		}
 
 		// Create directory for file
-		if mkdirAll != nil {
-			_ = mkdirAll(filepath.Dir(path), 0755)
-		}
+		_ = fsys.MkdirAll(filepath.Dir(path), 0755)
 
 		// Extract file
-		if writeFile != nil {
-			rc, err := file.Open()
-			if err != nil {
-				continue
-			}
-			content, _ := io.ReadAll(rc)
-			_ = rc.Close()
-			_ = writeFile(path, content, file.Mode())
+		rc, err := file.Open()
+		if err != nil {
+			continue
 		}
+		content, _ := io.ReadAll(rc)
+		_ = rc.Close()
+		
+		_ = fsys.WriteFile(path, content, file.Mode())
 	}
 
 	return nil
 }
 
 // extractTarArchive extracts a TAR or TAR.GZ archive.
-func (op *UnarchiveOperation) extractTarArchive(archivePath, extractPath string, patterns []string, fsys interface{}, compressed bool) error {
-	// Get filesystem methods
-	open, hasOpen := getOpenMethod(fsys)
-	if !hasOpen {
-		return fmt.Errorf("filesystem does not support Open")
-	}
-
+func (op *UnarchiveOperation) extractTarArchive(archivePath, extractPath string, patterns []string, fsys filesystem.FileSystem, compressed bool) error {
 	// Open archive file through filesystem interface
-	file, err := open(archivePath)
+	file, err := fsys.Open(archivePath)
 	if err != nil {
 		return fmt.Errorf("failed to open archive: %w", err)
 	}
@@ -563,11 +533,6 @@ func (op *UnarchiveOperation) extractTarArchive(archivePath, extractPath string,
 	} else {
 		tarReader = tar.NewReader(reader)
 	}
-
-	// Get filesystem methods
-	mkdirAll, _ := getMkdirAllMethod(fsys)
-	writeFile, _ := getWriteFileMethod(fsys)
-
 	for {
 		header, err := tarReader.Next()
 		if err == io.EOF {
@@ -586,20 +551,14 @@ func (op *UnarchiveOperation) extractTarArchive(archivePath, extractPath string,
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if mkdirAll != nil {
-				_ = mkdirAll(path, os.FileMode(header.Mode))
-			}
+			_ = fsys.MkdirAll(path, os.FileMode(header.Mode))
 		case tar.TypeReg:
 			// Create directory for file
-			if mkdirAll != nil {
-				_ = mkdirAll(filepath.Dir(path), 0755)
-			}
+			_ = fsys.MkdirAll(filepath.Dir(path), 0755)
 
 			// Extract file
-			if writeFile != nil {
-				content, _ := io.ReadAll(tarReader)
-				_ = writeFile(path, content, os.FileMode(header.Mode))
-			}
+			content, _ := io.ReadAll(tarReader)
+			_ = fsys.WriteFile(path, content, os.FileMode(header.Mode))
 		}
 	}
 
@@ -626,27 +585,12 @@ func matchesPatterns(name string, patterns []string) bool {
 	return false
 }
 
-// ExecuteV2 performs the unarchive with execution context support.
-func (op *UnarchiveOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Convert context
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
 
-	// Call the operation's Execute method with proper event handling
-	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
-}
-
-// ValidateV2 checks if the unarchive operation can be performed using ExecutionContext.
-func (op *UnarchiveOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return validateV2Helper(op, ctx, execCtx, fsys)
-}
 
 // Validate checks if the unarchive operation can be performed.
-func (op *UnarchiveOperation) Validate(ctx context.Context, fsys interface{}) error {
+func (op *UnarchiveOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	// First do base validation
-	if err := op.BaseOperation.Validate(ctx, fsys); err != nil {
+	if err := op.BaseOperation.Validate(ctx, execCtx, fsys); err != nil {
 		return err
 	}
 
@@ -705,16 +649,14 @@ func (op *UnarchiveOperation) Validate(ctx context.Context, fsys interface{}) er
 			Reason:        fmt.Sprintf("unsupported archive format for file: %s", archivePath),
 		}
 	}
-
+	
 	// Check if archive exists
-	if stat, ok := getStatMethod(fsys); ok {
-		if _, err := stat(op.description.Path); err != nil {
-			return &core.ValidationError{
-				OperationID:   op.ID(),
-				OperationDesc: op.Describe(),
-				Reason:        "archive does not exist",
-				Cause:         err,
-			}
+	if _, err := fsys.Stat(op.description.Path); err != nil {
+		return &core.ValidationError{
+			OperationID:   op.ID(),
+			OperationDesc: op.Describe(),
+			Reason:        "archive does not exist",
+			Cause:         err,
 		}
 	}
 
@@ -722,7 +664,7 @@ func (op *UnarchiveOperation) Validate(ctx context.Context, fsys interface{}) er
 }
 
 // Rollback for unarchive would need to track and remove all extracted files.
-func (op *UnarchiveOperation) Rollback(ctx context.Context, fsys interface{}) error {
+func (op *UnarchiveOperation) Rollback(ctx context.Context, fsys filesystem.FileSystem) error {
 	// TODO: Implement tracking of extracted files for proper rollback
 	return fmt.Errorf("rollback of unarchive operations not yet implemented")
 }

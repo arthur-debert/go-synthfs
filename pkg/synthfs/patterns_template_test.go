@@ -70,7 +70,7 @@ func TestTemplatePatterns(t *testing.T) {
 		}
 
 		op := sfs.WriteTemplate("package.json", tmpl, data)
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Template execution failed: %v", err)
 		}
@@ -190,14 +190,14 @@ database:
 
 		// Invalid template syntax
 		op := sfs.WriteTemplate("bad.txt", "{{.Name", TemplateData{"Name": "test"})
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Should fail validation with invalid template syntax")
 		}
 
 		// Valid template
 		op = sfs.WriteTemplate("good.txt", "{{.Name}}", TemplateData{"Name": "test"})
-		err = op.Validate(ctx, fs)
+		err = op.Validate(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Should pass validation: %v", err)
 		}

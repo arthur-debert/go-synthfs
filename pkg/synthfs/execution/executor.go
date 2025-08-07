@@ -33,7 +33,6 @@ func DefaultPipelineOptions() core.PipelineOptions {
 		DryRun:                 false,
 		RollbackOnError:        false,
 		ContinueOnError:        false,
-		MaxConcurrent:          1, // Default to sequential execution
 		Restorable:             false,
 		MaxBackupSizeMB:        10,
 		ResolvePrerequisites:   true,
@@ -45,12 +44,10 @@ func DefaultPipelineOptions() core.PipelineOptions {
 type OperationInterface interface {
 	ID() core.OperationID
 	Describe() core.OperationDesc
-	Dependencies() []core.OperationID
-	Conflicts() []core.OperationID
 	Prerequisites() []core.Prerequisite
 	AddDependency(depID core.OperationID)
-	ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
-	ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
+	Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
+	Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
 	ReverseOps(ctx context.Context, fsys interface{}, budget *core.BackupBudget) ([]interface{}, *core.BackupData, error)
 	Rollback(ctx context.Context, fsys interface{}) error
 	GetItem() interface{}
@@ -228,7 +225,7 @@ func (e *Executor) RunWithOptionsAndResolver(ctx context.Context, pipeline inter
 		}
 
 		opStart := time.Now()
-		err := op.ExecuteV2(ctx, execCtx, fs)
+		err := op.Execute(ctx, execCtx, fs)
 		opDuration := time.Since(opStart)
 
 		opResult := core.OperationResult{

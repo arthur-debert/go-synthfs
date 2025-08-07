@@ -454,3 +454,7 @@ func (mfs *MinimalFileSystem) Readlink(name string) (string, error) {
 func (mfs *MinimalFileSystem) RemoveAll(path string) error {
 	return &fs.PathError{Op: "removeall", Path: path, Err: fs.ErrPermission}
 }
+
+func (mfs *MinimalFileSystem) Stat(name string) (fs.FileInfo, error) {
+	return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
+}

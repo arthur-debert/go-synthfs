@@ -42,7 +42,7 @@ func (s *SynthFS) CreateFile(path string, content []byte, mode fs.FileMode) Oper
 	op := operations.NewCreateFileOperation(id, path)
 	item := targets.NewFile(path).WithContent(content).WithMode(mode)
 	op.SetItem(item)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // CreateDir creates a directory creation operation with an auto-generated ID.
@@ -51,13 +51,13 @@ func (s *SynthFS) CreateDir(path string, mode fs.FileMode) Operation {
 	op := operations.NewCreateDirectoryOperation(id, path)
 	item := targets.NewDirectory(path).WithMode(mode)
 	op.SetItem(item)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // Delete creates a delete operation with an auto-generated ID.
 func (s *SynthFS) Delete(path string) Operation {
 	id := s.idGen("delete", path)
-	return NewOperationsPackageAdapter(operations.NewDeleteOperation(id, path))
+	return operations.NewDeleteOperation(id, path)
 }
 
 // Copy creates a copy operation with an auto-generated ID.
@@ -65,7 +65,7 @@ func (s *SynthFS) Copy(src, dst string) Operation {
 	id := s.idGen("copy", src)
 	op := operations.NewCopyOperation(id, src)
 	op.SetPaths(src, dst)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // Move creates a move operation with an auto-generated ID.
@@ -73,7 +73,7 @@ func (s *SynthFS) Move(src, dst string) Operation {
 	id := s.idGen("move", src)
 	op := operations.NewMoveOperation(id, src)
 	op.SetPaths(src, dst)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // CreateSymlink creates a symlink operation with an auto-generated ID.
@@ -83,7 +83,25 @@ func (s *SynthFS) CreateSymlink(target, linkPath string) Operation {
 	item := targets.NewSymlink(linkPath, target)
 	op.SetItem(item)
 	op.SetDescriptionDetail("target", target)
-	return NewOperationsPackageAdapter(op)
+	return op
+}
+
+// Unarchive creates an unarchive operation with an auto-generated ID.
+func (s *SynthFS) Unarchive(archivePath, extractPath string) Operation {
+	id := s.idGen("unarchive", archivePath)
+	op := operations.NewUnarchiveOperation(id, archivePath)
+	item := targets.NewUnarchive(archivePath, extractPath)
+	op.SetItem(item)
+	return op
+}
+
+// UnarchiveWithPatterns creates an unarchive operation with patterns and an auto-generated ID.
+func (s *SynthFS) UnarchiveWithPatterns(archivePath, extractPath string, patterns []string) Operation {
+	id := s.idGen("unarchive", archivePath)
+	op := operations.NewUnarchiveOperation(id, archivePath)
+	item := targets.NewUnarchive(archivePath, extractPath).WithPatterns(patterns...)
+	op.SetItem(item)
+	return op
 }
 
 // CreateFileWithID creates a file creation operation with an explicit ID.
@@ -91,7 +109,7 @@ func (s *SynthFS) CreateFileWithID(id string, path string, content []byte, mode 
 	op := operations.NewCreateFileOperation(core.OperationID(id), path)
 	item := targets.NewFile(path).WithContent(content).WithMode(mode)
 	op.SetItem(item)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // CreateDirWithID creates a directory creation operation with an explicit ID.
@@ -99,26 +117,26 @@ func (s *SynthFS) CreateDirWithID(id string, path string, mode fs.FileMode) Oper
 	op := operations.NewCreateDirectoryOperation(core.OperationID(id), path)
 	item := targets.NewDirectory(path).WithMode(mode)
 	op.SetItem(item)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // DeleteWithID creates a delete operation with an explicit ID.
 func (s *SynthFS) DeleteWithID(id string, path string) Operation {
-	return NewOperationsPackageAdapter(operations.NewDeleteOperation(core.OperationID(id), path))
+	return operations.NewDeleteOperation(core.OperationID(id), path)
 }
 
 // CopyWithID creates a copy operation with an explicit ID.
 func (s *SynthFS) CopyWithID(id string, src, dst string) Operation {
 	op := operations.NewCopyOperation(core.OperationID(id), src)
 	op.SetPaths(src, dst)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // MoveWithID creates a move operation with an explicit ID.
 func (s *SynthFS) MoveWithID(id string, src, dst string) Operation {
 	op := operations.NewMoveOperation(core.OperationID(id), src)
 	op.SetPaths(src, dst)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // CreateSymlinkWithID creates a symlink operation with an explicit ID.
@@ -127,7 +145,7 @@ func (s *SynthFS) CreateSymlinkWithID(id string, target, linkPath string) Operat
 	item := targets.NewSymlink(linkPath, target)
 	op.SetItem(item)
 	op.SetDescriptionDetail("target", target)
-	return NewOperationsPackageAdapter(op)
+	return op
 }
 
 // CustomOperation creates a custom operation with an auto-generated ID.
@@ -141,14 +159,14 @@ func (s *SynthFS) CreateSymlinkWithID(id string, target, linkPath string) Operat
 func (s *SynthFS) CustomOperation(name string, executeFunc CustomOperationFunc) Operation {
 	id := s.idGen("custom", name)
 	op := NewCustomOperation(string(id), executeFunc)
-	return NewCustomOperationAdapter(op)
+	return op
 }
 
 // CustomOperationWithID creates a custom operation with an explicit ID.
 // This allows users to define their own operations with a specific ID for dependency management.
 func (s *SynthFS) CustomOperationWithID(id string, executeFunc CustomOperationFunc) Operation {
 	op := NewCustomOperation(id, executeFunc)
-	return NewCustomOperationAdapter(op)
+	return op
 }
 
 // CustomOperationWithOutput creates a custom operation that can store output.
@@ -166,13 +184,13 @@ func (s *SynthFS) CustomOperationWithID(id string, executeFunc CustomOperationFu
 func (s *SynthFS) CustomOperationWithOutput(name string, executeFunc CustomOperationWithOutputFunc) Operation {
 	id := s.idGen("custom", name)
 	op := NewCustomOperationWithOutput(string(id), executeFunc)
-	return NewCustomOperationAdapter(op)
+	return op
 }
 
 // CustomOperationWithOutputAndID creates a custom operation with explicit ID that can store output.
 func (s *SynthFS) CustomOperationWithOutputAndID(id string, executeFunc CustomOperationWithOutputFunc) Operation {
 	op := NewCustomOperationWithOutput(id, executeFunc)
-	return NewCustomOperationAdapter(op)
+	return op
 }
 
 // ReadFile creates a file read operation with auto-generated ID.
@@ -190,14 +208,10 @@ func (s *SynthFS) ReadFile(path string) Operation {
 // ReadFileWithID creates a file read operation with explicit ID.
 func (s *SynthFS) ReadFileWithID(id string, path string) Operation {
 	op := NewCustomOperationWithOutput(id, func(ctx context.Context, fs filesystem.FileSystem, storeOutput func(string, interface{})) error {
-		// Cast to FullFileSystem to access Stat
-		fullFS, ok := fs.(filesystem.FullFileSystem)
-		if !ok {
-			return fmt.Errorf("filesystem does not support Stat operation")
-		}
+		// Use filesystem directly
 		
 		// Check if file exists and is readable
-		info, err := fullFS.Stat(path)
+		info, err := fs.Stat(path)
 		if err != nil {
 			return fmt.Errorf("failed to stat file %s: %w", path, err)
 		}
@@ -232,7 +246,7 @@ func (s *SynthFS) ReadFileWithID(id string, path string) Operation {
 	})
 	
 	op = op.WithDescription(fmt.Sprintf("Read file: %s", path))
-	return NewCustomOperationAdapter(op)
+	return op
 }
 
 // ChecksumAlgorithm represents supported checksum algorithms
@@ -261,14 +275,10 @@ func (s *SynthFS) Checksum(path string, algorithm ChecksumAlgorithm) Operation {
 // ChecksumWithID creates a checksum operation with explicit ID.
 func (s *SynthFS) ChecksumWithID(id string, path string, algorithm ChecksumAlgorithm) Operation {
 	op := NewCustomOperationWithOutput(id, func(ctx context.Context, fs filesystem.FileSystem, storeOutput func(string, interface{})) error {
-		// Cast to FullFileSystem to access Stat
-		fullFS, ok := fs.(filesystem.FullFileSystem)
-		if !ok {
-			return fmt.Errorf("filesystem does not support Stat operation")
-		}
+		// Use filesystem directly
 		
 		// Check if file exists and is readable
-		info, err := fullFS.Stat(path)
+		info, err := fs.Stat(path)
 		if err != nil {
 			return fmt.Errorf("failed to stat file %s: %w", path, err)
 		}
@@ -321,5 +331,5 @@ func (s *SynthFS) ChecksumWithID(id string, path string, algorithm ChecksumAlgor
 	})
 	
 	op = op.WithDescription(fmt.Sprintf("Calculate %s checksum: %s", algorithm, path))
-	return NewCustomOperationAdapter(op)
+	return op
 }

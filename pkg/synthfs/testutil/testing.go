@@ -48,13 +48,13 @@ func RunOperationTest(t *testing.T, name string, test func(t *testing.T, fs synt
 // ValidateOperation validates an operation and returns any error
 func ValidateOperation(t *testing.T, op synthfs.Operation, fs synthfs.FileSystem) error {
 	ctx := context.Background()
-	return op.Validate(ctx, fs)
+	return op.Validate(ctx, nil, fs)
 }
 
 // ExecuteOperation executes an operation and returns any error
 func ExecuteOperation(t *testing.T, op synthfs.Operation, fs synthfs.FileSystem) error {
 	ctx := context.Background()
-	return op.Execute(ctx, fs)
+	return op.Execute(ctx, nil, fs)
 }
 
 // RunPipelineTest runs a test for a pipeline of operations
@@ -70,11 +70,11 @@ func RunPipelineTest(t *testing.T, name string, test func(t *testing.T, p synthf
 // AssertOperation is a helper to assert that an operation succeeds
 func AssertOperation(t *testing.T, op synthfs.Operation, fs synthfs.FileSystem, msg string) {
 	ctx := context.Background()
-	if err := op.Validate(ctx, fs); err != nil {
+	if err := op.Validate(ctx, nil, fs); err != nil {
 		t.Errorf("%s: validation failed: %v", msg, err)
 		return
 	}
-	if err := op.Execute(ctx, fs); err != nil {
+	if err := op.Execute(ctx, nil, fs); err != nil {
 		t.Errorf("%s: execution failed: %v", msg, err)
 	}
 }
@@ -84,11 +84,11 @@ func AssertOperationFails(t *testing.T, op synthfs.Operation, fs synthfs.FileSys
 	ctx := context.Background()
 	switch stage {
 	case "validate":
-		if err := op.Validate(ctx, fs); err == nil {
+		if err := op.Validate(ctx, nil, fs); err == nil {
 			t.Errorf("%s: expected validation to fail", msg)
 		}
 	case "execute":
-		if err := op.Execute(ctx, fs); err == nil {
+		if err := op.Execute(ctx, nil, fs); err == nil {
 			t.Errorf("%s: expected execution to fail", msg)
 		}
 	default:
@@ -112,17 +112,8 @@ func CreateTestDir(t *testing.T, fs synthfs.FileSystem, path string) {
 
 // FileExists checks if a file exists in the filesystem
 func FileExists(t *testing.T, fs synthfs.FileSystem, path string) bool {
-	if statFS, ok := fs.(synthfs.StatFS); ok {
-		_, err := statFS.Stat(path)
-		return err == nil
-	}
-	// Fallback to trying to open the file
-	file, err := fs.Open(path)
-	if err != nil {
-		return false
-	}
-	_ = file.Close()
-	return true
+	_, err := fs.Stat(path)
+	return err == nil
 }
 
 // AssertFileContent verifies that a file has the expected content
@@ -182,71 +173,10 @@ func LogOperationDetails(t *testing.T, op synthfs.Operation) {
 	if len(desc.Details) > 0 {
 		t.Logf("Details: %v", desc.Details)
 	}
-	if len(op.Dependencies()) > 0 {
-		t.Logf("Dependencies: %v", op.Dependencies())
-	}
-	if len(op.Conflicts()) > 0 {
-		t.Logf("Conflicts: %v", op.Conflicts())
-	}
 }
 
-// TestBatchHelper provides utilities for testing batch operations
-type TestBatchHelper struct {
-	t     *testing.T
-	batch *synthfs.Batch
-	fs    synthfs.FileSystem
-}
-
-// NewTestBatchHelper creates a new batch test helper
-func NewTestBatchHelper(t *testing.T) *TestBatchHelper {
-	fs := NewTestFileSystem()
-	batch := synthfs.NewBatch(fs)
-	return &TestBatchHelper{
-		t:     t,
-		batch: batch,
-		fs:    fs,
-	}
-}
-
-// Batch returns the test batch
-func (tbh *TestBatchHelper) Batch() *synthfs.Batch {
-	return tbh.batch
-}
-
-// FileSystem returns the test filesystem
-func (tbh *TestBatchHelper) FileSystem() synthfs.FileSystem {
-	return tbh.fs
-}
-
-// Run executes the batch and returns the result
-func (tbh *TestBatchHelper) Run() (*synthfs.Result, error) {
-	result, err := tbh.batch.Run()
-	if err != nil {
-		tbh.t.Logf("Batch run failed: %v", err)
-	}
-	return result, err
-}
-
-// AssertSuccess asserts that the batch runs successfully
-func (tbh *TestBatchHelper) AssertSuccess() *synthfs.Result {
-	result, err := tbh.Run()
-	if err != nil {
-		tbh.t.Fatalf("Expected batch to succeed, but got error: %v", err)
-	}
-	if !result.IsSuccess() {
-		tbh.t.Fatalf("Expected batch to succeed, but Success=false. Error: %v", result.GetError())
-	}
-	return result
-}
-
-// AssertFailure asserts that the batch fails
-func (tbh *TestBatchHelper) AssertFailure() *synthfs.Result {
-	result, err := tbh.Run()
-	if err == nil && result.IsSuccess() {
-		tbh.t.Fatalf("Expected batch to fail, but it succeeded")
-	}
-	return result
-}
+// TestBatchHelper has been removed along with the batch API
+// Use TestPipelineHelper or direct operation execution instead
 
 // TestPipelineHelper provides utilities for testing pipelines
 type TestPipelineHelper struct {
@@ -292,8 +222,12 @@ func (tph *TestPipelineHelper) ExecuteWithOptions(ctx context.Context, opts synt
 // AssertSuccess asserts that the pipeline executes successfully
 func (tph *TestPipelineHelper) AssertSuccess(ctx context.Context) *synthfs.Result {
 	result := tph.Execute(ctx)
-	if !result.IsSuccess() {
-		tph.t.Fatalf("Expected pipeline to succeed, but Success=false. Error: %v", result.GetError())
+	if !result.Success {
+		var errMsg string
+		if len(result.Errors) > 0 {
+			errMsg = result.Errors[0].Error()
+		}
+		tph.t.Fatalf("Expected pipeline to succeed, but Success=false. Error: %v", errMsg)
 	}
 	return result
 }
@@ -301,7 +235,7 @@ func (tph *TestPipelineHelper) AssertSuccess(ctx context.Context) *synthfs.Resul
 // AssertFailure asserts that the pipeline fails
 func (tph *TestPipelineHelper) AssertFailure(ctx context.Context) *synthfs.Result {
 	result := tph.Execute(ctx)
-	if result.IsSuccess() {
+	if result.Success {
 		tph.t.Fatalf("Expected pipeline to fail, but it succeeded")
 	}
 	return result
@@ -366,9 +300,7 @@ func CreateTestDirectoryOperation(id, path string) synthfs.Operation {
 func CreateTestCopyOperation(id, src, dst string) synthfs.Operation {
 	op := CreateTestOperation(id, "copy", src)
 	op.SetDescriptionDetail("destination", dst)
-	if adapter, ok := op.(*synthfs.OperationsPackageAdapter); ok {
-		adapter.SetPaths(src, dst)
-	}
+	op.SetPaths(src, dst)
 	return op
 }
 
@@ -376,9 +308,7 @@ func CreateTestCopyOperation(id, src, dst string) synthfs.Operation {
 func CreateTestMoveOperation(id, src, dst string) synthfs.Operation {
 	op := CreateTestOperation(id, "move", src)
 	op.SetDescriptionDetail("destination", dst)
-	if adapter, ok := op.(*synthfs.OperationsPackageAdapter); ok {
-		adapter.SetPaths(src, dst)
-	}
+	op.SetPaths(src, dst)
 	return op
 }
 

@@ -25,26 +25,24 @@ func BuildPipeline(ops ...Operation) *PipelineBuilder {
 
 	for _, op := range ops {
 		// Auto-detect dependencies based on paths
-		if adapter, ok := op.(*OperationsPackageAdapter); ok {
-			srcPath, dstPath := adapter.opsOperation.GetPaths()
-			desc := adapter.opsOperation.Describe()
-			opType := desc.Type
+		srcPath, dstPath := op.GetPaths()
+		desc := op.Describe()
+		opType := desc.Type
 
-			// For operations that read from a source, check if source was created by a previous op
-			if srcPath != "" && (opType == "copy" || opType == "move") {
-				if creator, exists := pathCreators[srcPath]; exists {
-					op.AddDependency(creator.ID())
-				}
+		// For operations that read from a source, check if source was created by a previous op
+		if srcPath != "" && (opType == "copy" || opType == "move") {
+			if creator, exists := pathCreators[srcPath]; exists {
+				op.AddDependency(creator.ID())
 			}
+		}
 
-			// Track paths this operation creates
-			if dstPath != "" {
-				pathCreators[dstPath] = op
-			} else if srcPath != "" && (opType == "create_file" ||
-				opType == "create_directory" ||
-				opType == "create_symlink") {
-				pathCreators[srcPath] = op
-			}
+		// Track paths this operation creates
+		if dstPath != "" {
+			pathCreators[dstPath] = op
+		} else if srcPath != "" && (opType == "create_file" ||
+			opType == "create_directory" ||
+			opType == "create_symlink") {
+			pathCreators[srcPath] = op
 		}
 
 		if err := pb.pipeline.Add(op); err == nil {
@@ -93,7 +91,7 @@ func (pb *PipelineBuilder) Build() Pipeline {
 }
 
 // Execute runs the pipeline against the given filesystem.
-func (pb *PipelineBuilder) Execute(ctx context.Context, fs filesystem.FullFileSystem) (*Result, error) {
+func (pb *PipelineBuilder) Execute(ctx context.Context, fs filesystem.FileSystem) (*Result, error) {
 	// For BuildPipeline, use sequential execution like simple_api to handle dependencies
 	// The pipeline/executor approach validates all operations upfront which fails for
 	// operations that depend on files created by previous operations
@@ -106,12 +104,12 @@ func (pb *PipelineBuilder) ExecuteWith(ctx context.Context, fs FileSystem, execu
 	result := executor.Run(ctx, pb.pipeline, fs)
 
 	// Check for errors (same as Execute)
-	for i, opResult := range result.GetOperations() {
-		if opRes, ok := opResult.(OperationResult); ok && opRes.Error != nil {
+	for i, opResult := range result.Operations {
+		if opResult.Error != nil {
 			var successfulOps []OperationID
 			for j := 0; j < i; j++ {
-				if prevRes, ok := result.GetOperations()[j].(OperationResult); ok && prevRes.Error == nil {
-					successfulOps = append(successfulOps, prevRes.OperationID)
+				if result.Operations[j].Error == nil {
+					successfulOps = append(successfulOps, result.Operations[j].OperationID)
 				}
 			}
 
@@ -121,11 +119,11 @@ func (pb *PipelineBuilder) ExecuteWith(ctx context.Context, fs FileSystem, execu
 					FailedOp:      ops[i],
 					FailedIndex:   i + 1,
 					TotalOps:      len(ops),
-					Err:           opRes.Error,
+					Err:           opResult.Error,
 					SuccessfulOps: successfulOps,
 				}
 			}
-			return result, opRes.Error
+			return result, opResult.Error
 		}
 	}
 
@@ -152,12 +150,12 @@ func (pe *PipelineExecutor) Execute(ctx context.Context, fs FileSystem) (*Result
 	result := executor.RunWithOptions(ctx, pe.pipeline, fs, pe.options)
 
 	// Check for errors
-	for i, opResult := range result.GetOperations() {
-		if opRes, ok := opResult.(OperationResult); ok && opRes.Error != nil {
+	for i, opResult := range result.Operations {
+		if opResult.Error != nil {
 			var successfulOps []OperationID
 			for j := 0; j < i; j++ {
-				if prevRes, ok := result.GetOperations()[j].(OperationResult); ok && prevRes.Error == nil {
-					successfulOps = append(successfulOps, prevRes.OperationID)
+				if result.Operations[j].Error == nil {
+					successfulOps = append(successfulOps, result.Operations[j].OperationID)
 				}
 			}
 
@@ -167,11 +165,11 @@ func (pe *PipelineExecutor) Execute(ctx context.Context, fs FileSystem) (*Result
 					FailedOp:      ops[i],
 					FailedIndex:   i + 1,
 					TotalOps:      len(ops),
-					Err:           opRes.Error,
+					Err:           opResult.Error,
 					SuccessfulOps: successfulOps,
 				}
 			}
-			return result, opRes.Error
+			return result, opResult.Error
 		}
 	}
 

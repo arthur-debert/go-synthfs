@@ -96,7 +96,7 @@ func TestSynthFS_WithIDMethods(t *testing.T) {
 				}
 			}
 			
-			err := op.Validate(context.Background(), testFS)
+			err := op.Validate(context.Background(), nil, testFS)
 			// Some operations may fail validation due to missing dependencies, but they shouldn't panic
 			if err != nil {
 				// This is acceptable - we're testing ID assignment, not full validation
@@ -168,7 +168,7 @@ func TestSynthFS_WithIDValidation(t *testing.T) {
 			}
 
 			// Test validation
-			err := op.Validate(context.Background(), testFS)
+			err := op.Validate(context.Background(), nil, testFS)
 			
 			if tt.expectError {
 				if err == nil {
@@ -256,8 +256,8 @@ func TestSynthFS_WithIDInPipeline(t *testing.T) {
 	
 	// Note: Can't access private Success field
 	
-	if len(result.operations) != 4 {
-		t.Errorf("expected 4 operation results but got %d", len(result.operations))
+	if len(result.Operations) != 4 {
+		t.Errorf("expected 4 operation results but got %d", len(result.Operations))
 	}
 	
 	// Check that explicit IDs are preserved in results
@@ -282,7 +282,7 @@ func TestSynthFS_WithIDErrorReporting(t *testing.T) {
 	// Create operation that will fail validation (copy from non-existent source)
 	op := sfs.CopyWithID("my-failing-copy-op", "nonexistent.txt", "dest.txt")
 	
-	err := op.Validate(context.Background(), testFS)
+	err := op.Validate(context.Background(), nil, testFS)
 	if err == nil {
 		t.Error("expected validation error for copy from non-existent file")
 		return
@@ -330,6 +330,6 @@ func TestSynthFS_WithIDCollisionHandling(t *testing.T) {
 	if err != nil {
 		t.Logf("pipeline with duplicate IDs failed (which may be expected): %v", err)
 	} else if result != nil {
-		t.Logf("pipeline with duplicate IDs succeeded with %d operations", len(result.operations))
+		t.Logf("pipeline with duplicate IDs succeeded with %d operations", len(result.Operations))
 	}
 }

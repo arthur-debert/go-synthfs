@@ -42,11 +42,11 @@ type pipelineAdapter struct {
 
 // Add appends operations to the pipeline.
 func (pa *pipelineAdapter) Add(ops ...Operation) error {
-	// Convert Operation to operationWrapper for execution package
+	// Convert Operation to operationInterfaceAdapter for execution package
 	var opsInterface []interface{}
 	for _, op := range ops {
-		wrapper := &operationWrapper{op: op}
-		opsInterface = append(opsInterface, wrapper)
+		adapter := &operationInterfaceAdapter{Operation: op}
+		opsInterface = append(opsInterface, adapter)
 	}
 	return pa.pipeline.Add(opsInterface...)
 }
@@ -57,8 +57,8 @@ func (pa *pipelineAdapter) Operations() []Operation {
 	opsInterface := pa.pipeline.Operations()
 	var ops []Operation
 	for _, opInterface := range opsInterface {
-		if wrapper, ok := opInterface.(*operationWrapper); ok {
-			ops = append(ops, wrapper.op)
+		if adapter, ok := opInterface.(*operationInterfaceAdapter); ok {
+			ops = append(ops, adapter.Operation)
 		} else if op, ok := opInterface.(Operation); ok {
 			ops = append(ops, op)
 		}

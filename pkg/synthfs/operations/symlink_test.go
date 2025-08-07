@@ -2,6 +2,7 @@ package operations_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -18,7 +19,7 @@ func TestSymlinkOperations(t *testing.T) {
 		op := operations.NewCreateSymlinkOperation(core.OperationID("test-op"), "test/link")
 		// Don't set item - should fail validation
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected validation error for missing item")
 			return
@@ -44,14 +45,15 @@ func TestSymlinkOperations(t *testing.T) {
 		// Also set target in description
 		op.SetDescriptionDetail("target", "../target")
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Expected no validation error, got: %v", err)
 		}
 	})
 
 	t.Run("create symlink execution not supported", func(t *testing.T) {
-		fs := NewMockFilesystem()
+		// Use a filesystem that doesn't support symlinks
+		fs := &noSymlinkFS{NewMockFilesystem()}
 
 		op := operations.NewCreateSymlinkOperation(core.OperationID("test-op"), "test/link")
 		// Set symlink item with target
@@ -66,7 +68,7 @@ func TestSymlinkOperations(t *testing.T) {
 		op.SetDescriptionDetail("target", "../target")
 
 		// MockFilesystem doesn't support symlinks
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected error for unsupported symlink operation")
 			return
@@ -114,4 +116,13 @@ func TestSymlinkOperations(t *testing.T) {
 			t.Error("Expected reverse op to be DeleteOperation")
 		}
 	})
+}
+
+// noSymlinkFS wraps a filesystem and always returns an error for Symlink operations
+type noSymlinkFS struct {
+	*MockFilesystem
+}
+
+func (fs *noSymlinkFS) Symlink(oldname, newname string) error {
+	return fmt.Errorf("filesystem does not support Symlink")
 }

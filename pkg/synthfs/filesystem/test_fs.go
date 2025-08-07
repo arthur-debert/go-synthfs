@@ -139,7 +139,7 @@ func (tfs *TestFileSystem) Rename(oldpath, newpath string) error {
 	return nil
 }
 
-// Stat implements FullFileSystem for testing
+// Stat implements FileSystem for testing
 func (tfs *TestFileSystem) Stat(name string) (fs.FileInfo, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrInvalid}

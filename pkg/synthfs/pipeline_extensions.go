@@ -30,12 +30,12 @@ func (ep *executablePipeline) Execute(ctx context.Context, fs FileSystem) (*Resu
 
 	// Enhanced error handling
 	ops := ep.Operations()
-	for i, opResult := range result.GetOperations() {
-		if opRes, ok := opResult.(OperationResult); ok && opRes.Error != nil {
+	for i, opResult := range result.Operations {
+		if opResult.Error != nil {
 			var successfulOps []OperationID
 			for j := 0; j < i; j++ {
-				if prevRes, ok := result.GetOperations()[j].(OperationResult); ok && prevRes.Error == nil {
-					successfulOps = append(successfulOps, prevRes.OperationID)
+				if result.Operations[j].Error == nil {
+					successfulOps = append(successfulOps, result.Operations[j].OperationID)
 				}
 			}
 
@@ -44,11 +44,11 @@ func (ep *executablePipeline) Execute(ctx context.Context, fs FileSystem) (*Resu
 					FailedOp:      ops[i],
 					FailedIndex:   i + 1,
 					TotalOps:      len(ops),
-					Err:           opRes.Error,
+					Err:           opResult.Error,
 					SuccessfulOps: successfulOps,
 				}
 			}
-			return result, opRes.Error
+			return result, opResult.Error
 		}
 	}
 
@@ -61,12 +61,12 @@ func (ep *executablePipeline) ExecuteWith(ctx context.Context, fs FileSystem, ex
 
 	// Same error handling as Execute
 	ops := ep.Operations()
-	for i, opResult := range result.GetOperations() {
-		if opRes, ok := opResult.(OperationResult); ok && opRes.Error != nil {
+	for i, opResult := range result.Operations {
+		if opResult.Error != nil {
 			var successfulOps []OperationID
 			for j := 0; j < i; j++ {
-				if prevRes, ok := result.GetOperations()[j].(OperationResult); ok && prevRes.Error == nil {
-					successfulOps = append(successfulOps, prevRes.OperationID)
+				if result.Operations[j].Error == nil {
+					successfulOps = append(successfulOps, result.Operations[j].OperationID)
 				}
 			}
 
@@ -75,11 +75,11 @@ func (ep *executablePipeline) ExecuteWith(ctx context.Context, fs FileSystem, ex
 					FailedOp:      ops[i],
 					FailedIndex:   i + 1,
 					TotalOps:      len(ops),
-					Err:           opRes.Error,
+					Err:           opResult.Error,
 					SuccessfulOps: successfulOps,
 				}
 			}
-			return result, opRes.Error
+			return result, opResult.Error
 		}
 	}
 

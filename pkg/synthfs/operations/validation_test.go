@@ -49,7 +49,7 @@ func TestCreateFileValidation(t *testing.T) {
 		}
 		op.SetItem(dirItem)
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected validation error for wrong item type")
 			return
@@ -65,7 +65,7 @@ func TestCreateFileValidation(t *testing.T) {
 		op := operations.NewCreateFileOperation(core.OperationID("test-op"), "test/file.txt")
 		// Don't set any item
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected validation error for missing item")
 		}
@@ -92,7 +92,7 @@ func TestCreateDirectoryValidation(t *testing.T) {
 		}
 		op.SetItem(fileItem)
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected validation error for wrong item type")
 			return
@@ -118,7 +118,7 @@ func TestCreateDirectoryValidation(t *testing.T) {
 		op.SetItem(dirItem)
 
 		// Directory creation is idempotent - should not error
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Expected no validation error for existing directory (idempotent), got: %v", err)
 		}
@@ -140,7 +140,7 @@ func TestSourceExistenceValidation(t *testing.T) {
 		// Also set destination in description for consistency
 		op.SetDescriptionDetail("destination", "destination.txt")
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Expected no validation error for existing source, got: %v", err)
 		}
@@ -154,7 +154,7 @@ func TestSourceExistenceValidation(t *testing.T) {
 		// Also set destination in description for consistency
 		op.SetDescriptionDetail("destination", "destination.txt")
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected validation error for non-existent source, but got none")
 		}
@@ -176,7 +176,7 @@ func TestSourceExistenceValidation(t *testing.T) {
 		// Also set destination in description for consistency
 		op.SetDescriptionDetail("destination", "new_location.txt")
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Expected no validation error for existing source, got: %v", err)
 		}
@@ -190,7 +190,7 @@ func TestSourceExistenceValidation(t *testing.T) {
 		// Also set destination in description for consistency
 		op.SetDescriptionDetail("destination", "new_location.txt")
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected validation error for non-existent source, but got none")
 		}
@@ -213,7 +213,7 @@ func TestDeleteValidation(t *testing.T) {
 
 		op := operations.NewDeleteOperation(core.OperationID("delete-op"), "existing_file.txt")
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Expected no validation error for existing target, got: %v", err)
 		}
@@ -225,7 +225,7 @@ func TestDeleteValidation(t *testing.T) {
 		op := operations.NewDeleteOperation(core.OperationID("delete-op"), "nonexistent_file.txt")
 
 		// Delete is idempotent - should not error on non-existent files
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Expected no validation error for non-existent target (idempotent), got: %v", err)
 		}

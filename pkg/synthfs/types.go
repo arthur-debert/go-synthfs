@@ -7,6 +7,7 @@ import (
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/validation"
 )
 
@@ -17,8 +18,7 @@ import (
 type ReadFS = filesystem.ReadFS
 type WriteFS = filesystem.WriteFS
 type FileSystem = filesystem.FileSystem
-type StatFS = filesystem.StatFS
-type FullFileSystem = filesystem.FullFileSystem
+// Phase 2: Legacy aliases StatFS and FullFileSystem have been removed - use FileSystem directly
 
 // --- FsItem Types ---
 
@@ -34,6 +34,8 @@ type FsItem interface {
 type OperationID = core.OperationID
 type OperationDesc = core.OperationDesc
 type BackupData = core.BackupData
+type Result = core.Result
+type OperationResult = core.OperationResult
 
 // ChecksumRecord is now defined in the validation package
 type ChecksumRecord = validation.ChecksumRecord
@@ -56,24 +58,9 @@ type Executable interface {
 	Validate(ctx context.Context, fsys FileSystem) error
 }
 
-// Operation is the main interface that composes all operation capabilities
-type Operation interface {
-	core.OperationMetadata // ID(), Describe()
-	core.DependencyAware   // Dependencies(), Conflicts()
-	Executable             // Execute(), Validate()
-	core.ExecutableV2      // ExecuteV2(), ValidateV2() - new methods
-	Prerequisites() []core.Prerequisite
-	Rollback(ctx context.Context, fsys FileSystem) error
-	GetItem() FsItem
-	GetChecksum(path string) *ChecksumRecord
-	GetAllChecksums() map[string]*ChecksumRecord
-	ReverseOps(ctx context.Context, fsys FileSystem, budget *core.BackupBudget) ([]Operation, *core.BackupData, error)
-
-	// Batch building methods
-	SetDescriptionDetail(key string, value interface{})
-	AddDependency(depID OperationID)
-	SetPaths(src, dst string)
-}
+// Operation type alias - Phase 2: Use operations.Operation directly
+// This provides backward compatibility while we complete the consolidation
+type Operation = operations.Operation
 
 // ValidationError is now defined in the core package
 type ValidationError = core.ValidationError

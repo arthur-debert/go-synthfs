@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
-	"github.com/gammazero/toposort"
 )
 
 // Pipeline defines the interface for operation pipeline management
@@ -64,7 +63,6 @@ func (mp *memPipeline) Add(ops ...interface{}) error {
 			Str("op_id", string(op.ID())).
 			Str("op_type", op.Describe().Type).
 			Str("path", op.Describe().Path).
-			Int("dependencies", len(op.Dependencies())).
 			Msg("operation added to queue")
 
 		// Add operation to queue
@@ -111,74 +109,11 @@ func (mp *memPipeline) Resolve() error {
 		return nil
 	}
 
-	// Validate that all dependencies exist
-	mp.logger.Info().Msg("validating dependency references")
-	if err := mp.validateDependencies(); err != nil {
-		mp.logger.Info().
-			Err(err).
-			Msg("dependency validation failed")
-		return fmt.Errorf("dependency validation failed: %w", err)
-	}
-	mp.logger.Info().Msg("dependency references validated successfully")
-
-	// Build dependency graph using topological sort library
-	edges := make([]toposort.Edge, 0)
-
-	for _, op := range mp.ops {
-		for _, depID := range op.Dependencies() {
-			// Edge is [2]interface{} where element 0 comes before element 1
-			// So dependency -> operation (dependency must come first)
-			edges = append(edges, toposort.Edge{string(depID), string(op.ID())})
-		}
-	}
-
-	mp.logger.Info().
-		Int("dependency_edges", len(edges)).
-		Msg("performing topological sort")
-
-	// Perform topological sort
-	sortedIDs, err := toposort.Toposort(edges)
-	if err != nil {
-		mp.logger.Info().
-			Err(err).
-			Msg("topological sort failed - circular dependency detected")
-		return fmt.Errorf("circular dependency detected: %w", err)
-	}
-
-	// Rebuild operations slice in topologically sorted order
-	resolvedOps := make([]OperationInterface, 0, len(mp.ops))
-	newIdIndex := make(map[core.OperationID]int)
-
-	// Add operations in dependency order
-	for _, idInterface := range sortedIDs {
-		idStr, ok := idInterface.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type in topological sort result: %T", idInterface)
-		}
-		opID := core.OperationID(idStr)
-		if oldIndex, exists := mp.idIndex[opID]; exists {
-			newIndex := len(resolvedOps)
-			resolvedOps = append(resolvedOps, mp.ops[oldIndex])
-			newIdIndex[opID] = newIndex
-		}
-	}
-
-	// Add any operations that weren't in the dependency graph (no dependencies or dependents)
-	for _, op := range mp.ops {
-		if _, alreadyAdded := newIdIndex[op.ID()]; !alreadyAdded {
-			newIndex := len(resolvedOps)
-			resolvedOps = append(resolvedOps, op)
-			newIdIndex[op.ID()] = newIndex
-		}
-	}
-
-	mp.ops = resolvedOps
-	mp.idIndex = newIdIndex
+	// Since we removed dependency tracking, operations are executed in order of addition
 	mp.resolved = true
-
 	mp.logger.Info().
-		Int("resolved_operations", len(resolvedOps)).
-		Msg("dependency resolution completed successfully")
+		Int("resolved_operations", len(mp.ops)).
+		Msg("operations will be executed in order of addition")
 
 	return nil
 }
@@ -320,15 +255,7 @@ func (mp *memPipeline) Validate(ctx context.Context, fs interface{}) error {
 		Bool("resolved", mp.resolved).
 		Msg("starting comprehensive pipeline validation")
 
-	// First validate dependencies exist
-	mp.logger.Debug().Msg("validating operation dependencies")
-	if err := mp.validateDependencies(); err != nil {
-		mp.logger.Debug().
-			Err(err).
-			Msg("dependency validation failed")
-		return err
-	}
-	mp.logger.Debug().Msg("dependency validation completed successfully")
+	// Dependencies are no longer validated since we removed dependency tracking
 
 	// Validate each operation individually
 	mp.logger.Debug().Msg("validating individual operations")
@@ -341,7 +268,7 @@ func (mp *memPipeline) Validate(ctx context.Context, fs interface{}) error {
 			Str("path", op.Describe().Path).
 			Msg("validating individual operation")
 
-		if err := op.ValidateV2(ctx, &core.ExecutionContext{Logger: mp.logger}, fs); err != nil {
+		if err := op.Validate(ctx, &core.ExecutionContext{Logger: mp.logger}, fs); err != nil {
 			mp.logger.Debug().
 				Str("op_id", string(op.ID())).
 				Str("op_type", op.Describe().Type).
@@ -378,92 +305,10 @@ func (mp *memPipeline) Validate(ctx context.Context, fs interface{}) error {
 	return nil
 }
 
-// validateDependencies ensures all referenced dependencies exist in the pipeline
-func (mp *memPipeline) validateDependencies() error {
-	mp.logger.Debug().
-		Int("operations_to_check", len(mp.ops)).
-		Msg("checking dependency references")
 
-	dependencyCount := 0
-	for _, op := range mp.ops {
-		deps := op.Dependencies()
-		dependencyCount += len(deps)
-
-		mp.logger.Debug().
-			Str("op_id", string(op.ID())).
-			Str("op_type", op.Describe().Type).
-			Interface("dependencies", deps).
-			Int("dependency_count", len(deps)).
-			Msg("checking operation dependencies")
-
-		for _, depID := range deps {
-			if _, exists := mp.idIndex[depID]; !exists {
-				mp.logger.Debug().
-					Str("op_id", string(op.ID())).
-					Str("missing_dependency", string(depID)).
-					Interface("all_dependencies", deps).
-					Msg("dependency reference validation failed - missing dependency")
-
-				return fmt.Errorf("operation %s has missing dependency: %s", op.ID(), depID)
-			} else {
-				mp.logger.Debug().
-					Str("op_id", string(op.ID())).
-					Str("dependency", string(depID)).
-					Msg("dependency reference found")
-			}
-		}
-	}
-
-	mp.logger.Debug().
-		Int("total_dependencies", dependencyCount).
-		Int("operations_checked", len(mp.ops)).
-		Msg("dependency reference validation completed")
-
-	return nil
-}
-
-// validateConflicts checks for operations that conflict with each other
+// validateConflicts is no longer needed since conflict tracking was removed
 func (mp *memPipeline) validateConflicts() error {
-	mp.logger.Debug().
-		Int("operations_to_check", len(mp.ops)).
-		Msg("checking operation conflicts")
-
-	conflictCount := 0
-	for _, op := range mp.ops {
-		conflicts := op.Conflicts()
-		conflictCount += len(conflicts)
-
-		if len(conflicts) > 0 {
-			mp.logger.Debug().
-				Str("op_id", string(op.ID())).
-				Str("op_type", op.Describe().Type).
-				Interface("conflicts", conflicts).
-				Int("conflict_count", len(conflicts)).
-				Msg("checking operation conflicts")
-		}
-
-		for _, conflictID := range conflicts {
-			if _, exists := mp.idIndex[conflictID]; exists {
-				mp.logger.Debug().
-					Str("op_id", string(op.ID())).
-					Str("conflicting_operation", string(conflictID)).
-					Interface("all_conflicts", conflicts).
-					Msg("conflict validation failed - conflicting operation found in queue")
-				return fmt.Errorf("operation %s conflicts with operation %s", op.ID(), conflictID)
-			} else {
-				mp.logger.Debug().
-					Str("op_id", string(op.ID())).
-					Str("potential_conflict", string(conflictID)).
-					Msg("potential conflict not in queue - no actual conflict")
-			}
-		}
-	}
-
-	mp.logger.Debug().
-		Int("total_potential_conflicts", conflictCount).
-		Int("operations_checked", len(mp.ops)).
-		Msg("conflict validation completed - no conflicts found")
-
+	mp.logger.Debug().Msg("conflict validation skipped - feature removed")
 	return nil
 }
 

@@ -81,8 +81,8 @@ func TestReadOnlyWrapper(t *testing.T) {
 	})
 }
 
-func TestReadOnlyWrapper_WithNonStatFS(t *testing.T) {
-	// Create a simple fs.FS that doesn't implement fs.StatFS
+func TestReadOnlyWrapper_WithNonFileSystem(t *testing.T) {
+	// Create a simple fs.FS that doesn't implement fs.FileSystem
 	testFS := fstest.MapFS{
 		"file.txt": &fstest.MapFile{
 			Data: []byte("test content"),
@@ -90,7 +90,7 @@ func TestReadOnlyWrapper_WithNonStatFS(t *testing.T) {
 		},
 	}
 
-	// Wrap it to hide the StatFS interface
+	// Wrap it to hide the FileSystem interface
 	var plainFS fs.FS = testFS
 	wrapper := filesystem.NewReadOnlyWrapper(plainFS)
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 // BaseOperation provides a base implementation of the Operation interface.
@@ -39,15 +40,6 @@ func (op *BaseOperation) ID() core.OperationID {
 	return op.id
 }
 
-// Dependencies returns the list of operation dependencies.
-func (op *BaseOperation) Dependencies() []core.OperationID {
-	return op.dependencies
-}
-
-// Conflicts returns an empty list (conflicts not implemented yet).
-func (op *BaseOperation) Conflicts() []core.OperationID {
-	return nil
-}
 
 // Prerequisites returns an empty list of prerequisites (default implementation).
 // Concrete operations should override this method to declare their prerequisites.
@@ -117,13 +109,13 @@ func (op *BaseOperation) GetAllChecksums() map[string]interface{} {
 
 // Execute performs the actual filesystem operation.
 // Subclasses should override this method.
-func (op *BaseOperation) Execute(ctx context.Context, fsys interface{}) error {
+func (op *BaseOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	return fmt.Errorf("Execute not implemented for operation type: %s", op.description.Type)
 }
 
 // Validate checks if the operation can be performed.
 // Subclasses should override this method.
-func (op *BaseOperation) Validate(ctx context.Context, fsys interface{}) error {
+func (op *BaseOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	// Basic validation: reject empty IDs
 	if string(op.id) == "" {
 		return &core.ValidationError{
@@ -158,37 +150,64 @@ func (op *BaseOperation) Validate(ctx context.Context, fsys interface{}) error {
 
 // Rollback attempts to undo the effects of the Execute method.
 // Subclasses should override this method.
-func (op *BaseOperation) Rollback(ctx context.Context, fsys interface{}) error {
+func (op *BaseOperation) Rollback(ctx context.Context, fsys filesystem.FileSystem) error {
 	return fmt.Errorf("Rollback not implemented for operation type: %s", op.description.Type)
 }
 
 // ReverseOps generates operations that would undo this operation's effects.
 // Subclasses should override this method.
-func (op *BaseOperation) ReverseOps(ctx context.Context, fsys interface{}, budget interface{}) ([]interface{}, interface{}, error) {
+func (op *BaseOperation) ReverseOps(ctx context.Context, fsys filesystem.FileSystem, budget interface{}) ([]Operation, interface{}, error) {
 	return nil, nil, fmt.Errorf("ReverseOps not implemented for operation type: %s", op.description.Type)
 }
 
 // Additional methods to satisfy the main package Operation interface
-// Note: GetItem, GetChecksum, and GetAllChecksums are already defined above
+// These shadow the existing methods with proper return types
 
-// ExecuteV2 performs the operation using ExecutionContext.
-// IMPORTANT: This base implementation should NOT be used. Each concrete operation
-// type must override this method to ensure proper method dispatch.
-func (op *BaseOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// This is a fallback that should not be reached if operations are properly implemented
-	return fmt.Errorf("ExecuteV2 not properly implemented for operation type: %s", op.description.Type)
+// GetItemSynthFS returns the item as FsItem interface (overrides GetItem for synthfs compatibility)
+func (op *BaseOperation) GetItemSynthFS() interface{} {
+	// Return as interface{} for now - the actual FsItem will be set correctly by the operation
+	return op.item
 }
 
-// ValidateV2 checks if the operation can be performed using ExecutionContext.
-func (op *BaseOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Convert interfaces back to concrete types
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
+// GetChecksumSynthFS returns checksum as *ChecksumRecord (overrides GetChecksum for synthfs compatibility)  
+func (op *BaseOperation) GetChecksumSynthFS(path string) interface{} {
+	// Return the checksum as interface{} - type assertion will be done by caller
+	return op.GetChecksum(path)
+}
+
+// GetAllChecksumsSynthFS returns all checksums with proper types (overrides GetAllChecksums for synthfs compatibility)
+func (op *BaseOperation) GetAllChecksumsSynthFS() map[string]interface{} {
+	// Return as map[string]interface{} which matches the checksum storage
+	return op.checksums
+}
+
+// ReverseOpsSynthFS returns reverse operations with proper types (overrides ReverseOps for synthfs compatibility)
+func (op *BaseOperation) ReverseOpsSynthFS(ctx context.Context, fsys interface{}, budget interface{}) ([]interface{}, interface{}, error) {
+	// Convert the filesystem interface to the expected type
+	if fs, ok := fsys.(filesystem.FileSystem); ok {
+		operations, backupData, err := op.ReverseOps(ctx, fs, budget)
+		if err != nil {
+			return nil, nil, err
+		}
+		
+		// Convert []Operation to []interface{}
+		result := make([]interface{}, len(operations))
+		for i, operation := range operations {
+			result[i] = operation
+		}
+		
+		return result, backupData, nil
 	}
-
-	// For now, delegate to the original method
-	// Note: This calls BaseOperation.Validate, not the overridden method!
-	// Concrete operations should override ValidateV2 to call their own Validate method.
-	return op.Validate(context, fsys)
+	return nil, nil, fmt.Errorf("invalid filesystem type")
 }
+
+// RollbackSynthFS adapts Rollback to accept interface{} filesystem (overrides Rollback for synthfs compatibility)
+func (op *BaseOperation) RollbackSynthFS(ctx context.Context, fsys interface{}) error {
+	// Convert interface{} filesystem to concrete type
+	if fs, ok := fsys.(filesystem.FileSystem); ok {
+		return op.Rollback(ctx, fs)
+	}
+	return fmt.Errorf("invalid filesystem type for rollback")
+}
+
+

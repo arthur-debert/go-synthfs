@@ -15,7 +15,7 @@ func TestSimpleAPISequentialOperations(t *testing.T) {
 	tests := []struct {
 		name string
 		ops  func(sfs *synthfs.SynthFS) []synthfs.Operation
-		verify func(t *testing.T, fs filesystem.FullFileSystem)
+		verify func(t *testing.T, fs filesystem.FileSystem)
 	}{
 		{
 			name: "create directory then file",
@@ -25,7 +25,7 @@ func TestSimpleAPISequentialOperations(t *testing.T) {
 					sfs.CreateFile("mydir/file.txt", []byte("content"), 0644),
 				}
 			},
-			verify: func(t *testing.T, fs filesystem.FullFileSystem) {
+			verify: func(t *testing.T, fs filesystem.FileSystem) {
 				// Check directory exists
 				info, err := fs.Stat("mydir")
 				if err != nil {
@@ -49,7 +49,7 @@ func TestSimpleAPISequentialOperations(t *testing.T) {
 					sfs.Copy("original.txt", "copy.txt"),
 				}
 			},
-			verify: func(t *testing.T, fs filesystem.FullFileSystem) {
+			verify: func(t *testing.T, fs filesystem.FileSystem) {
 				// Check both files exist
 				if _, err := fs.Stat("original.txt"); err != nil {
 					t.Errorf("Original file should exist: %v", err)
@@ -72,7 +72,7 @@ func TestSimpleAPISequentialOperations(t *testing.T) {
 					sfs.CreateSymlink("project/src/main.go", "project/main"),
 				}
 			},
-			verify: func(t *testing.T, fs filesystem.FullFileSystem) {
+			verify: func(t *testing.T, fs filesystem.FileSystem) {
 				// Verify directory structure
 				paths := []string{
 					"project",
@@ -108,7 +108,7 @@ func TestSimpleAPISequentialOperations(t *testing.T) {
 					sfs.Move("temp.txt", "final.txt"),
 				}
 			},
-			verify: func(t *testing.T, fs filesystem.FullFileSystem) {
+			verify: func(t *testing.T, fs filesystem.FileSystem) {
 				// Source should exist
 				if _, err := fs.Stat("source.txt"); err != nil {
 					t.Error("Source file should still exist")
@@ -142,7 +142,7 @@ func TestSimpleAPISequentialOperations(t *testing.T) {
 				t.Fatalf("Run failed: %v", err)
 			}
 			
-			if !result.IsSuccess() {
+			if !result.Success {
 				t.Fatal("Run should have succeeded")
 			}
 			
@@ -170,7 +170,7 @@ func TestSimpleAPIDryRun(t *testing.T) {
 		t.Fatalf("Dry run failed: %v", err)
 	}
 	
-	if !result.IsSuccess() {
+	if !result.Success {
 		t.Fatal("Dry run should succeed")
 	}
 	

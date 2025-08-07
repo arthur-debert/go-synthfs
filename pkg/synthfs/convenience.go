@@ -103,12 +103,12 @@ func executeDirectOp(ctx context.Context, fs filesystem.FileSystem, op Operation
 	action := getOperationAction(desc.Type)
 
 	// Validate first
-	if err := op.Validate(ctx, fs); err != nil {
+	if err := op.Validate(ctx, nil, fs); err != nil {
 		return WrapOperationError(op, action, err)
 	}
 
 	// Execute
-	if err := op.Execute(ctx, fs); err != nil {
+	if err := op.Execute(ctx, nil, fs); err != nil {
 		return WrapOperationError(op, action, err)
 	}
 

@@ -2,6 +2,8 @@ package synthfs
 
 import (
 	"testing"
+	
+	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
 )
 
 // TestRegistryOperationsPackage tests that the registry can create operations from the operations package
@@ -29,9 +31,9 @@ func TestRegistryOperationsPackage(t *testing.T) {
 				continue
 			}
 
-			// Verify it's wrapped in adapter
-			if _, ok := op.(*OperationsPackageAdapter); !ok {
-				t.Errorf("Expected OperationsPackageAdapter for %s, got %T", opType, op)
+			// Verify it's an operations.Operation directly (no more adapter)
+			if _, ok := op.(operations.Operation); !ok {
+				t.Errorf("Expected operations.Operation for %s, got %T", opType, op)
 			}
 
 			// Verify it implements Operation interface

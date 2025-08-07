@@ -22,7 +22,7 @@ func TestDeleteOperation_EdgeCases(t *testing.T) {
 		}
 
 		op := operations.NewDeleteOperation(core.OperationID("test-op"), "test/dir")
-		err = op.Execute(ctx, fs)
+		err = op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Delete failed: %v", err)
 		}
@@ -43,7 +43,7 @@ func TestDeleteOperation_EdgeCases(t *testing.T) {
 		}
 
 		op := operations.NewDeleteOperation(core.OperationID("test-op"), "test/file.txt")
-		err = op.Execute(ctx, fs)
+		err = op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Delete failed: %v", err)
 		}
@@ -58,7 +58,7 @@ func TestDeleteOperation_EdgeCases(t *testing.T) {
 		fs := NewMockFilesystem()
 
 		op := operations.NewDeleteOperation(core.OperationID("test-op"), "nonexistent.txt")
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		// Should not error - delete is idempotent
 		if err != nil {
 			t.Errorf("Delete should be idempotent, got error: %v", err)
@@ -79,7 +79,7 @@ func TestDeleteOperation_EdgeCases(t *testing.T) {
 		}
 
 		op := operations.NewDeleteOperation(core.OperationID("test-op"), "test/dir")
-		err = op.Execute(ctx, fs)
+		err = op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Delete failed: %v", err)
 		}
@@ -109,7 +109,7 @@ func TestCreateOperations_EdgeCases(t *testing.T) {
 		}
 		op.SetItem(fileItem)
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -138,7 +138,7 @@ func TestCreateOperations_EdgeCases(t *testing.T) {
 		}
 		op.SetItem(dirItem)
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -158,7 +158,7 @@ func TestCreateOperations_EdgeCases(t *testing.T) {
 		op := operations.NewCreateSymlinkOperation(core.OperationID("test-op"), "test/link")
 		// Don't set target in description - should fail validation
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected validation error for missing target")
 		}
@@ -170,7 +170,7 @@ func TestCreateOperations_EdgeCases(t *testing.T) {
 		op := operations.NewCreateArchiveOperation(core.OperationID("test-op"), "test/archive.tar.gz")
 		// Don't set sources in description - should fail validation
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected validation error for missing sources")
 		}
@@ -198,7 +198,7 @@ func TestCopyMoveOperations_EdgeCases(t *testing.T) {
 		// Also set destination in description for consistency
 		op.SetDescriptionDetail("destination", "targetdir/source.txt")
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -235,7 +235,7 @@ func TestCopyMoveOperations_EdgeCases(t *testing.T) {
 		// Also set destination in description for consistency
 		op.SetDescriptionDetail("destination", "dir2/file.txt")
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -265,7 +265,7 @@ func TestCopyMoveOperations_EdgeCases(t *testing.T) {
 		op.SetDescriptionDetail("destination", "destdir")
 
 		// Copy of directories is not yet implemented
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected error for directory copy (not implemented)")
 		}

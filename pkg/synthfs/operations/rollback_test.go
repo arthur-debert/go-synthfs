@@ -25,7 +25,7 @@ func TestOperationRollback(t *testing.T) {
 		op.SetItem(fileItem)
 
 		// Execute to create the file
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -59,7 +59,7 @@ func TestOperationRollback(t *testing.T) {
 		op.SetItem(dirItem)
 
 		// Execute to create the directory
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -96,7 +96,7 @@ func TestOperationRollback(t *testing.T) {
 		op.SetDescriptionDetail("destination", "test/destination.txt")
 
 		// Execute copy
-		err = op.Execute(ctx, fs)
+		err = op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -138,7 +138,7 @@ func TestOperationRollback(t *testing.T) {
 		op.SetDescriptionDetail("destination", "test/movedest.txt")
 
 		// Execute move
-		err = op.Execute(ctx, fs)
+		err = op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}

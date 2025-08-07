@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
-	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
@@ -18,7 +17,7 @@ func TestReadFile_Basic(t *testing.T) {
 
 	t.Run("read text file", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test file
@@ -36,8 +35,8 @@ func TestReadFile_Basic(t *testing.T) {
 			t.Fatalf("ReadFile operation failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Fatalf("ReadFile operation did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Fatalf("ReadFile operation did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify content was captured
@@ -60,7 +59,7 @@ func TestReadFile_Basic(t *testing.T) {
 
 	t.Run("read empty file", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create empty file
@@ -77,8 +76,8 @@ func TestReadFile_Basic(t *testing.T) {
 			t.Fatalf("ReadFile operation failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Fatalf("ReadFile operation did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Fatalf("ReadFile operation did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify empty content
@@ -96,7 +95,7 @@ func TestReadFile_Basic(t *testing.T) {
 
 	t.Run("read with explicit ID", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test file
@@ -114,8 +113,8 @@ func TestReadFile_Basic(t *testing.T) {
 			t.Fatalf("ReadFile operation failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Fatalf("ReadFile operation did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Fatalf("ReadFile operation did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify content was captured
@@ -138,7 +137,7 @@ func TestReadFile_ErrorHandling(t *testing.T) {
 
 	t.Run("nonexistent file", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Try to read nonexistent file
@@ -149,14 +148,14 @@ func TestReadFile_ErrorHandling(t *testing.T) {
 			t.Error("Expected error when reading nonexistent file")
 		}
 
-		if result.IsSuccess() {
+		if result.Success {
 			t.Error("Operation should have failed for nonexistent file")
 		}
 	})
 
 	t.Run("try to read directory", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create directory
@@ -173,7 +172,7 @@ func TestReadFile_ErrorHandling(t *testing.T) {
 			t.Error("Expected error when reading directory as file")
 		}
 
-		if result.IsSuccess() {
+		if result.Success {
 			t.Error("Operation should have failed when reading directory")
 		}
 
@@ -191,7 +190,7 @@ func TestChecksum_Basic(t *testing.T) {
 
 	t.Run("md5 checksum", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test file with known content
@@ -209,8 +208,8 @@ func TestChecksum_Basic(t *testing.T) {
 			t.Fatalf("Checksum operation failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Fatalf("Checksum operation did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Fatalf("Checksum operation did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify MD5 checksum (expected: 65a8e27d8879283831b664bd8b7f0ad4)
@@ -240,7 +239,7 @@ func TestChecksum_Basic(t *testing.T) {
 
 	t.Run("sha1 checksum", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test file
@@ -258,8 +257,8 @@ func TestChecksum_Basic(t *testing.T) {
 			t.Fatalf("Checksum operation failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Fatalf("Checksum operation did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Fatalf("Checksum operation did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify SHA1 checksum (expected: 0a0a9f2a6772942557ab5355d76af442f8f65e01)
@@ -278,7 +277,7 @@ func TestChecksum_Basic(t *testing.T) {
 
 	t.Run("sha256 checksum", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test file
@@ -296,8 +295,8 @@ func TestChecksum_Basic(t *testing.T) {
 			t.Fatalf("Checksum operation failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Fatalf("Checksum operation did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Fatalf("Checksum operation did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify SHA256 checksum (expected: dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f)
@@ -310,7 +309,7 @@ func TestChecksum_Basic(t *testing.T) {
 
 	t.Run("sha512 checksum", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test file
@@ -328,8 +327,8 @@ func TestChecksum_Basic(t *testing.T) {
 			t.Fatalf("Checksum operation failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Fatalf("Checksum operation did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Fatalf("Checksum operation did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify SHA512 checksum exists and is correct length
@@ -347,7 +346,7 @@ func TestChecksum_Basic(t *testing.T) {
 
 	t.Run("checksum with explicit ID", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test file
@@ -365,8 +364,8 @@ func TestChecksum_Basic(t *testing.T) {
 			t.Fatalf("Checksum operation failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Fatalf("Checksum operation did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Fatalf("Checksum operation did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify checksum was captured
@@ -389,7 +388,7 @@ func TestChecksum_ErrorHandling(t *testing.T) {
 
 	t.Run("nonexistent file", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Try to checksum nonexistent file
@@ -400,14 +399,14 @@ func TestChecksum_ErrorHandling(t *testing.T) {
 			t.Error("Expected error when checksumming nonexistent file")
 		}
 
-		if result.IsSuccess() {
+		if result.Success {
 			t.Error("Operation should have failed for nonexistent file")
 		}
 	})
 
 	t.Run("try to checksum directory", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create directory
@@ -424,7 +423,7 @@ func TestChecksum_ErrorHandling(t *testing.T) {
 			t.Error("Expected error when checksumming directory")
 		}
 
-		if result.IsSuccess() {
+		if result.Success {
 			t.Error("Operation should have failed when checksumming directory")
 		}
 
@@ -442,7 +441,7 @@ func TestFileOperations_InPipeline(t *testing.T) {
 
 	t.Run("read and checksum in pipeline", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test content
@@ -463,8 +462,8 @@ func TestFileOperations_InPipeline(t *testing.T) {
 			t.Fatalf("Pipeline failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Fatalf("Pipeline did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Fatalf("Pipeline did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify read operation captured content
@@ -495,7 +494,7 @@ func TestFileOperations_InPipeline(t *testing.T) {
 
 	t.Run("multiple checksums of same file", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem().(filesystem.FullFileSystem)
+		fs := helper.FileSystem()
 		sfs := synthfs.New()
 
 		// Create test file
@@ -518,8 +517,8 @@ func TestFileOperations_InPipeline(t *testing.T) {
 			t.Fatalf("Pipeline failed: %v", err)
 		}
 
-		if !result.IsSuccess() {
-			t.Fatalf("Pipeline did not succeed: %v", result.GetError())
+		if !result.Success {
+			t.Fatalf("Pipeline did not succeed: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify all checksums were calculated

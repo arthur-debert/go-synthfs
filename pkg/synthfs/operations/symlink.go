@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 // CreateSymlinkOperation represents a symbolic link creation operation.
@@ -35,8 +37,19 @@ func (op *CreateSymlinkOperation) Prerequisites() []core.Prerequisite {
 	return prereqs
 }
 
-// Execute creates the symbolic link.
-func (op *CreateSymlinkOperation) Execute(ctx context.Context, fsys interface{}) error {
+// Execute creates the symbolic link with event handling.
+func (op *CreateSymlinkOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
+	// Execute with event handling if ExecutionContext is provided
+	if execCtx != nil {
+		return ExecuteWithEvents(op, ctx, execCtx, fsys, op.execute)
+	}
+
+	// Fallback to direct execution
+	return op.execute(ctx, fsys)
+}
+
+// execute is the internal implementation without event handling
+func (op *CreateSymlinkOperation) execute(ctx context.Context, fsys filesystem.FileSystem) error {
 	item := op.GetItem()
 	if item == nil {
 		return fmt.Errorf("create_symlink operation requires an item")
@@ -54,53 +67,35 @@ func (op *CreateSymlinkOperation) Execute(ctx context.Context, fsys interface{})
 		return fmt.Errorf("item does not implement ItemInterface")
 	}
 
-	// Get filesystem methods
-	symlink, hasSymlink := getSymlinkMethod(fsys)
-	mkdirAll, hasMkdirAll := getMkdirAllMethod(fsys)
-
-	if !hasSymlink {
-		return fmt.Errorf("filesystem does not support Symlink")
-	}
 
 	// Create parent directory if needed
-	if hasMkdirAll {
-		dir := filepath.Dir(linkItem.Path())
-		if dir != "." && dir != "/" {
-			if err := mkdirAll(dir, 0755); err != nil {
+	dir := filepath.Dir(linkItem.Path())
+	if dir != "." && dir != "/" {
+		if err := fsys.MkdirAll(dir, 0755); err != nil {
+			// Check if it's just that MkdirAll is not supported
+			if strings.Contains(err.Error(), "does not support MkdirAll") {
+				// MkdirAll not supported - that's okay, continue with symlink creation
+			} else {
+				// Other MkdirAll error - this is a real failure
 				return fmt.Errorf("failed to create parent directory: %w", err)
 			}
 		}
 	}
 
 	// Create the symlink
-	if err := symlink(target, linkItem.Path()); err != nil {
+	if err := fsys.Symlink(target, linkItem.Path()); err != nil {
 		return fmt.Errorf("failed to create symlink: %w", err)
 	}
 
 	return nil
 }
 
-// ExecuteV2 performs the symlink creation with execution context support.
-func (op *CreateSymlinkOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Convert context
-	context, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("invalid context type")
-	}
 
-	// Call the operation's Execute method with proper event handling
-	return executeWithEvents(op, context, execCtx, fsys, op.Execute)
-}
-
-// ValidateV2 checks if the symlink can be created using ExecutionContext.
-func (op *CreateSymlinkOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return validateV2Helper(op, ctx, execCtx, fsys)
-}
 
 // Validate checks if the symlink can be created.
-func (op *CreateSymlinkOperation) Validate(ctx context.Context, fsys interface{}) error {
+func (op *CreateSymlinkOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	// First do base validation
-	if err := op.BaseOperation.Validate(ctx, fsys); err != nil {
+	if err := op.BaseOperation.Validate(ctx, execCtx, fsys); err != nil {
 		return err
 	}
 
@@ -124,13 +119,11 @@ func (op *CreateSymlinkOperation) Validate(ctx context.Context, fsys interface{}
 	}
 
 	// Check if symlink already exists
-	if stat, ok := getStatMethod(fsys); ok {
-		if _, err := stat(op.description.Path); err == nil {
-			return &core.ValidationError{
-				OperationID:   op.ID(),
-				OperationDesc: op.Describe(),
-				Reason:        "symlink already exists",
-			}
+	if _, err := fsys.Stat(op.description.Path); err == nil {
+		return &core.ValidationError{
+			OperationID:   op.ID(),
+			OperationDesc: op.Describe(),
+			Reason:        "symlink already exists",
 		}
 	}
 
@@ -142,36 +135,19 @@ func (op *CreateSymlinkOperation) Validate(ctx context.Context, fsys interface{}
 }
 
 // Rollback removes the created symlink.
-func (op *CreateSymlinkOperation) Rollback(ctx context.Context, fsys interface{}) error {
-	remove, ok := getRemoveMethod(fsys)
-	if !ok {
-		return fmt.Errorf("filesystem does not support Remove")
-	}
-
+func (op *CreateSymlinkOperation) Rollback(ctx context.Context, fsys filesystem.FileSystem) error {
 	// Remove the symlink
-	_ = remove(op.description.Path) // Ignore error - might not exist
+	_ = fsys.Remove(op.description.Path) // Ignore error - might not exist
 	return nil
 }
 
 // ReverseOps generates operations to remove the symlink.
-func (op *CreateSymlinkOperation) ReverseOps(ctx context.Context, fsys interface{}, budget interface{}) ([]interface{}, interface{}, error) {
+func (op *CreateSymlinkOperation) ReverseOps(ctx context.Context, fsys filesystem.FileSystem, budget interface{}) ([]Operation, interface{}, error) {
 	// Create a delete operation to remove the symlink
 	reverseOp := NewDeleteOperation(
 		core.OperationID(fmt.Sprintf("reverse_%s", op.ID())),
 		op.description.Path,
 	)
 
-	return []interface{}{reverseOp}, nil, nil
-}
-
-// Helper function to get Symlink method from filesystem
-func getSymlinkMethod(fsys interface{}) (func(string, string) error, bool) {
-	type symlinkFS interface {
-		Symlink(oldname, newname string) error
-	}
-
-	if fs, ok := fsys.(symlinkFS); ok {
-		return fs.Symlink, true
-	}
-	return nil, false
+	return []Operation{reverseOp}, nil, nil
 }

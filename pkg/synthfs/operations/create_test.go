@@ -22,7 +22,7 @@ func TestCreateFileOperation(t *testing.T) {
 		}
 		op.SetItem(fileItem)
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -41,7 +41,7 @@ func TestCreateFileOperation(t *testing.T) {
 		op := operations.NewCreateFileOperation(core.OperationID("test-create"), "test.txt")
 		// Don't set item
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected error when no item is set")
 		}
@@ -58,7 +58,7 @@ func TestCreateFileOperation(t *testing.T) {
 		}
 		op.SetItem(fileItem)
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -85,7 +85,7 @@ func TestCreateFileOperation(t *testing.T) {
 		}
 		op.SetItem(fileItem)
 
-		err := op.Validate(ctx, fs)
+		err := op.Validate(ctx, nil, fs)
 		if err != nil {
 			t.Errorf("Validate failed: %v", err)
 		}
@@ -139,7 +139,7 @@ func TestCreateDirectoryOperation(t *testing.T) {
 		}
 		op.SetItem(dirItem)
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -160,7 +160,7 @@ func TestCreateDirectoryOperation(t *testing.T) {
 		}
 		op.SetItem(dirItem)
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -177,7 +177,7 @@ func TestCreateDirectoryOperation(t *testing.T) {
 		op := operations.NewCreateDirectoryOperation(core.OperationID("test-create-dir"), "testdir")
 		// Don't set item
 
-		err := op.Execute(ctx, fs)
+		err := op.Execute(ctx, nil, fs)
 		if err == nil {
 			t.Error("Expected error when no item is set")
 		}

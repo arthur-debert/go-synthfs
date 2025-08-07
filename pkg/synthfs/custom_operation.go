@@ -84,79 +84,79 @@ func (op *CustomOperation) StoreOutput(key string, value interface{}) {
 	op.SetDescriptionDetail(key, value)
 }
 
-// Execute runs the custom operation's execute function.
-func (op *CustomOperation) Execute(ctx context.Context, fsys interface{}) error {
+// executeInternal runs the custom operation's execute function with event handling.
+func (op *CustomOperation) executeInternal(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	if op.executeFunc == nil {
 		return fmt.Errorf("custom operation %s: no execute function defined", op.ID())
 	}
 
-	// Type assert to filesystem.FileSystem
-	fs, ok := fsys.(filesystem.FileSystem)
-	if !ok {
-		return fmt.Errorf("custom operation %s: invalid filesystem type", op.ID())
+	// Execute with event handling if ExecutionContext is provided
+	if execCtx != nil {
+		return operations.ExecuteWithEvents(op.BaseOperation, ctx, execCtx, fsys, func(ctx context.Context, fsys filesystem.FileSystem) error {
+			return op.executeFunc(ctx, fsys)
+		})
 	}
 
-	return op.executeFunc(ctx, fs)
+	// Fallback to direct execution
+	return op.executeFunc(ctx, fsys)
 }
 
-// Validate runs the custom operation's validation function if defined.
+// Execute with concrete types for operations.Operation interface
+func (op *CustomOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
+	return op.executeInternal(ctx, execCtx, fsys)
+}
+
+// validateInternal runs the custom operation's validation function if defined.
 // If no validation function is set, it returns nil (assumes valid).
-func (op *CustomOperation) Validate(ctx context.Context, fsys interface{}) error {
+func (op *CustomOperation) validateInternal(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	if op.validateFunc == nil {
 		// No validation function means operation is always valid
 		return nil
 	}
 
-	// Type assert to filesystem.FileSystem
-	fs, ok := fsys.(filesystem.FileSystem)
-	if !ok {
-		return fmt.Errorf("custom operation %s: invalid filesystem type", op.ID())
-	}
+	return op.validateFunc(ctx, fsys)
+}
 
-	return op.validateFunc(ctx, fs)
+// Validate with concrete types for operations.Operation interface  
+func (op *CustomOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
+	return op.validateInternal(ctx, execCtx, fsys)
 }
 
 // Rollback runs the custom operation's rollback function if defined.
 // If no rollback function is set, it returns nil (no-op rollback).
-func (op *CustomOperation) Rollback(ctx context.Context, fsys interface{}) error {
+func (op *CustomOperation) Rollback(ctx context.Context, fsys filesystem.FileSystem) error {
 	if op.rollbackFunc == nil {
 		// No rollback function means nothing to rollback
 		return nil
 	}
 
-	// Type assert to filesystem.FileSystem
-	fs, ok := fsys.(filesystem.FileSystem)
-	if !ok {
-		return fmt.Errorf("custom operation %s: invalid filesystem type", op.ID())
-	}
-
-	return op.rollbackFunc(ctx, fs)
+	return op.rollbackFunc(ctx, fsys)
 }
 
-// ExecuteV2 implements the V2 execution interface
-func (op *CustomOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Delegate to Execute with context type assertion
-	if contextOp, ok := ctx.(context.Context); ok {
-		return op.Execute(contextOp, fsys)
-	}
-	return fmt.Errorf("custom operation %s: invalid context type", op.ID())
+
+
+// Additional methods to implement synthfs.Operation interface directly
+
+// GetItem returns nil for custom operations (they don't have filesystem items)
+func (op *CustomOperation) GetItem() interface{} {
+	return nil
 }
 
-// ValidateV2 implements the V2 validation interface
-func (op *CustomOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	// Delegate to Validate with context type assertion
-	if contextOp, ok := ctx.(context.Context); ok {
-		return op.Validate(contextOp, fsys)
-	}
-	return fmt.Errorf("custom operation %s: invalid context type", op.ID())
+// GetChecksum returns nil for custom operations (they don't manage checksums)  
+func (op *CustomOperation) GetChecksum(path string) interface{} {
+	return nil
 }
 
-// ReverseOps returns the operations needed to reverse this custom operation.
-// For custom operations, this creates a single operation that runs the rollback function.
-func (op *CustomOperation) ReverseOps(ctx context.Context, fsys interface{}, budget interface{}) ([]interface{}, interface{}, error) {
+// GetAllChecksums returns nil for custom operations (they don't manage checksums)
+func (op *CustomOperation) GetAllChecksums() map[string]interface{} {
+	return nil
+}
+
+// ReverseOps returns the operations needed to reverse this custom operation
+func (op *CustomOperation) ReverseOps(ctx context.Context, fsys filesystem.FileSystem, budget interface{}) ([]operations.Operation, interface{}, error) {
 	if op.rollbackFunc == nil {
 		// No rollback means no reverse operations
-		return []interface{}{}, nil, nil
+		return []operations.Operation{}, nil, nil
 	}
 
 	// Create a reverse custom operation that runs the rollback function
@@ -165,8 +165,25 @@ func (op *CustomOperation) ReverseOps(ctx context.Context, fsys interface{}, bud
 		op.rollbackFunc,
 	).WithDescription(fmt.Sprintf("Reverse of %s", op.ID()))
 
-	return []interface{}{reverseOp}, nil, nil
+	return []operations.Operation{reverseOp}, nil, nil
 }
 
-// Ensure CustomOperation implements the Operation interface
+// Core interface methods with proper signatures
+
+// AddDependency for both interfaces - uses OperationID which is an alias for core.OperationID
+func (op *CustomOperation) AddDependency(depID core.OperationID) {
+	op.BaseOperation.AddDependency(depID)
+}
+
+// ID returns the operation ID - uses OperationID which is an alias for core.OperationID
+func (op *CustomOperation) ID() core.OperationID {
+	return op.BaseOperation.ID()
+}
+
+// Describe returns the operation description - uses OperationDesc which is an alias for core.OperationDesc
+func (op *CustomOperation) Describe() core.OperationDesc {
+	return op.BaseOperation.Describe()
+}
+
+// Ensure CustomOperation implements operations.Operation interface
 var _ operations.Operation = (*CustomOperation)(nil)

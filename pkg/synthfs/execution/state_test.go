@@ -716,14 +716,12 @@ func (m *MockOperationInterface) Describe() core.OperationDesc {
 		Details: m.details,
 	}
 }
-func (m *MockOperationInterface) Dependencies() []core.OperationID     { return []core.OperationID{} }
-func (m *MockOperationInterface) Conflicts() []core.OperationID        { return []core.OperationID{} }
 func (m *MockOperationInterface) Prerequisites() []core.Prerequisite   { return []core.Prerequisite{} }
 func (m *MockOperationInterface) AddDependency(depID core.OperationID) { /* no-op for mock */ }
-func (m *MockOperationInterface) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (m *MockOperationInterface) Execute(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	return nil
 }
-func (m *MockOperationInterface) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func (m *MockOperationInterface) Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
 	return nil
 }
 func (m *MockOperationInterface) ReverseOps(ctx context.Context, fsys interface{}, budget *core.BackupBudget) ([]interface{}, *core.BackupData, error) {

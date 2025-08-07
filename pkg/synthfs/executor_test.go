@@ -9,6 +9,8 @@ import (
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/operations"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/testutil"
 )
 
@@ -65,15 +67,15 @@ func TestExecutor_Run(t *testing.T) {
 
 		result := executor.Run(ctx, pipeline, fs)
 
-		if !result.IsSuccess() {
-			t.Errorf("Expected success=true, got success=%v, error=%v", result.IsSuccess(), result.GetError())
+		if !result.Success {
+			t.Errorf("Expected success=true, got success=%v, error=%v", result.Success, (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
-		if len(result.GetOperations()) != 2 {
-			t.Errorf("Expected 2 operation results, got %d", len(result.GetOperations()))
+		if len(result.Operations) != 2 {
+			t.Errorf("Expected 2 operation results, got %d", len(result.Operations))
 		}
 
-		if result.GetDuration() == 0 {
+		if result.Duration == 0 {
 			t.Error("Expected non-zero duration")
 		}
 	})
@@ -86,12 +88,12 @@ func TestExecutor_Run(t *testing.T) {
 
 		result := executor.Run(ctx, pipeline, fs)
 
-		if !result.IsSuccess() {
-			t.Errorf("Expected success=true for empty pipeline, got success=%v, error=%v", result.IsSuccess(), result.GetError())
+		if !result.Success {
+			t.Errorf("Expected success=true for empty pipeline, got success=%v, error=%v", result.Success, (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
-		if len(result.GetOperations()) != 0 {
-			t.Errorf("Expected 0 operation results for empty pipeline, got %d", len(result.GetOperations()))
+		if len(result.Operations) != 0 {
+			t.Errorf("Expected 0 operation results for empty pipeline, got %d", len(result.Operations))
 		}
 	})
 }
@@ -115,15 +117,15 @@ func TestExecutor_RunWithOptions(t *testing.T) {
 
 		result := executor.RunWithOptions(ctx, pipeline, fs, opts)
 
-		if !result.IsSuccess() {
-			t.Errorf("Expected success=true, got success=%v, error=%v", result.IsSuccess(), result.GetError())
+		if !result.Success {
+			t.Errorf("Expected success=true, got success=%v, error=%v", result.Success, (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
-		if result.GetBudget() == nil {
+		if result.Budget == nil {
 			t.Error("Expected budget to be initialized for restorable execution")
 		}
 
-		if len(result.GetRestoreOps()) == 0 {
+		if len(result.RestoreOps) == 0 {
 			t.Error("Expected restore operations to be available")
 		}
 	})
@@ -143,8 +145,8 @@ func TestExecutor_RunWithOptions(t *testing.T) {
 
 		result := executor.RunWithOptions(ctx, pipeline, fs, opts)
 
-		if !result.IsSuccess() {
-			t.Errorf("Expected success=true, got success=%v, error=%v", result.IsSuccess(), result.GetError())
+		if !result.Success {
+			t.Errorf("Expected success=true, got success=%v, error=%v", result.Success, (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Should skip prerequisite resolution gracefully
@@ -169,16 +171,16 @@ func TestExecutor_ErrorPaths(t *testing.T) {
 
 		result := executor.RunWithOptions(ctx, pipeline, fs, synthfs.DefaultPipelineOptions())
 
-		if result.IsSuccess() {
+		if result.Success {
 			t.Error("Expected failure for pipeline validation error")
 		}
 
-		if result.GetError() == nil {
+		if len(result.Errors) == 0 {
 			t.Error("Expected error to be returned")
 		}
 
-		if !strings.Contains(fmt.Sprintf("%v", result.GetError()), "validation failed") {
-			t.Errorf("Expected validation error, got: %v", result.GetError())
+		if !strings.Contains(fmt.Sprintf("%v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })()), "validation failed") {
+			t.Errorf("Expected validation error, got: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 	})
 
@@ -195,16 +197,16 @@ func TestExecutor_ErrorPaths(t *testing.T) {
 
 		result := executor.RunWithOptions(ctx, pipeline, fs, synthfs.DefaultPipelineOptions())
 
-		if result.IsSuccess() {
+		if result.Success {
 			t.Error("Expected failure when operation execution fails")
 		}
 
-		if result.GetError() == nil {
+		if len(result.Errors) == 0 {
 			t.Error("Expected error to be returned")
 		}
 
 		// Check that operations were processed
-		if len(result.GetOperations()) == 0 {
+		if len(result.Operations) == 0 {
 			t.Error("Expected operation results to be returned even on failure")
 		}
 	})
@@ -225,38 +227,34 @@ func TestExecutor_ResultConversion(t *testing.T) {
 		result := executor.Run(ctx, pipeline, fs)
 
 		// Test main result methods
-		if !result.IsSuccess() {
+		if !result.Success {
 			t.Error("Expected success=true")
 		}
 
-		if result.GetError() != nil {
-			t.Errorf("Expected no error, got: %v", result.GetError())
+		if len(result.Errors) > 0 {
+			t.Errorf("Expected no error, got: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
-		ops := result.GetOperations()
+		ops := result.Operations
 		if len(ops) != 2 {
 			t.Errorf("Expected 2 operations, got %d", len(ops))
 		}
 
-		// Check operation result conversion
-		for i, opInterface := range ops {
-			if opResult, ok := opInterface.(synthfs.OperationResult); ok {
-				if opResult.OperationID == "" {
-					t.Errorf("Operation %d missing OperationID", i)
-				}
-				if opResult.Operation == nil {
-					t.Errorf("Operation %d missing Operation reference", i)
-				}
-				// Duration might be 0 on very fast systems, so we just check it exists
-				// The important thing is that the Duration field is populated from the core result
-			} else {
-				t.Errorf("Expected OperationResult, got %T", opInterface)
+		// Check operation results
+		for i, opResult := range ops {
+			if opResult.OperationID == "" {
+				t.Errorf("Operation %d missing OperationID", i)
 			}
+			if opResult.Operation == nil {
+				t.Errorf("Operation %d missing Operation reference", i)
+			}
+			// Duration might be 0 on very fast systems, so we just check it exists
+			// The important thing is that the Duration field is populated from the core result
 		}
 
 		// Total duration might be 0 on very fast systems
 		// Just verify the method exists and returns a value
-		_ = result.GetDuration()
+		_ = result.Duration
 	})
 
 	t.Run("Convert result with restore operations", func(t *testing.T) {
@@ -275,11 +273,11 @@ func TestExecutor_ResultConversion(t *testing.T) {
 
 		result := executor.RunWithOptions(ctx, pipeline, fs, opts)
 
-		if !result.IsSuccess() {
-			t.Errorf("Expected success=true, got: %v", result.GetError())
+		if !result.Success {
+			t.Errorf("Expected success=true, got: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
-		restoreOps := result.GetRestoreOps()
+		restoreOps := result.RestoreOps
 		if len(restoreOps) == 0 {
 			t.Error("Expected restore operations to be available")
 		}
@@ -299,8 +297,8 @@ func TestPipelineWrapper(t *testing.T) {
 
 		result := executor.Run(ctx, pipeline, fs)
 
-		if !result.IsSuccess() {
-			t.Errorf("Expected success=true, got: %v", result.GetError())
+		if !result.Success {
+			t.Errorf("Expected success=true, got: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify pipeline methods were called
@@ -351,13 +349,13 @@ func TestOperationWrapper(t *testing.T) {
 
 		result := executor.Run(ctx, pipeline, fs)
 
-		if !result.IsSuccess() {
-			t.Errorf("Expected success=true, got: %v", result.GetError())
+		if !result.Success {
+			t.Errorf("Expected success=true, got: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Verify operation was wrapped and executed correctly
-		if len(result.GetOperations()) != 1 {
-			t.Errorf("Expected 1 operation result, got %d", len(result.GetOperations()))
+		if len(result.Operations) != 1 {
+			t.Errorf("Expected 1 operation result, got %d", len(result.Operations))
 		}
 	})
 
@@ -373,13 +371,13 @@ func TestOperationWrapper(t *testing.T) {
 
 		result := executor.Run(ctx, pipeline, fs)
 
-		if !result.IsSuccess() {
-			t.Errorf("Expected success=true, got: %v", result.GetError())
+		if !result.Success {
+			t.Errorf("Expected success=true, got: %v", (func() string { if len(result.Errors) > 0 { return result.Errors[0].Error() } else { return "<no error>" } })())
 		}
 
 		// Should fallback to original Execute/Validate methods
-		if len(result.GetOperations()) != 1 {
-			t.Errorf("Expected 1 operation result, got %d", len(result.GetOperations()))
+		if len(result.Operations) != 1 {
+			t.Errorf("Expected 1 operation result, got %d", len(result.Operations))
 		}
 	})
 }
@@ -460,31 +458,24 @@ func (m *MockMainOperation) Describe() synthfs.OperationDesc {
 		Path: m.path,
 	}
 }
-func (m *MockMainOperation) Dependencies() []synthfs.OperationID     { return []synthfs.OperationID{} }
-func (m *MockMainOperation) Conflicts() []synthfs.OperationID        { return []synthfs.OperationID{} }
 func (m *MockMainOperation) AddDependency(depID synthfs.OperationID) { /* no-op for mock */ }
 
-func (m *MockMainOperation) Execute(ctx context.Context, fs synthfs.FileSystem) error {
+func (m *MockMainOperation) Execute(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	return m.executeError
 }
 
-func (m *MockMainOperation) ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return m.executeError
-}
-
-func (m *MockMainOperation) Validate(ctx context.Context, fs synthfs.FileSystem) error {
+func (m *MockMainOperation) Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	return m.validateError
 }
 
-func (m *MockMainOperation) ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
-	return m.validateError
-}
-
-func (m *MockMainOperation) ReverseOps(ctx context.Context, fs synthfs.FileSystem, budget *synthfs.BackupBudget) ([]synthfs.Operation, *synthfs.BackupData, error) {
+func (m *MockMainOperation) ReverseOps(ctx context.Context, fs filesystem.FileSystem, budget interface{}) ([]operations.Operation, interface{}, error) {
 	if m.reverseOpsError != nil {
 		return nil, nil, m.reverseOpsError
 	}
-	return m.reverseOps, m.backupData, nil
+	// Convert []synthfs.Operation to []operations.Operation
+	// synthfs.Operation is now an alias to operations.Operation
+	opsOps := append([]operations.Operation(nil), m.reverseOps...)
+	return opsOps, m.backupData, nil
 }
 
 func (m *MockMainOperation) Rollback(ctx context.Context, fs synthfs.FileSystem) error {
@@ -492,18 +483,17 @@ func (m *MockMainOperation) Rollback(ctx context.Context, fs synthfs.FileSystem)
 	return m.rollbackError
 }
 
-func (m *MockMainOperation) GetItem() synthfs.FsItem {
-	if item, ok := m.item.(synthfs.FsItem); ok {
-		return item
-	}
-	return nil
+func (m *MockMainOperation) GetItem() interface{} {
+	return m.item
 }
 
-func (m *MockMainOperation) Prerequisites() []core.Prerequisite                  { return []core.Prerequisite{} }
-func (m *MockMainOperation) GetChecksum(path string) *synthfs.ChecksumRecord     { return nil }
-func (m *MockMainOperation) GetAllChecksums() map[string]*synthfs.ChecksumRecord { return nil }
+func (m *MockMainOperation) Prerequisites() []core.Prerequisite                   { return []core.Prerequisite{} }
+func (m *MockMainOperation) GetChecksum(path string) interface{}                  { return nil }
+func (m *MockMainOperation) GetAllChecksums() map[string]interface{}             { return nil }
 func (m *MockMainOperation) SetDescriptionDetail(key string, value interface{})  { /* no-op for mock */ }
 func (m *MockMainOperation) SetPaths(src, dst string)                            { /* no-op for mock */ }
+func (m *MockMainOperation) GetPaths() (src, dst string)                         { return "", "" }
+func (m *MockMainOperation) SetChecksum(path string, checksum interface{})       { /* no-op for mock */ }
 
 func (m *MockMainOperation) SetExecuteError(err error)    { m.executeError = err }
 func (m *MockMainOperation) SetValidateError(err error)   { m.validateError = err }

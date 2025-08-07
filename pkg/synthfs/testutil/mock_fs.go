@@ -600,7 +600,7 @@ var _ fs.FileInfo = (*mockFileInfo)(nil)
 var _ fs.DirEntry = (*mockDirEntryChild)(nil)
 var _ fs.DirEntry = (*mockDirEntry)(nil)
 var _ fs.ReadFileFS = (*MockFS)(nil)
-var _ fs.StatFS = (*MockFS)(nil)
+var _ synthfs.FileSystem = (*MockFS)(nil)
 
 // Exists checks if a path exists in the MockFS.
 func (mfs *MockFS) Exists(name string) bool {
