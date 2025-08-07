@@ -2,10 +2,12 @@ package synthfs
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/batch"
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 // Batch is a wrapper around batch.Batch that provides convenience methods for operation results
@@ -15,8 +17,13 @@ type Batch struct {
 
 // NewBatch creates a new batch with the clean implementation that has prerequisite resolution enabled by default
 func NewBatch(fs interface{}) *Batch {
+	// Cast to filesystem.FileSystem if possible, otherwise panic as it's a programming error
+	fsTyped, ok := fs.(filesystem.FileSystem)
+	if !ok {
+		panic(fmt.Sprintf("NewBatch requires filesystem.FileSystem, got %T", fs))
+	}
 	return &Batch{
-		impl: batch.NewBatch(fs, NewOperationRegistry()),
+		impl: batch.NewBatch(fsTyped, NewOperationRegistry()),
 	}
 }
 
@@ -76,7 +83,12 @@ func (b *Batch) UnarchiveWithPatterns(archivePath, extractPath string, patterns 
 
 // WithFileSystem sets the filesystem for the batch operations.
 func (b *Batch) WithFileSystem(fs interface{}) *Batch {
-	b.impl = b.impl.WithFileSystem(fs)
+	// Cast to filesystem.FileSystem if possible, otherwise panic as it's a programming error
+	fsTyped, ok := fs.(filesystem.FileSystem)
+	if !ok {
+		panic(fmt.Sprintf("WithFileSystem requires filesystem.FileSystem, got %T", fs))
+	}
+	b.impl = b.impl.WithFileSystem(fsTyped)
 	return b
 }
 

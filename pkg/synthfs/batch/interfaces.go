@@ -5,6 +5,7 @@ import (
 	"io/fs"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 // Batch represents a collection of operations that can be validated and executed as a unit.
@@ -24,7 +25,7 @@ type Batch interface {
 	UnarchiveWithPatterns(archivePath, extractPath string, patterns []string, metadata ...map[string]interface{}) (interface{}, error)
 
 	// Configuration
-	WithFileSystem(fs interface{}) Batch
+	WithFileSystem(fs filesystem.FileSystem) Batch
 	WithContext(ctx context.Context) Batch
 	WithRegistry(registry core.OperationFactory) Batch
 	WithLogger(logger core.Logger) Batch

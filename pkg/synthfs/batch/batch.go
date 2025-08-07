@@ -19,7 +19,7 @@ import (
 // This implementation uses prerequisite resolution for automatic dependency management.
 type BatchImpl struct {
 	operations []interface{}
-	fs         interface{} // Filesystem interface
+	fs         filesystem.FileSystem // Concrete filesystem type
 	ctx        context.Context
 	idCounter  int
 	registry   core.OperationFactory
@@ -28,7 +28,7 @@ type BatchImpl struct {
 }
 
 // NewBatch creates a new operation batch with prerequisite resolution enabled.
-func NewBatch(fs interface{}, registry core.OperationFactory) Batch {
+func NewBatch(fs filesystem.FileSystem, registry core.OperationFactory) Batch {
 	return &BatchImpl{
 		operations: []interface{}{},
 		fs:         fs,
@@ -49,7 +49,7 @@ func (b *BatchImpl) Operations() []interface{} {
 }
 
 // WithFileSystem sets the filesystem for the batch operations.
-func (b *BatchImpl) WithFileSystem(fs interface{}) Batch {
+func (b *BatchImpl) WithFileSystem(fs filesystem.FileSystem) Batch {
 	b.fs = fs
 	return b
 }
@@ -97,9 +97,9 @@ func (b *BatchImpl) add(op interface{}) error {
 
 // validateOperation validates an operation
 func (b *BatchImpl) validateOperation(op interface{}) error {
-	// Try ExecutionContext-aware Validate method first
+	// Try ExecutionContext-aware Validate method first with concrete types
 	type validator interface {
-		Validate(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
+		Validate(ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error
 	}
 
 	if v, ok := op.(validator); ok {
@@ -122,6 +122,7 @@ func (b *BatchImpl) validateOperation(op interface{}) error {
 		}
 	}
 
+	// If no validation method found, that's OK - not all operations need validation
 	return nil
 }
 
@@ -235,11 +236,10 @@ func (b *BatchImpl) Copy(src, dst string, metadata ...map[string]interface{}) (i
 	}
 
 	// Compute checksum for source file (after validation passes)
-	if fs, ok := b.fs.(filesystem.FileSystem); ok {
-		if checksum, err := validation.ComputeFileChecksum(fs, src); err == nil && checksum != nil {
+	if checksum, err := validation.ComputeFileChecksum(b.fs, src); err == nil && checksum != nil {
 			// Set checksum on operation
 			type checksumSetter interface {
-				SetChecksum(path string, checksum *validation.ChecksumRecord)
+				SetChecksum(path string, checksum interface{})
 			}
 			if setter, ok := op.(checksumSetter); ok {
 				setter.SetChecksum(src, checksum)
@@ -249,7 +249,6 @@ func (b *BatchImpl) Copy(src, dst string, metadata ...map[string]interface{}) (i
 				"source_checksum": checksum.MD5,
 			})
 		}
-	}
 
 	return op, nil
 }
@@ -289,11 +288,10 @@ func (b *BatchImpl) Move(src, dst string, metadata ...map[string]interface{}) (i
 	}
 
 	// Compute checksum for source file (after validation passes)
-	if fs, ok := b.fs.(filesystem.FileSystem); ok {
-		if checksum, err := validation.ComputeFileChecksum(fs, src); err == nil && checksum != nil {
+	if checksum, err := validation.ComputeFileChecksum(b.fs, src); err == nil && checksum != nil {
 			// Set checksum on operation
 			type checksumSetter interface {
-				SetChecksum(path string, checksum *validation.ChecksumRecord)
+				SetChecksum(path string, checksum interface{})
 			}
 			if setter, ok := op.(checksumSetter); ok {
 				setter.SetChecksum(src, checksum)
@@ -303,7 +301,6 @@ func (b *BatchImpl) Move(src, dst string, metadata ...map[string]interface{}) (i
 				"source_checksum": checksum.MD5,
 			})
 		}
-	}
 
 	return op, nil
 }
@@ -409,23 +406,21 @@ func (b *BatchImpl) CreateArchive(archivePath string, format interface{}, source
 	}
 
 	// Compute checksums for all source files
-	if fs, ok := b.fs.(filesystem.FileSystem); ok {
-		for _, source := range sources {
-			if checksum, err := validation.ComputeFileChecksum(fs, source); err == nil && checksum != nil {
-				// Set checksum on operation
-				type checksumSetter interface {
-					SetChecksum(path string, checksum *validation.ChecksumRecord)
-				}
-				if setter, ok := op.(checksumSetter); ok {
-					setter.SetChecksum(source, checksum)
-				}
+	for _, source := range sources {
+		if checksum, err := validation.ComputeFileChecksum(b.fs, source); err == nil && checksum != nil {
+			// Set checksum on operation
+			type checksumSetter interface {
+				SetChecksum(path string, checksum interface{})
+			}
+			if setter, ok := op.(checksumSetter); ok {
+				setter.SetChecksum(source, checksum)
 			}
 		}
-		// Set sources_checksummed in details
-		_ = b.setOperationDetails(op, map[string]interface{}{
-			"sources_checksummed": len(sources),
-		})
 	}
+	// Set sources_checksummed in details
+	_ = b.setOperationDetails(op, map[string]interface{}{
+		"sources_checksummed": len(sources),
+	})
 
 	return op, nil
 }
