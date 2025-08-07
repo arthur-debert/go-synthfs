@@ -312,7 +312,10 @@ func (e *Executor) RunWithOptionsAndResolver(ctx context.Context, pipeline inter
 			// Add a marker error to indicate rollback failed
 			// The main executor wrapper will convert this to proper error types
 			originalErr := result.Errors[len(result.Errors)-1]
-			result.Errors[len(result.Errors)-1] = fmt.Errorf("operation failed with rollback errors: original error: %w, rollback error: %v", originalErr, rollbackErr)
+			result.Errors[len(result.Errors)-1] = &core.RollbackError{
+				OriginalErr:  originalErr,
+				RollbackErrs: []error{rollbackErr},
+			}
 		} else {
 			e.logger.Info().
 				Msg("rollback completed successfully")

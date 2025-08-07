@@ -46,8 +46,10 @@ func Run(ctx context.Context, fs filesystem.FullFileSystem, ops ...Operation) (*
 // It builds a pipeline with the given operations and runs it using the main executor.
 // This ensures that all operations are validated before execution begins.
 func RunWithOptions(ctx context.Context, fs filesystem.FullFileSystem, options PipelineOptions, ops ...Operation) (*Result, error) {
-	// For the simple API, we disable prerequisite resolution because the sequential
-	// execution order implicitly handles dependencies.
+	// For the simple API, we disable prerequisite resolution by default to allow for the straightforward,
+	// ordered execution of operations without requiring explicit dependency declarations.
+	// For complex workflows with non-linear dependencies, users should use the
+	// BuildPipeline function directly to leverage the full capabilities of the dependency resolution engine.
 	options.ResolvePrerequisites = false
 
 	if options.DryRun {
