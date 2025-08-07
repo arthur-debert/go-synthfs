@@ -1,3 +1,9 @@
+// Package synthfs provides the main API for the SynthFS library.
+// This file contains the OperationsPackageAdapter which bridges the gap between
+// the main package's Operation interface and the operations package's interface.
+//
+// TODO(v2.0): Remove this adapter when migrating to operations package interface.
+// See https://github.com/arthur-debert/synthfs/issues/71 for details.
 package synthfs
 
 import (
@@ -12,11 +18,18 @@ import (
 
 // OperationsPackageAdapter adapts an operations.Operation to implement the main package Operation interface.
 // This allows gradual migration from SimpleOperation to the operations package.
+//
+// Deprecated: This adapter will be removed in v2.0 when the main package Operation interface
+// is deprecated in favor of using the operations package interface directly.
+// See https://github.com/arthur-debert/synthfs/issues/71 for migration details.
 type OperationsPackageAdapter struct {
 	opsOperation operations.Operation
 }
 
 // NewOperationsPackageAdapter creates a new adapter for an operations package operation.
+//
+// Deprecated: This function will be removed in v2.0. Operations will implement
+// the interface directly without needing an adapter.
 func NewOperationsPackageAdapter(opsOp operations.Operation) Operation {
 	return &OperationsPackageAdapter{
 		opsOperation: opsOp,
@@ -79,13 +92,11 @@ func (a *OperationsPackageAdapter) GetItem() FsItem {
 		return nil
 	}
 
-	// Try to convert interface{} to FsItem
+	// Operations package stores FsItem as interface{}
 	if fsItem, ok := item.(FsItem); ok {
 		return fsItem
 	}
 
-	// If it's from the operations package, we might need to adapt it
-	// For now, return nil if we can't convert
 	return nil
 }
 
@@ -96,13 +107,11 @@ func (a *OperationsPackageAdapter) GetChecksum(path string) *ChecksumRecord {
 		return nil
 	}
 
-	// Try to convert interface{} to ChecksumRecord
+	// Operations package stores ChecksumRecord as interface{}
 	if checksum, ok := cs.(*ChecksumRecord); ok {
 		return checksum
 	}
 
-	// If it's a different type, try to adapt it
-	// For now, return nil if we can't convert
 	return nil
 }
 
