@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
 // executeWithEvents is a helper that wraps operation execution with event handling
-func executeWithEvents(op Operation, ctx context.Context, execCtx *core.ExecutionContext, fsys interface{},
-	executeFunc func(context.Context, interface{}) error) error {
+func executeWithEvents(op Operation, ctx context.Context, execCtx *core.ExecutionContext, fsys filesystem.FileSystem,
+	executeFunc func(context.Context, filesystem.FileSystem) error) error {
 
 	// Emit operation started event
 	if execCtx.EventBus != nil {
@@ -80,7 +81,7 @@ func executeWithEvents(op Operation, ctx context.Context, execCtx *core.Executio
 }
 
 // validateV2Helper is a helper for implementing ValidateV2 that delegates to Validate
-func validateV2Helper(op Operation, ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error {
+func validateV2Helper(op Operation, ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error {
 	// Convert context
 	context, ok := ctx.(context.Context)
 	if !ok {

@@ -4,10 +4,10 @@ import (
 	"context"
 
 	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/filesystem"
 )
 
-// Operation represents a filesystem operation with minimal coupling.
-// This interface uses interface{} types to avoid circular dependencies.
+// Operation represents a filesystem operation.
 type Operation interface {
 	// Core metadata
 	ID() core.OperationID
@@ -33,17 +33,17 @@ type Operation interface {
 	// Description details
 	SetDescriptionDetail(key string, value interface{})
 
-	// Execution methods - take interface{} for filesystem to avoid coupling
-	Execute(ctx context.Context, fsys interface{}) error
-	Validate(ctx context.Context, fsys interface{}) error
-	Rollback(ctx context.Context, fsys interface{}) error
+	// Execution methods
+	Execute(ctx context.Context, fsys filesystem.FileSystem) error
+	Validate(ctx context.Context, fsys filesystem.FileSystem) error
+	Rollback(ctx context.Context, fsys filesystem.FileSystem) error
 
 	// ExecuteV2 for new execution context pattern
-	ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
-	ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys interface{}) error
+	ExecuteV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error
+	ValidateV2(ctx interface{}, execCtx *core.ExecutionContext, fsys filesystem.FileSystem) error
 
-	// Reverse operations - returns interface{} for operations and backup data
-	ReverseOps(ctx context.Context, fsys interface{}, budget interface{}) ([]interface{}, interface{}, error)
+	// Reverse operations
+	ReverseOps(ctx context.Context, fsys filesystem.FileSystem, budget interface{}) ([]Operation, interface{}, error)
 }
 
 // ItemInterface represents a filesystem item to be created
