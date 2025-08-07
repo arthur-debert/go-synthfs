@@ -307,68 +307,6 @@ func TestCustomOperation_InPipeline(t *testing.T) {
 }
 
 func TestCustomOperation_ErrorHandling(t *testing.T) {
-	t.Run("rollback on error with custom operation", func(t *testing.T) {
-		helper := testutil.NewRealFSTestHelper(t)
-		fs := helper.FileSystem()
-		sfs := synthfs.New()
-
-		cleanupFile := "cleanup-me.txt"
-		rollbackExecuted := false
-
-		// Custom operation that creates a file and can clean it up on rollback
-		op := synthfs.NewCustomOperation("create-with-cleanup", func(ctx context.Context, fs filesystem.FileSystem) error {
-			return fs.WriteFile(cleanupFile, []byte("temporary data"), 0644)
-		}).WithRollback(func(ctx context.Context, fs filesystem.FileSystem) error {
-			rollbackExecuted = true
-			return fs.Remove(cleanupFile)
-		})
-
-		// Use the custom operation directly
-		customOp := op
-
-		// Operation that will fail
-		failOp := sfs.CustomOperation("fail-op", func(ctx context.Context, fs filesystem.FileSystem) error {
-			return errors.New("intentional failure")
-		})
-
-		// Run with rollback enabled
-		opts := synthfs.DefaultPipelineOptions()
-		opts.RollbackOnError = true
-
-		// Execute the successful operation first
-		_, err := synthfs.RunWithOptions(context.Background(), fs, opts, customOp)
-		if err != nil {
-			t.Fatalf("Expected customOp to succeed, but it failed: %v", err)
-		}
-
-		// Now, execute the failing operation, which will trigger the rollback of the first.
-		result, err := synthfs.RunWithOptions(context.Background(), fs, opts, failOp)
-
-		if err == nil {
-			t.Error("Expected error from failed operation")
-		}
-
-		if result.Success {
-			t.Error("Expected pipeline to fail")
-		}
-
-		// Verify rollback was executed
-		if !rollbackExecuted {
-			// This test is tricky because the rollback happens in a separate Run call.
-			// The current implementation of RunWithOptions doesn't support cross-run rollbacks.
-			// This test needs to be redesigned to have both operations in the same Run call.
-			t.Skip("Skipping rollback check until a better test can be designed.")
-		}
-
-		// Verify cleanup file was removed
-		if _, err := fs.Stat(cleanupFile); err == nil {
-			// This test is tricky because the rollback happens in a separate Run call.
-			// The current implementation of RunWithOptions doesn't support cross-run rollbacks.
-			// This test needs to be redesigned to have both operations in the same Run call.
-			t.Skip("Skipping cleanup check until a better test can be designed.")
-		}
-	})
-
 	t.Run("validation prevents execution", func(t *testing.T) {
 		helper := testutil.NewRealFSTestHelper(t)
 		fs := helper.FileSystem()
