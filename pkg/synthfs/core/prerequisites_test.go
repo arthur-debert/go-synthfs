@@ -2,7 +2,9 @@ package core
 
 import (
 	"fmt"
+	"io/fs"
 	"testing"
+	"time"
 )
 
 // MockFileSystem implements the basic interfaces needed for prerequisite testing
@@ -10,15 +12,20 @@ type MockFileSystem struct {
 	files map[string]MockFileInfo
 }
 
-// MockFileInfo implements the FileInfo interface
+// MockFileInfo implements the fs.FileInfo interface
 type MockFileInfo struct {
 	name  string
 	isDir bool
+	size  int64
+	mode  fs.FileMode
 }
 
-func (f MockFileInfo) IsDir() bool {
-	return f.isDir
-}
+func (f MockFileInfo) Name() string       { return f.name }
+func (f MockFileInfo) Size() int64        { return f.size }
+func (f MockFileInfo) Mode() fs.FileMode  { return f.mode }
+func (f MockFileInfo) ModTime() time.Time { return time.Now() }
+func (f MockFileInfo) IsDir() bool        { return f.isDir }
+func (f MockFileInfo) Sys() interface{}   { return nil }
 
 func NewMockFileSystem() *MockFileSystem {
 	return &MockFileSystem{
@@ -26,7 +33,7 @@ func NewMockFileSystem() *MockFileSystem {
 	}
 }
 
-func (fs *MockFileSystem) Stat(name string) (interface{}, error) {
+func (fs *MockFileSystem) Stat(name string) (fs.FileInfo, error) {
 	if info, exists := fs.files[name]; exists {
 		return info, nil
 	}
