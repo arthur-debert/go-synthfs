@@ -309,9 +309,14 @@ func (e *Executor) RunWithOptionsAndResolver(ctx context.Context, pipeline inter
 			// Add a marker error to indicate rollback failed
 			// The main executor wrapper will convert this to proper error types
 			originalErr := result.Errors[len(result.Errors)-1]
+			// Create rollback error map - since we don't have the operation ID here,
+			// we'll use a placeholder. The wrapper layer will provide proper mapping.
+			rollbackErrMap := make(map[core.OperationID]error)
+			rollbackErrMap[core.OperationID("rollback_error")] = rollbackErr
+			
 			result.Errors[len(result.Errors)-1] = &core.RollbackError{
 				OriginalErr:  originalErr,
-				RollbackErrs: []error{rollbackErr},
+				RollbackErrs: rollbackErrMap,
 			}
 		} else {
 			e.logger.Info().

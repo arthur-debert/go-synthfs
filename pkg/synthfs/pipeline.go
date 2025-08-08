@@ -2,8 +2,9 @@ package synthfs
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/arthur-debert/synthfs/pkg/synthfs/execution"
+	"github.com/arthur-debert/synthfs/pkg/synthfs/core"
 )
 
 // Pipeline defines an interface for managing a sequence of operations.
@@ -29,57 +30,91 @@ type Pipeline interface {
 
 // NewMemPipeline creates a new in-memory operation pipeline.
 func NewMemPipeline() Pipeline {
-	logger := DefaultLogger()
-	return &pipelineAdapter{
-		pipeline: execution.NewMemPipeline(NewLoggerAdapter(&logger)),
+	return &simplePipeline{
+		operations: make([]Operation, 0),
+		idMap:      make(map[OperationID]Operation),
 	}
 }
 
-// pipelineAdapter adapts execution.Pipeline to our Pipeline interface
-type pipelineAdapter struct {
-	pipeline execution.Pipeline
+// simplePipeline is a simple pipeline implementation without adapters
+type simplePipeline struct {
+	operations []Operation
+	idMap      map[OperationID]Operation
+	resolved   bool
 }
 
 // Add appends operations to the pipeline.
-func (pa *pipelineAdapter) Add(ops ...Operation) error {
-	// Convert Operation to operationInterfaceAdapter for execution package
-	var opsInterface []interface{}
+func (sp *simplePipeline) Add(ops ...Operation) error {
 	for _, op := range ops {
-		adapter := &operationInterfaceAdapter{Operation: op}
-		opsInterface = append(opsInterface, adapter)
+		// Check for duplicate IDs
+		if existing, exists := sp.idMap[op.ID()]; exists {
+			return fmt.Errorf("operation with ID %s already exists: %v", op.ID(), existing)
+		}
+		
+		sp.operations = append(sp.operations, op)
+		sp.idMap[op.ID()] = op
+		sp.resolved = false // Mark as needing resolution
 	}
-	return pa.pipeline.Add(opsInterface...)
+	return nil
 }
 
 // Operations returns all operations currently in the pipeline.
-func (pa *pipelineAdapter) Operations() []Operation {
-	// Convert from interface{} back to Operation
-	opsInterface := pa.pipeline.Operations()
-	var ops []Operation
-	for _, opInterface := range opsInterface {
-		if adapter, ok := opInterface.(*operationInterfaceAdapter); ok {
-			ops = append(ops, adapter.Operation)
-		} else if op, ok := opInterface.(Operation); ok {
-			ops = append(ops, op)
-		}
-	}
-	return ops
+func (sp *simplePipeline) Operations() []Operation {
+	return sp.operations
 }
 
 // Resolve performs dependency resolution using topological sorting.
-func (pa *pipelineAdapter) Resolve() error {
-	return pa.pipeline.Resolve()
+func (sp *simplePipeline) Resolve() error {
+	if sp.resolved {
+		return nil
+	}
+	
+	// Simple dependency resolution based on operation type and paths
+	// This maintains compatibility without requiring the Dependencies() method
+	resolved := make([]Operation, 0, len(sp.operations))
+	
+	// Group operations by type - creates before operations that need them
+	var creates []Operation
+	var others []Operation
+	
+	for _, op := range sp.operations {
+		desc := op.Describe()
+		opType := desc.Type
+		
+		if opType == "create_file" || opType == "create_directory" || opType == "create_symlink" || opType == "mkdir" {
+			creates = append(creates, op)
+		} else {
+			others = append(others, op)
+		}
+	}
+	
+	// Add creates first, then others
+	resolved = append(resolved, creates...)
+	resolved = append(resolved, others...)
+	
+	sp.operations = resolved
+	sp.resolved = true
+	return nil
 }
 
 // Validate checks if all operations in the pipeline are valid.
-func (pa *pipelineAdapter) Validate(ctx context.Context, fs FileSystem) error {
-	// The execution package expects a context and filesystem interface
-	// We need to handle error conversion for ValidationError
-	err := pa.pipeline.Validate(ctx, fs)
-	if err != nil {
-		// Check if we can recover the operation from the error message
-		// For now, return the error as-is
+func (sp *simplePipeline) Validate(ctx context.Context, fs FileSystem) error {
+	// First resolve dependencies to ensure proper order
+	if err := sp.Resolve(); err != nil {
 		return err
+	}
+	
+	// Create execution context for validation
+	logger := DefaultLogger()
+	execCtx := &core.ExecutionContext{
+		Logger:   NewLoggerAdapter(&logger),
+		EventBus: core.NewMemoryEventBus(NewLoggerAdapter(&logger)),
+	}
+	
+	for _, op := range sp.operations {
+		if err := op.Validate(ctx, execCtx, fs); err != nil {
+			return err
+		}
 	}
 	return nil
 }
