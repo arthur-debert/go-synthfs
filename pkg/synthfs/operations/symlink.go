@@ -26,12 +26,8 @@ func NewCreateSymlinkOperation(id core.OperationID, linkPath string) *CreateSyml
 func (op *CreateSymlinkOperation) Prerequisites() []core.Prerequisite {
 	var prereqs []core.Prerequisite
 
-	// Need parent directory to exist
-	if filepath.Dir(op.description.Path) != "." && filepath.Dir(op.description.Path) != "/" {
-		prereqs = append(prereqs, core.NewParentDirPrerequisite(op.description.Path))
-	}
-
-	// Need no conflict with existing files
+	// Parent directory prerequisite removed - Execute auto-creates parent directories
+	// Only keep the no-conflict prerequisite
 	prereqs = append(prereqs, core.NewNoConflictPrerequisite(op.description.Path))
 
 	return prereqs

@@ -158,21 +158,21 @@ func TestExecutor_RunWithOptions(t *testing.T) {
 
 // TestExecutor_ErrorPaths tests various error scenarios
 func TestExecutor_ErrorPaths(t *testing.T) {
-	t.Run("Pipeline validation failure", func(t *testing.T) {
+	t.Run("Operation validation failure", func(t *testing.T) {
 		executor := synthfs.NewExecutor()
 		pipeline := NewMockMainPipeline()
 		fs := testutil.NewTestFileSystem()
 		ctx := context.Background()
 
-		pipeline.SetValidateError(errors.New("validation failed: conflicting operations"))
-
-		op1 := NewMockMainOperation("op1", "create_file", "test.txt")
-		pipeline.AddOperations(op1)
+		// Create an operation that will fail validation
+		failingOp := NewMockMainOperation("failing_op", "create_file", "test.txt")
+		failingOp.SetValidateError(errors.New("validation failed: invalid path"))
+		pipeline.AddOperations(failingOp)
 
 		result := executor.RunWithOptions(ctx, pipeline, fs, synthfs.DefaultPipelineOptions())
 
 		if result.Success {
-			t.Error("Expected failure for pipeline validation error")
+			t.Error("Expected failure for operation validation error")
 		}
 
 		if len(result.Errors) == 0 {
@@ -305,9 +305,7 @@ func TestPipelineWrapper(t *testing.T) {
 		if !pipeline.resolveCalled {
 			t.Error("Expected Resolve to be called")
 		}
-		if !pipeline.validateCalled {
-			t.Error("Expected Validate to be called")
-		}
+		// Validate is no longer called at pipeline level - validation happens in RunWithOptions
 	})
 
 	t.Run("Pipeline wrapper with filesystem interface mismatch", func(t *testing.T) {

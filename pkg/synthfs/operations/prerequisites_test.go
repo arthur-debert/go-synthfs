@@ -11,21 +11,17 @@ func TestOperationPrerequisites(t *testing.T) {
 		op := NewCreateFileOperation(core.OperationID("test-op"), "dir/file.txt")
 
 		prereqs := op.Prerequisites()
-		if len(prereqs) != 2 {
-			t.Errorf("Expected 2 prerequisites, got %d", len(prereqs))
+		if len(prereqs) != 1 {
+			t.Errorf("Expected 1 prerequisite, got %d", len(prereqs))
 		}
 
-		// Check for parent directory prerequisite
-		hasParentDir := false
+		// Should only have no-conflict prerequisite (parent dir auto-created)
 		hasNoConflict := false
 
 		for _, prereq := range prereqs {
 			switch prereq.Type() {
 			case "parent_dir":
-				hasParentDir = true
-				if prereq.Path() != "dir" {
-					t.Errorf("Expected parent_dir path 'dir', got '%s'", prereq.Path())
-				}
+				t.Error("Should not have parent_dir prerequisite (auto-creates)")
 			case "no_conflict":
 				hasNoConflict = true
 				if prereq.Path() != "dir/file.txt" {
@@ -34,9 +30,6 @@ func TestOperationPrerequisites(t *testing.T) {
 			}
 		}
 
-		if !hasParentDir {
-			t.Error("Expected parent_dir prerequisite")
-		}
 		if !hasNoConflict {
 			t.Error("Expected no_conflict prerequisite")
 		}
@@ -46,9 +39,9 @@ func TestOperationPrerequisites(t *testing.T) {
 		op := NewCreateFileOperation(core.OperationID("test-op"), "file.txt")
 
 		prereqs := op.Prerequisites()
-		// Should still have no_conflict but parent_dir is current directory
-		if len(prereqs) != 2 {
-			t.Errorf("Expected 2 prerequisites, got %d", len(prereqs))
+		// Should only have no_conflict (no parent dir needed)
+		if len(prereqs) != 1 {
+			t.Errorf("Expected 1 prerequisite, got %d", len(prereqs))
 		}
 	})
 
@@ -56,52 +49,33 @@ func TestOperationPrerequisites(t *testing.T) {
 		op := NewCreateDirectoryOperation(core.OperationID("test-op"), "parent/newdir")
 
 		prereqs := op.Prerequisites()
-		if len(prereqs) != 1 {
-			t.Errorf("Expected 1 prerequisite, got %d", len(prereqs))
+		if len(prereqs) != 0 {
+			t.Errorf("Expected 0 prerequisites, got %d", len(prereqs))
 		}
 
-		// Check for parent directory prerequisite
-		hasParentDir := false
-
+		// No prerequisites needed:
+		// - MkdirAll creates parent directories automatically
+		// - MkdirAll is idempotent (no conflict check needed)
 		for _, prereq := range prereqs {
-			switch prereq.Type() {
-			case "parent_dir":
-				hasParentDir = true
-				if prereq.Path() != "parent" {
-					t.Errorf("Expected parent_dir path 'parent', got '%s'", prereq.Path())
-				}
-			default:
-				t.Errorf("Unexpected prerequisite type: %s", prereq.Type())
-			}
+			t.Errorf("Unexpected prerequisite: %s", prereq.Type())
 		}
-
-		if !hasParentDir {
-			t.Error("Expected parent_dir prerequisite")
-		}
-		
-		// Note: NoConflictPrerequisite was intentionally removed from directory operations
-		// because directory creation is idempotent (like 'mkdir -p')
 	})
 
 	t.Run("CreateSymlinkOperation Prerequisites", func(t *testing.T) {
 		op := NewCreateSymlinkOperation(core.OperationID("test-op"), "dir/symlink")
 
 		prereqs := op.Prerequisites()
-		if len(prereqs) != 2 {
-			t.Errorf("Expected 2 prerequisites, got %d", len(prereqs))
+		if len(prereqs) != 1 {
+			t.Errorf("Expected 1 prerequisite, got %d", len(prereqs))
 		}
 
-		// Check for parent directory prerequisite
-		hasParentDir := false
+		// Should only have no-conflict prerequisite (parent dir auto-created)
 		hasNoConflict := false
 
 		for _, prereq := range prereqs {
 			switch prereq.Type() {
 			case "parent_dir":
-				hasParentDir = true
-				if prereq.Path() != "dir" {
-					t.Errorf("Expected parent_dir path 'dir', got '%s'", prereq.Path())
-				}
+				t.Error("Should not have parent_dir prerequisite (auto-creates)")
 			case "no_conflict":
 				hasNoConflict = true
 				if prereq.Path() != "dir/symlink" {
@@ -110,9 +84,6 @@ func TestOperationPrerequisites(t *testing.T) {
 			}
 		}
 
-		if !hasParentDir {
-			t.Error("Expected parent_dir prerequisite")
-		}
 		if !hasNoConflict {
 			t.Error("Expected no_conflict prerequisite")
 		}

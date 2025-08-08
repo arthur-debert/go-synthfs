@@ -138,34 +138,29 @@ func TestPrerequisiteResolutionIntegration(t *testing.T) {
 		t.Fatalf("Failed to resolve prerequisites: %v", err)
 	}
 
-	// Check that parent directory operations were created
+	// Check that operations were NOT created for parent directories
+	// Since CreateFileOperation no longer has parent_dir prerequisites,
+	// and auto-creates parent directories during execution,
+	// prerequisite resolution should not add any operations
 	ops := pipeline.Operations()
-	if len(ops) < 2 {
-		t.Errorf("Expected at least 2 operations (parent dir + file), got %d", len(ops))
+	if len(ops) != 1 {
+		t.Errorf("Expected 1 operation (file only, no parent dirs), got %d", len(ops))
 	}
 
-	// Verify that parent directory operations exist
-	foundParentOp := false
-	for _, opInterface := range ops {
-		if opInterface == nil {
-			continue
-		}
-
-		// Use interface assertion to check operation details
-		if describer, ok := opInterface.(interface{ Describe() core.OperationDesc }); ok {
+	// Verify that only the original file operation exists
+	if len(ops) > 0 {
+		if describer, ok := ops[0].(interface{ Describe() core.OperationDesc }); ok {
 			desc := describer.Describe()
-			if desc.Type == "create_directory" && (desc.Path == "parent" || desc.Path == "parent/child") {
-				foundParentOp = true
-				break
+			if desc.Type != "create_file" {
+				t.Errorf("Expected create_file operation, got %s", desc.Type)
+			}
+			if desc.Path != "parent/child/file.txt" {
+				t.Errorf("Expected path parent/child/file.txt, got %s", desc.Path)
 			}
 		}
 	}
 
-	if !foundParentOp {
-		t.Error("Expected to find parent directory operation")
-	}
-
-	t.Logf("Successfully resolved prerequisites and created %d operations", len(ops))
+	t.Logf("Successfully resolved prerequisites: %d operations (parent dirs auto-created during execution)", len(ops))
 }
 
 // mockFileSystem implements a simple in-memory filesystem for testing
