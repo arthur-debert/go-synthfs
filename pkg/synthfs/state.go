@@ -76,8 +76,20 @@ func (pst *PathStateTracker) UpdateState(op Operation) error {
 			path: dst,
 			srcPath: src,
 		})
+	case "create_archive":
+		return pst.tracker.UpdateState(&simpleOpAdapter{
+			id: op.ID(),
+			opType: "create_file", // Archive is essentially a file
+			path: desc.Path,
+		})
+	case "unarchive":
+		// Unarchive creates multiple files/directories
+		// For now, we'll just track the operation without specific state changes
+		// This could be enhanced to track all extracted paths
+		return nil
 	default:
 		// For unknown operation types, just return nil
+		// This includes operations like write_template which might be added later
 		return nil
 	}
 }

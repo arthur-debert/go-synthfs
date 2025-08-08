@@ -85,12 +85,10 @@ func TestValidationConsistency(t *testing.T) {
 					}
 				}
 
-				// First try validation
+				// First try validation - should now pass with projected filesystem
 				err := pipeline.Validate(ctx, fs)
 				if err != nil {
-					t.Logf("Pipeline validation failed (expected until fixed): %v", err)
-					// This is expected to fail until we implement the fix
-					// Don't fail the test yet, just log it
+					t.Errorf("Pipeline validation failed: %v", err)
 				}
 
 				// Try execution anyway
