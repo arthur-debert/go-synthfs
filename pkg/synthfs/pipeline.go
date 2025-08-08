@@ -111,8 +111,16 @@ func (sp *simplePipeline) Validate(ctx context.Context, fs FileSystem) error {
 		EventBus: core.NewMemoryEventBus(NewLoggerAdapter(&logger)),
 	}
 	
+	// Use projected filesystem for validation to support sequential operations
+	projectedFS := NewProjectedFileSystem(fs)
+	
 	for _, op := range sp.operations {
-		if err := op.Validate(ctx, execCtx, fs); err != nil {
+		// Validate against projected filesystem
+		if err := op.Validate(ctx, execCtx, projectedFS); err != nil {
+			return err
+		}
+		// Update projected state for next operation
+		if err := projectedFS.UpdateProjectedState(op); err != nil {
 			return err
 		}
 	}

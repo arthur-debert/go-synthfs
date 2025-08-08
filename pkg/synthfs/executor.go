@@ -60,15 +60,8 @@ func (e *Executor) RunWithOptions(ctx context.Context, pipeline Pipeline, fs Fil
 		}
 	}
 
-	// Validate pipeline (maintaining executor contract)
-	if err := pipeline.Validate(ctx, fs); err != nil {
-		return &Result{
-			Success:    false,
-			Operations: []core.OperationResult{},
-			Errors:     []error{err},
-			Duration:   0,
-		}
-	}
+	// Skip pipeline.Validate() here - RunWithOptions will validate with projected filesystem
+	// This avoids double validation and ensures consistent validation behavior
 
 	// Use direct execution instead of adapters
 	ops := pipeline.Operations()

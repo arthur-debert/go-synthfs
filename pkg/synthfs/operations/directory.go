@@ -23,16 +23,10 @@ func NewCreateDirectoryOperation(id core.OperationID, path string) *CreateDirect
 
 // Prerequisites returns the prerequisites for creating a directory.
 func (op *CreateDirectoryOperation) Prerequisites() []core.Prerequisite {
-	var prereqs []core.Prerequisite
-
-	// Always need parent directory to exist (even if it's current directory)
-	prereqs = append(prereqs, core.NewParentDirPrerequisite(op.description.Path))
-
-	// Note: We don't use NoConflictPrerequisite because directory creation is idempotent.
-	// If a directory already exists, the operation should succeed (like mkdir -p).
-	// The individual Validate() method handles conflict detection properly.
-
-	return prereqs
+	// No prerequisites needed:
+	// - Parent directory prerequisite removed - Execute uses MkdirAll which creates parents
+	// - No conflict prerequisite not needed - MkdirAll is idempotent (like mkdir -p)
+	return []core.Prerequisite{}
 }
 
 // Execute creates the directory with event handling.
